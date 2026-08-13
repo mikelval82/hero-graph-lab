@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HERO Graph Lab</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">H</span>
+      <div><strong>Graph Lab</strong><span id="source-name">Loading...</span></div>
+    </div>
+    <div class="topbar-actions">
+      <button id="project-open" class="quiet-command" type="button">Open project</button>
+      <button id="mission-launch" class="command-button" type="button">Start mission</button>
+    </div>
+    <div class="mission-presence" aria-live="polite">
+      <i id="harness-indicator" aria-hidden="true"></i>
+      <div><strong id="mission-stage-label">Local design</strong><span id="mission-branch-label">HARNESS offline</span></div>
+    </div>
+    <div class="topbar-secondary-actions">
+      <button id="feedback-toggle" class="quiet-command" type="button">Record finding</button>
+    </div>
+  </header>
+
+  <main id="app-layout">
+    <aside id="project-panel" class="project-panel">
+      <section class="file-explorer" aria-labelledby="explorer-title">
+        <header class="explorer-heading">
+          <p class="eyebrow" id="explorer-title">Explorer</p>
+          <div class="panel-heading-actions">
+            <div class="font-size-controls" role="group" aria-label="Explorer text size" data-font-panel="explorer">
+              <button type="button" data-font-change="-1" aria-label="Decrease Explorer text size" title="Decrease text size">A&minus;</button>
+              <button type="button" data-font-reset aria-label="Reset Explorer text size" title="Reset text size"><span data-font-value>14</span></button>
+              <button type="button" data-font-change="1" aria-label="Increase Explorer text size" title="Increase text size">A+</button>
+            </div>
+            <button id="collapse-tree" class="icon-command" type="button" title="Collapse folders" aria-label="Collapse folders"><span aria-hidden="true">-</span></button>
+            <button class="icon-command panel-collapse" type="button" data-collapse-panel="explorer" title="Collapse Explorer" aria-label="Collapse Explorer" aria-expanded="true"><span aria-hidden="true">&lsaquo;</span></button>
+          </div>
+        </header>
+        <div id="file-tree" class="file-tree" role="tree" aria-label="Project files"></div>
+      </section>
+    </aside>
+
+    <div id="explorer-splitter" class="panel-splitter" role="separator" tabindex="0" aria-label="Resize Explorer" aria-controls="project-panel" aria-orientation="vertical" aria-valuemin="180" aria-valuemax="480" aria-valuenow="280"></div>
+
+    <section id="workspace" class="workspace" aria-label="Code workspace">
+      <section id="graph-panel" class="canvas-shell" aria-label="Software graph">
+        <header class="panel-heading">
+          <div><span class="panel-kicker" id="graph-view-label">Flow Graph</span><strong id="graph-count"></strong></div>
+          <div class="graph-view-switch" role="group" aria-label="Graph view">
+            <button type="button" data-graph-view="structure" data-command="view.structure" aria-pressed="false">Hierarchy</button>
+            <button type="button" data-graph-view="flow" data-command="view.flow" aria-pressed="true">Flow</button>
+            <button type="button" data-graph-view="focus" data-command="view.focus" aria-pressed="false">Focus</button>
+          </div>
+        </header>
+        <div class="scope-bar">
+          <button id="scope-up" class="scope-up" type="button" aria-label="Go to parent scope" title="Go to parent scope" disabled>&larr;</button>
+          <nav id="scope-breadcrumbs" class="scope-breadcrumbs" aria-label="Code scope and Flow trail"></nav>
+          <div class="font-size-controls" role="group" aria-label="Graph text size" data-font-panel="graph">
+            <button type="button" data-font-change="-1" aria-label="Decrease Graph text size" title="Decrease text size">A&minus;</button>
+            <button type="button" data-font-reset aria-label="Reset Graph text size" title="Reset text size"><span data-font-value>14</span></button>
+            <button type="button" data-font-change="1" aria-label="Increase Graph text size" title="Increase text size">A+</button>
+          </div>
+          <div class="graph-zoom" role="group" aria-label="Graph zoom">
+            <button id="zoom-out" type="button" aria-label="Zoom out" title="Zoom out">&minus;</button>
+            <output id="zoom-level" aria-live="polite">100%</output>
+            <button id="zoom-in" type="button" aria-label="Zoom in" title="Zoom in">+</button>
+            <button id="zoom-fit" type="button" aria-label="Fit graph to view" title="Fit graph to view">Fit</button>
+          </div>
+        </div>
+        <div class="graph-control-strip">
+          <div class="graph-toolbar" role="toolbar" aria-label="Graph visualization tools">
+            <button id="explain-node" type="button" data-command="selection.explain" disabled><b aria-hidden="true">I</b><span>Explain</span></button>
+            <button id="diagram-node" type="button" data-command="selection.diagram" disabled><b aria-hidden="true">M</b><span>Diagram</span></button>
+            <button id="project-node" type="button" data-command="selection.project" disabled><b aria-hidden="true">G</b><span>Project</span></button>
+            <button id="trace-calls" type="button" data-command="calls.trace" aria-pressed="false" disabled><b aria-hidden="true">&#8594;</b><span>Trace calls</span></button>
+            <button id="expand-node" type="button" data-command="node.expand" disabled><b aria-hidden="true">+</b><span>Expand</span></button>
+            <button id="collapse-node" type="button" data-command="node.collapse" disabled><b aria-hidden="true">-</b><span>Collapse</span></button>
+            <button id="add-relation" type="button" data-command="relation.add" disabled><b aria-hidden="true">R</b><span>Relation</span></button>
+            <button id="hide-node" type="button" disabled><b aria-hidden="true">x</b><span>Hide</span></button>
+            <button id="lock-layout" type="button" aria-pressed="false"><b aria-hidden="true">L</b><span>Lock view</span></button>
+            <button id="reset-view" type="button" disabled><b aria-hidden="true">o</b><span>Reset view</span></button>
+            <button id="shortcut-help" type="button" data-command="shortcuts.help"><b aria-hidden="true">?</b><span>Shortcuts</span></button>
+          </div>
+          <section class="design-tools" aria-labelledby="design-tools-title">
+            <p class="eyebrow" id="design-tools-title">Design</p>
+            <div class="tool-grid">
+              <button id="add-node" class="tool-button" type="button" data-command="node.add"><b aria-hidden="true">+</b><span>Add</span></button>
+              <button id="edit-node" class="tool-button" type="button" disabled><b aria-hidden="true">I</b><span>Edit</span></button>
+              <button id="delete-node" class="tool-button destructive" type="button" data-command="selection.delete" disabled><b aria-hidden="true">x</b><span>Delete</span></button>
+            </div>
+            <details class="design-legend">
+              <summary>Legend</summary>
+              <div class="design-legend-content">
+                <div class="design-commands"><button id="sync-design" class="reset-button sync-design" type="button" disabled>Save map</button><button id="reset-design" class="reset-button" type="button" title="Reset all proposals">Reset</button></div>
+                <p id="design-sync-status" class="sync-status" role="status">Local draft</p>
+                <div class="status-legend"><span><i class="status-sample observed"></i>Observed code</span><span><i class="status-sample proposed"></i>Proposed</span><span><i class="status-sample modified"></i>To modify</span><span><i class="status-sample removed"></i>To remove</span></div>
+                <p class="legend-title">Relationship status</p>
+                <div class="relation-status-legend"><span><i class="relation-sample observed"></i>Code</span><span><i class="relation-sample proposed"></i>New</span><span><i class="relation-sample modified"></i>Edit</span><span><i class="relation-sample removed"></i>Delete</span></div>
+                <div class="legend"><span><i class="swatch package"></i>Area</span><span><i class="swatch module"></i>Module</span><span><i class="swatch class"></i>Class</span><span><i class="swatch function"></i>Function</span><span><i class="line-sample"></i>Calls</span></div>
+              </div>
+            </details>
+          </section>
+        </div>
+        <div id="graph-viewport" class="graph-viewport" tabindex="0" aria-label="Graph canvas. Drag the background to pan and use Control plus mouse wheel to zoom.">
+          <svg id="graph" role="img" aria-label="Software structure graph" viewBox="0 0 1000 680">
+            <g id="edges"></g>
+            <path id="connection-preview" hidden></path>
+            <g id="edge-labels"></g>
+            <g id="nodes"></g>
+          </svg>
+        </div>
+        <section id="graph-projection-bar" class="graph-projection-bar" aria-live="polite" hidden>
+          <div><strong id="graph-projection-title">Projection</strong><span id="graph-projection-meta"></span></div>
+          <button id="graph-projection-back" type="button">Back</button>
+          <button id="graph-projection-restore" type="button">Restore view</button>
+        </section>
+        <p id="graph-command-status" class="graph-command-status" role="status" aria-live="polite"></p>
+        <div id="empty-state" hidden>Could not load the graph.</div>
+      </section>
+
+      <div id="workspace-splitter" class="panel-splitter" role="separator" tabindex="0" aria-label="Resize Flow Graph and Code" aria-controls="graph-panel code-panel" aria-orientation="vertical" aria-valuemin="30" aria-valuemax="70" aria-valuenow="50"></div>
+
+      <section id="code-panel" class="code-panel" aria-label="Source code" aria-live="polite">
+        <header class="panel-heading code-panel-heading">
+          <div>
+            <span class="panel-kicker">Code</span>
+            <strong id="code-title">No file open</strong>
+            <small id="code-meta">Select a script in Explorer or a node in Flow Graph.</small>
+          </div>
+          <div id="code-search" class="code-search" role="search" aria-label="Search source code">
+            <input id="code-search-input" type="search" placeholder="Search code" aria-label="Search source code" autocomplete="off" disabled>
+            <span id="code-search-count" class="code-search-count" aria-live="polite">0/0</span>
+            <button id="code-search-previous" type="button" aria-label="Previous match" title="Previous match" disabled>&uarr;</button>
+            <button id="code-search-next" type="button" aria-label="Next match" title="Next match" disabled>&darr;</button>
+            <button id="code-search-clear" type="button" aria-label="Clear search" title="Clear search" disabled>&times;</button>
+          </div>
+          <div class="editor-command-group">
+            <div class="font-size-controls" role="group" aria-label="Code text size" data-font-panel="code">
+              <button type="button" data-font-change="-1" aria-label="Decrease Code text size" title="Decrease text size">A&minus;</button>
+              <button type="button" data-font-reset aria-label="Reset Code text size" title="Reset text size"><span data-font-value>14</span></button>
+              <button type="button" data-font-change="1" aria-label="Increase Code text size" title="Increase text size">A+</button>
+            </div>
+            <span id="code-status" class="code-status" hidden>CODE</span>
+            <button id="save-document" class="editor-save" type="button" hidden>Save</button>
+            <button id="close-document" class="editor-close" type="button" aria-label="Close document" title="Close document" hidden>x</button>
+            <button class="icon-command panel-collapse" type="button" data-collapse-panel="code" title="Collapse Code" aria-label="Collapse Code" aria-expanded="true"><span aria-hidden="true">&rsaquo;</span></button>
+          </div>
+        </header>
+        <div id="code-content" class="code-content" aria-label="Selected source code" hidden></div>
+        <section id="document-editor" class="document-editor" aria-label="Mission document editor" hidden>
+          <div class="document-mode" role="group" aria-label="Document view">
+            <button type="button" data-document-mode="preview" aria-pressed="true">Preview</button>
+            <button type="button" data-document-mode="edit" aria-pressed="false">Edit</button>
+          </div>
+          <textarea id="document-content" spellcheck="true" aria-label="Markdown content"></textarea>
+          <article id="document-preview" class="document-preview" aria-label="Rendered mission document"></article>
+          <footer><span id="document-revision"></span><span id="document-save-status" role="status"></span></footer>
+        </section>
+        <div id="code-empty" class="code-empty">
+          <strong>No source selected</strong>
+          <p>Select a Python file in Explorer or a code node in Flow Graph.</p>
+        </div>
+      </section>
+    </section>
+
+    <div id="inspector-splitter" class="panel-splitter" role="separator" tabindex="0" aria-label="Resize Inspector" aria-controls="inspector" aria-orientation="vertical" aria-valuemin="190" aria-valuemax="900" aria-valuenow="260"></div>
+
+    <aside id="inspector" class="inspector" aria-live="polite">
+      <div class="inspector-tabs" role="tablist" aria-label="Inspector views">
+        <button type="button" role="tab" aria-selected="false" data-inspector-tab="mission">Mission</button>
+        <button type="button" role="tab" aria-selected="true" data-inspector-tab="chat">Chat <span id="chat-count" hidden>0</span></button>
+        <button class="icon-command panel-collapse" type="button" data-collapse-panel="inspector" title="Collapse Inspector" aria-label="Collapse Inspector" aria-expanded="true"><span aria-hidden="true">&rsaquo;</span></button>
+      </div>
+      <div class="inspector-font-toolbar">
+        <span>Text size</span>
+        <div class="font-size-controls" role="group" aria-label="Inspector text size" data-font-panel="inspector">
+          <button type="button" data-font-change="-1" aria-label="Decrease Inspector text size" title="Decrease text size">A&minus;</button>
+          <button type="button" data-font-reset aria-label="Reset Inspector text size" title="Reset text size"><span data-font-value>14</span></button>
+          <button type="button" data-font-change="1" aria-label="Increase Inspector text size" title="Increase text size">A+</button>
+        </div>
+      </div>
+      <section id="mission-panel" class="inspector-panel mission-panel" role="tabpanel" hidden>
+        <header class="mission-heading">
+          <div><p class="eyebrow">Mission state</p><h2 id="mission-stage">Offline</h2></div>
+          <button id="mission-stop" class="icon-button" type="button" aria-label="Stop HARNESS worker" title="Stop HARNESS worker" hidden>x</button>
+        </header>
+        <p id="mission-summary" class="mission-summary">Start a mission to bind this workspace to HARNESS.</p>
+        <div id="mission-operation" class="mission-operation" hidden></div>
+        <section id="mission-activity-section" class="mission-activity-section" aria-labelledby="mission-activity-title" hidden>
+          <header><p class="eyebrow" id="mission-activity-title">Live activity</p><span id="mission-activity-state"></span></header>
+          <ol id="mission-activity" class="mission-activity" aria-live="polite"></ol>
+        </section>
+        <section class="mission-section" aria-labelledby="mission-actions-title">
+          <p class="eyebrow" id="mission-actions-title">Available gates</p>
+          <div id="mission-actions" class="mission-actions"></div>
+        </section>
+        <section class="mission-section" aria-labelledby="mission-documents-title">
+          <p class="eyebrow" id="mission-documents-title">Documents</p>
+          <div id="mission-documents" class="mission-list"></div>
+        </section>
+        <section class="mission-section" aria-labelledby="mission-tasks-title">
+          <p class="eyebrow" id="mission-tasks-title">Workplan</p>
+          <div id="mission-tasks" class="task-list"></div>
+        </section>
+      </section>
+      <section id="chat-panel" class="inspector-panel chat-panel" role="tabpanel">
+        <header>
+          <div class="chat-mode-switch" role="group" aria-label="Assistant mode">
+            <button type="button" data-chat-mode="explore" aria-pressed="true">Explore</button>
+            <button type="button" data-chat-mode="mission" aria-pressed="false">Mission</button>
+          </div>
+          <span id="chat-phase">Starting</span>
+        </header>
+        <div id="explore-context" class="explore-context">
+          <span id="explore-context-label">No graph selection</span>
+          <button id="explore-pin" type="button" data-command="selection.pin" disabled>Pin</button>
+          <button id="explore-clear-pins" type="button" disabled>Clear</button>
+          <ul id="explore-pins" class="explore-pins" aria-label="Pinned graph nodes" hidden></ul>
+        </div>
+        <div id="chat-messages" class="chat-messages" aria-live="polite"></div>
+        <form id="chat-form" class="chat-form">
+          <label id="chat-input-label" for="chat-input">Ask about this code</label>
+          <textarea id="chat-input" rows="3" placeholder="Ask about the selected code or graph"></textarea>
+          <div class="chat-actions">
+            <button id="chat-microphone" type="button" aria-label="Dictate question" aria-pressed="false" title="Dictate question">Mic</button>
+            <button id="chat-speech" type="button" aria-label="Read assistant responses" aria-pressed="false" title="Read assistant responses">Read</button>
+            <button id="chat-done" type="button" disabled hidden>Finish</button>
+            <button class="submit-button" type="submit" disabled>Send</button>
+          </div>
+          <p id="chat-status" role="status"></p>
+        </form>
+      </section>
+    </aside>
+  </main>
+
+  <dialog id="relation-dialog">
+    <form id="relation-form">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">Relationship proposal</p><h2 id="relation-dialog-title">Add relationship</h2></div>
+        <button type="button" id="relation-close" class="icon-button" aria-label="Close">x</button>
+      </div>
+      <div class="relation-endpoints">
+        <span><small>From</small><strong id="relation-source"></strong></span>
+        <i aria-hidden="true">-&gt;</i>
+        <span><small>To</small><strong id="relation-target"></strong></span>
+      </div>
+      <label>Name<input id="relation-name" required maxlength="50" autocomplete="off" placeholder="calculates price"></label>
+      <label>Type
+        <select id="relation-type">
+          <option value="calls">Calls</option>
+          <option value="uses">Uses</option>
+          <option value="depends_on">Depends on</option>
+          <option value="publishes">Publishes</option>
+          <option value="contains">Contains</option>
+          <option value="custom">Custom</option>
+        </select>
+      </label>
+      <label>Properties
+        <textarea id="relation-properties" placeholder="protocol=sync&#10;critical=true"></textarea>
+        <small class="field-help">One key=value property per line</small>
+      </label>
+      <div class="dialog-actions">
+        <button id="delete-relation" class="delete-button" type="button" hidden>Delete relationship</button>
+        <button class="submit-button" type="submit">Save relationship</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="shortcut-dialog" class="command-dialog" aria-labelledby="shortcut-title">
+    <div class="command-dialog-content">
+      <div class="dialog-heading"><div><p class="eyebrow">Graph commands</p><h2 id="shortcut-title">Keyboard shortcuts</h2></div><button id="shortcut-close" class="icon-button" type="button" aria-label="Close">x</button></div>
+      <p>Single-letter shortcuts work only while the graph has focus.</p>
+      <ul id="shortcut-list" class="shortcut-list"></ul>
+    </div>
+  </dialog>
+
+  <dialog id="command-palette-dialog" class="command-dialog" aria-labelledby="command-palette-title">
+    <div class="command-dialog-content">
+      <div class="dialog-heading"><div><p class="eyebrow">Ctrl+K</p><h2 id="command-palette-title">Command palette</h2></div><button id="command-palette-close" class="icon-button" type="button" aria-label="Close">x</button></div>
+      <label for="command-search">Find a command</label><input id="command-search" type="search" autocomplete="off" placeholder="Explain, focus, pin...">
+      <div id="command-list" class="command-list"></div>
+    </div>
+  </dialog>
+
+  <dialog id="diagram-dialog" class="diagram-dialog" aria-labelledby="diagram-title">
+    <div class="command-dialog-content">
+      <div class="dialog-heading"><div><p class="eyebrow">Graph diagrams</p><h2 id="diagram-title">Diagram studio</h2></div><button id="diagram-close" class="icon-button" type="button" aria-label="Close">x</button></div>
+      <div class="diagram-controls">
+        <label>Type<select id="diagram-type"></select></label>
+        <label>Depth<select id="diagram-depth"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="6">6</option><option value="10">10</option></select></label>
+        <div id="diagram-path-controls" class="diagram-path-controls" hidden>
+          <label>From<select id="diagram-path-from"></select></label>
+          <label>To<select id="diagram-path-to"></select></label>
+        </div>
+        <button id="diagram-generate" class="submit-button" type="button">Generate</button>
+      </div>
+      <div class="diagram-meta"><strong id="diagram-confidence">DETERMINISTIC</strong><span id="diagram-status" role="status"></span></div>
+      <div id="diagram-preview" class="rich-content diagram-preview"></div>
+      <label for="diagram-source">Mermaid source</label>
+      <textarea id="diagram-source" class="diagram-source" readonly></textarea>
+      <button id="diagram-copy" class="submit-button" type="button">Copy Mermaid</button>
+    </div>
+  </dialog>
+
+  <dialog id="node-dialog">
+    <form id="node-form">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">Design proposal</p><h2 id="node-dialog-title">Add node</h2></div>
+        <button type="button" id="node-close" class="icon-button" aria-label="Close">x</button>
+      </div>
+      <label>Name<input id="node-name" required maxlength="40" autocomplete="off"></label>
+      <label>Kind
+        <select id="node-type"><option value="class">Class</option><option value="method">Method</option><option value="function">Function</option><option value="module">Module</option></select>
+      </label>
+      <label>Contained by<select id="node-parent"></select></label>
+      <button class="submit-button" type="submit">Save proposal</button>
+    </form>
+  </dialog>
+
+  <dialog id="feedback-dialog">
+    <form id="feedback-form">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">Capture evidence</p><h2>What happened while using it?</h2></div>
+        <button type="button" id="feedback-close" class="icon-button" aria-label="Close">x</button>
+      </div>
+      <label>Friction <span class="range-label"><output id="friction-value">3</output> / 5</span>
+        <input id="friction" type="range" min="1" max="5" value="3">
+      </label>
+      <label>Decision
+        <select id="decision"><option value="undecided">Not yet</option><option value="keep">Keep</option><option value="change">Change</option><option value="discard">Discard</option></select>
+      </label>
+      <label>Observation<textarea id="notes" required placeholder="What was easy, confusing, missing, or unexpected?"></textarea></label>
+      <p id="form-status" role="status"></p>
+      <button class="submit-button" type="submit">Save finding</button>
+    </form>
+  </dialog>
+  <dialog id="mission-dialog" class="mission-dialog">
+    <form id="mission-form">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">HARNESS mission</p><h2>Open a design session</h2></div>
+        <button type="button" id="mission-close" class="icon-button" aria-label="Close">x</button>
+      </div>
+      <label>Project folder
+        <span class="project-picker"><input id="mission-project" type="text" readonly placeholder="Select a local folder"><button id="select-project" type="button">Browse</button></span>
+      </label>
+      <label>Mission title<input id="mission-task" type="text" required maxlength="120" value="Design and implement this mission"></label>
+      <div class="mission-form-row">
+        <label>Branch<input id="mission-branch" type="text" maxlength="80" placeholder="Generated from title"></label>
+        <label>Mode<select id="mission-mode"><option value="full">Full</option><option value="focused">Focused</option><option value="plan">Plan only</option><option value="explore">Explore</option><option value="hotfix">Hotfix</option></select></label>
+      </div>
+      <label>Idea Markdown<textarea id="mission-idea" required placeholder="# Mission idea"></textarea></label>
+      <div class="mission-file-row">
+        <label class="file-command" for="mission-file">Load Markdown<input id="mission-file" type="file" accept=".md,text/markdown,text/plain"></label>
+        <label class="resume-control"><input id="mission-resume" type="checkbox">Resume existing branch</label>
+      </div>
+      <p id="mission-form-status" role="status"></p>
+      <button class="submit-button" type="submit">Start HARNESS</button>
+    </form>
+  </dialog>
+  <script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/lib/marked.umd.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11.6.0/dist/mermaid.min.js" defer></script>
+  <script src="/app.js" defer></script>
+  <script src="/graph-render.js" defer></script>
+  <script src="/rich-render.js" defer></script>
+  <script src="/mission.js" defer></script>
+  <script src="/explore.js" defer></script>
+  <script src="/diagrams.js" defer></script>
+  <script src="/commands.js" defer></script>
+</body>
+</html>

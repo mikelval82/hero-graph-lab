@@ -1,0 +1,1677 @@
+const SVG_NS = "http://www.w3.org/2000/svg";
+const DESIGN_STORAGE_KEY = "hero-graph-lab-design-v1";
+const LAYOUT_STORAGE_KEY = "hero-graph-lab-layout-v1";
+const TYPOGRAPHY_STORAGE_KEY = "hero-graph-lab-typography-v1";
+const state = {
+  graph: null,
+  baseGraph: null,
+  source: null,
+  view: "flow",
+  scope: null,
+  selected: null,
+  selectedRelation: null,
+  task: "Explore project structure and execution flow",
+  positions: {},
+  treeExpanded: new Set(),
+  inlineExpanded: new Set(),
+  flowTrail: [],
+  hiddenGraphNodes: new Set(),
+  callTrace: null,
+  graphProjection: null,
+  drag: null,
+  lastNodeClick: null,
+  ignoreNextCanvasClick: false,
+  connection: null,
+  relationSource: null,
+  relationDraft: null,
+  graphWidth: 1000,
+  graphHeight: 680,
+  graphZoom: 1,
+  graphPan: null,
+  layoutLocked: false,
+  layoutSnapshot: null,
+  currentLayout: null,
+  viewStates: { structure: null, flow: null, focus: null },
+  nodeById: new Map(),
+  childrenByParent: new Map(),
+};
+const graphElement = document.querySelector("#graph");
+const edgeLayer = document.querySelector("#edges");
+const edgeLabelLayer = document.querySelector("#edge-labels");
+const nodeLayer = document.querySelector("#nodes");
+const connectionPreview = document.querySelector("#connection-preview");
+const graphViewport = document.querySelector("#graph-viewport");
+const appLayout = document.querySelector("#app-layout");
+const workspace = document.querySelector("#workspace");
+const panelLayout = { explorerWidth: null, graphRatio: 50, inspectorWidth: null, collapsed: [] };
+const panelTypographyDefaults = { explorer: 14, graph: 14, code: 14, inspector: 14 };
+const panelTypographyLimits = {
+  explorer: [11, 22],
+  graph: [10, 22],
+  code: [11, 24],
+  inspector: [11, 24],
+};
+const GRAPH_MIN_ZOOM = .1;
+const GRAPH_MAX_ZOOM = 2.5;
+const GRAPH_FIT_PADDING = 24;
+const panelTypography = { ...panelTypographyDefaults };
+
+function clamp(value, minimum, maximum) {
+  return Math.max(minimum, Math.min(maximum, value));
+}
+
+function graphBaseScale() {
+  return Math.max(.72, (graphViewport.clientWidth || graphWidth()) / state.graphWidth);
+}
+
+function applyGraphScale() {
+  const scale = graphBaseScale() * state.graphZoom;
+  graphElement.style.width = `${Math.ceil(state.graphWidth * scale)}px`;
+  graphElement.style.height = `${Math.ceil(state.graphHeight * scale)}px`;
+  graphElement.style.marginTop = `${Math.max(0, Math.floor((graphViewport.clientHeight - state.graphHeight * scale) / 2))}px`;
+  document.querySelector("#zoom-level").textContent = `${Math.round(state.graphZoom * 100)}%`;
+  document.querySelector("#zoom-out").disabled = state.graphZoom <= GRAPH_MIN_ZOOM;
+  document.querySelector("#zoom-in").disabled = state.graphZoom >= GRAPH_MAX_ZOOM;
+}
+
+function setGraphZoom(zoom, anchorClientX, anchorClientY) {
+  const nextZoom = clamp(Math.round(zoom * 100) / 100, GRAPH_MIN_ZOOM, GRAPH_MAX_ZOOM);
+  if (nextZoom === state.graphZoom) return;
+  const bounds = graphViewport.getBoundingClientRect();
+  const anchorX = anchorClientX === undefined ? graphViewport.clientWidth / 2 : anchorClientX - bounds.left;
+  const anchorY = anchorClientY === undefined ? graphViewport.clientHeight / 2 : anchorClientY - bounds.top;
+  const contentX = (graphViewport.scrollLeft + anchorX) / state.graphZoom;
+  const contentY = (graphViewport.scrollTop + anchorY) / state.graphZoom;
+  state.graphZoom = nextZoom;
+  applyGraphScale();
+  graphViewport.scrollLeft = contentX * nextZoom - anchorX;
+  graphViewport.scrollTop = contentY * nextZoom - anchorY;
+}
+
+function fitGraphToView() {
+  const availableWidth = Math.max(1, graphViewport.offsetWidth - GRAPH_FIT_PADDING);
+  const availableHeight = Math.max(1, graphViewport.offsetHeight - GRAPH_FIT_PADDING);
+  const fittedScale = Math.min(availableWidth / state.graphWidth, availableHeight / state.graphHeight);
+  state.graphZoom = clamp(fittedScale / graphBaseScale(), GRAPH_MIN_ZOOM, GRAPH_MAX_ZOOM);
+  applyGraphScale();
+  graphViewport.scrollTo({
+    left: Math.max(0, (graphViewport.scrollWidth - graphViewport.clientWidth) / 2),
+    top: Math.max(0, (graphViewport.scrollHeight - graphViewport.clientHeight) / 2),
+  });
+}
+
+function startGraphPan(event) {
+  if (event.button !== 0 && event.button !== 1) return;
+  if (event.target.closest(".graph-node, .edge-label, .edge-hit, .connector, .connector-halo")) return;
+  event.preventDefault();
+  state.graphPan = {
+    pointerId: event.pointerId,
+    clientX: event.clientX,
+    clientY: event.clientY,
+    scrollLeft: graphViewport.scrollLeft,
+    scrollTop: graphViewport.scrollTop,
+  };
+  graphViewport.classList.add("panning");
+  graphViewport.setPointerCapture(event.pointerId);
+}
+
+function moveGraphPan(event) {
+  if (!state.graphPan || event.pointerId !== state.graphPan.pointerId) return;
+  graphViewport.scrollLeft = state.graphPan.scrollLeft - (event.clientX - state.graphPan.clientX);
+  graphViewport.scrollTop = state.graphPan.scrollTop - (event.clientY - state.graphPan.clientY);
+}
+
+function stopGraphPan(event) {
+  if (!state.graphPan || event.pointerId !== state.graphPan.pointerId) return;
+  state.graphPan = null;
+  graphViewport.classList.remove("panning");
+  if (graphViewport.hasPointerCapture(event.pointerId)) graphViewport.releasePointerCapture(event.pointerId);
+}
+
+function inspectorVisible() {
+  return getComputedStyle(document.querySelector("#inspector")).display !== "none";
+}
+
+function explorerMaximum() {
+  const inspectorSpace = inspectorVisible() ? (panelLayout.inspectorWidth || document.querySelector("#inspector").getBoundingClientRect().width) + 6 : 0;
+  return Math.max(180, Math.min(480, appLayout.clientWidth - inspectorSpace - 672));
+}
+
+function inspectorMaximum() {
+  const explorerSpace = document.querySelector("#project-panel").getBoundingClientRect().width;
+  const proportionalMaximum = appLayout.clientWidth * .65;
+  return Math.max(190, Math.min(proportionalMaximum, appLayout.clientWidth - explorerSpace - 486));
+}
+
+function applyPanelLayout() {
+  const collapsed = new Set(panelLayout.collapsed);
+  document.body.classList.toggle("explorer-collapsed", collapsed.has("explorer"));
+  document.body.classList.toggle("code-collapsed", collapsed.has("code"));
+  document.body.classList.toggle("inspector-collapsed", collapsed.has("inspector"));
+  document.querySelectorAll("[data-collapse-panel]").forEach((button) => {
+    const panel = button.dataset.collapsePanel;
+    const isCollapsed = collapsed.has(panel);
+    button.setAttribute("aria-expanded", String(!isCollapsed));
+    button.setAttribute("aria-label", `${isCollapsed ? "Expand" : "Collapse"} ${panel === "code" ? "Code" : panel === "inspector" ? "Inspector" : "Explorer"}`);
+    button.title = button.getAttribute("aria-label");
+    button.querySelector("span").textContent = isCollapsed ? (panel === "explorer" ? ">" : "<") : (panel === "explorer" ? "<" : ">");
+  });
+  if (panelLayout.explorerWidth !== null) {
+    const explorerWidth = clamp(panelLayout.explorerWidth, 180, explorerMaximum());
+    appLayout.style.setProperty("--explorer-width", `${explorerWidth}px`);
+  }
+  if (panelLayout.inspectorWidth !== null && inspectorVisible()) {
+    const inspectorWidth = clamp(panelLayout.inspectorWidth, 190, inspectorMaximum());
+    appLayout.style.setProperty("--inspector-width", `${inspectorWidth}px`);
+  }
+  const graphRatio = clamp(panelLayout.graphRatio, 30, 70);
+  workspace.style.setProperty("--graph-width", `${graphRatio}%`);
+  const explorerSplitter = document.querySelector("#explorer-splitter");
+  explorerSplitter.setAttribute("aria-valuemax", Math.round(explorerMaximum()));
+  explorerSplitter.setAttribute("aria-valuenow", Math.round(document.querySelector("#project-panel").getBoundingClientRect().width));
+  const graphWidth = document.querySelector("#graph-panel").getBoundingClientRect().width;
+  const codeWidth = document.querySelector("#code-panel").getBoundingClientRect().width;
+  document.querySelector("#workspace-splitter").setAttribute("aria-valuenow", Math.round(graphWidth / (graphWidth + codeWidth) * 100));
+  if (inspectorVisible()) {
+    const inspectorSplitter = document.querySelector("#inspector-splitter");
+    inspectorSplitter.setAttribute("aria-valuemax", Math.round(inspectorMaximum()));
+    inspectorSplitter.setAttribute("aria-valuenow", Math.round(document.querySelector("#inspector").getBoundingClientRect().width));
+  }
+}
+
+function savePanelLayout() {
+  localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(panelLayout));
+}
+
+function applyPanelTypography() {
+  const selectors = {
+    explorer: "#project-panel",
+    graph: "#graph-panel",
+    code: "#code-panel",
+    inspector: "#inspector",
+  };
+  Object.entries(selectors).forEach(([panel, selector]) => {
+    const [minimum, maximum] = panelTypographyLimits[panel];
+    const size = clamp(Number(panelTypography[panel]), minimum, maximum);
+    panelTypography[panel] = size;
+    document.querySelector(selector).style.setProperty("--panel-font-size", `${size}px`);
+    const controls = document.querySelector(`[data-font-panel="${panel}"]`);
+    controls.querySelector("[data-font-value]").textContent = size;
+    controls.querySelector('[data-font-change="-1"]').disabled = size <= minimum;
+    controls.querySelector('[data-font-change="1"]').disabled = size >= maximum;
+  });
+}
+
+function savePanelTypography() {
+  localStorage.setItem(TYPOGRAPHY_STORAGE_KEY, JSON.stringify(panelTypography));
+}
+
+function initializePanelTypography() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(TYPOGRAPHY_STORAGE_KEY));
+    if (stored && typeof stored === "object") {
+      Object.keys(panelTypography).forEach((panel) => {
+        if (Number.isFinite(stored[panel])) panelTypography[panel] = stored[panel];
+      });
+    }
+  } catch (error) {
+    localStorage.removeItem(TYPOGRAPHY_STORAGE_KEY);
+  }
+  applyPanelTypography();
+  document.querySelectorAll("[data-font-panel]").forEach((controls) => {
+    controls.addEventListener("click", (event) => {
+      const button = event.target.closest("button");
+      if (!button) return;
+      const panel = controls.dataset.fontPanel;
+      if (button.hasAttribute("data-font-reset")) {
+        panelTypography[panel] = panelTypographyDefaults[panel];
+      } else if (button.dataset.fontChange) {
+        panelTypography[panel] += Number(button.dataset.fontChange);
+      }
+      applyPanelTypography();
+      savePanelTypography();
+      if (panel === "graph" && state.graph) {
+        releaseGraphLayout();
+        invalidateLayout();
+        render();
+      }
+    });
+  });
+}
+
+function restorePanelLayout() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(LAYOUT_STORAGE_KEY));
+    if (stored && typeof stored === "object") {
+      if (Number.isFinite(stored.explorerWidth)) panelLayout.explorerWidth = stored.explorerWidth;
+      if (Number.isFinite(stored.graphRatio)) panelLayout.graphRatio = stored.graphRatio;
+      if (Number.isFinite(stored.inspectorWidth)) panelLayout.inspectorWidth = stored.inspectorWidth;
+      if (Array.isArray(stored.collapsed)) panelLayout.collapsed = stored.collapsed.filter((panel) => ["explorer", "code", "inspector"].includes(panel));
+    }
+  } catch (error) {
+    localStorage.removeItem(LAYOUT_STORAGE_KEY);
+  }
+  applyPanelLayout();
+}
+
+function resizePanel(kind, clientX) {
+  if (kind === "explorer") {
+    panelLayout.explorerWidth = clamp(clientX - appLayout.getBoundingClientRect().left, 180, explorerMaximum());
+  } else if (kind === "inspector") {
+    panelLayout.inspectorWidth = clamp(appLayout.getBoundingClientRect().right - clientX, 190, inspectorMaximum());
+  } else {
+    const bounds = workspace.getBoundingClientRect();
+    const availableWidth = bounds.width - 6;
+    const graphWidth = clamp(clientX - bounds.left, 360, availableWidth - 300);
+    panelLayout.graphRatio = graphWidth / availableWidth * 100;
+  }
+  applyPanelLayout();
+}
+
+function setupPanelSplitter(splitterId, kind) {
+  const splitter = document.querySelector(splitterId);
+  let pointerId = null;
+  splitter.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    pointerId = event.pointerId;
+    splitter.setPointerCapture(pointerId);
+    splitter.classList.add("dragging");
+    document.body.classList.add("resizing-panels");
+  });
+  splitter.addEventListener("pointermove", (event) => {
+    if (event.pointerId === pointerId) resizePanel(kind, event.clientX);
+  });
+  const stop = (event) => {
+    if (event.pointerId !== pointerId) return;
+    pointerId = null;
+    splitter.classList.remove("dragging");
+    document.body.classList.remove("resizing-panels");
+    savePanelLayout();
+  };
+  splitter.addEventListener("pointerup", stop);
+  splitter.addEventListener("pointercancel", stop);
+  splitter.addEventListener("dblclick", () => {
+    if (kind === "explorer") panelLayout.explorerWidth = 280;
+    else if (kind === "inspector") panelLayout.inspectorWidth = 260;
+    else panelLayout.graphRatio = 50;
+    applyPanelLayout();
+    savePanelLayout();
+  });
+  splitter.addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const bounds = splitter.getBoundingClientRect();
+    let clientX = bounds.left + bounds.width / 2;
+    if (event.key === "ArrowLeft") clientX -= 16;
+    if (event.key === "ArrowRight") clientX += 16;
+    if (event.key === "Home") clientX = kind === "inspector" ? appLayout.getBoundingClientRect().right - 190 : kind === "explorer" ? appLayout.getBoundingClientRect().left + 180 : workspace.getBoundingClientRect().left + 360;
+    if (event.key === "End") clientX = kind === "inspector" ? appLayout.getBoundingClientRect().right - inspectorMaximum() : kind === "explorer" ? appLayout.getBoundingClientRect().left + explorerMaximum() : workspace.getBoundingClientRect().right - 306;
+    resizePanel(kind, clientX);
+    savePanelLayout();
+  });
+}
+
+function initializePanelResizing() {
+  restorePanelLayout();
+  setupPanelSplitter("#explorer-splitter", "explorer");
+  setupPanelSplitter("#workspace-splitter", "workspace");
+  setupPanelSplitter("#inspector-splitter", "inspector");
+  document.querySelectorAll("[data-collapse-panel]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const collapsed = new Set(panelLayout.collapsed);
+      if (collapsed.has(button.dataset.collapsePanel)) collapsed.delete(button.dataset.collapsePanel);
+      else collapsed.add(button.dataset.collapsePanel);
+      panelLayout.collapsed = [...collapsed];
+      applyPanelLayout();
+      savePanelLayout();
+      requestAnimationFrame(() => {
+        updateGraphViewport();
+        render();
+      });
+    });
+  });
+}
+
+function graphNode(nodeId) {
+  return state.nodeById.get(nodeId);
+}
+
+function scopeChildren(scopeId) {
+  return state.childrenByParent.get(scopeId) || [];
+}
+
+function rebuildGraphIndexes(graph = state.graph) {
+  state.nodeById = new Map();
+  state.childrenByParent = new Map();
+  (graph?.nodes || []).forEach((node) => {
+    if (!state.nodeById.has(node.id)) state.nodeById.set(node.id, node);
+    if (!state.childrenByParent.has(node.parent)) state.childrenByParent.set(node.parent, []);
+    state.childrenByParent.get(node.parent).push(node);
+  });
+}
+
+function sortedTreeChildren(nodeId) {
+  const kindOrder = { package: 0, module: 1, class: 2, function: 3, method: 3 };
+  return scopeChildren(nodeId).sort((left, right) => {
+    const order = (kindOrder[left.kind] ?? 4) - (kindOrder[right.kind] ?? 4);
+    return order || left.label.localeCompare(right.label);
+  });
+}
+
+function expandTreePath(nodeId) {
+  let node = graphNode(nodeId);
+  while (node) {
+    state.treeExpanded.add(node.id);
+    node = graphNode(node.parent);
+  }
+}
+
+function syncTreeSelection() {
+  document.querySelectorAll(".tree-row").forEach((row) => {
+    const selected = row.dataset.nodeId === state.selected;
+    row.classList.toggle("selected", selected);
+    row.classList.toggle("scope", row.dataset.nodeId === state.scope);
+    row.querySelector(".tree-item")?.setAttribute("aria-selected", String(selected));
+  });
+}
+
+function selectTreeNode(nodeId) {
+  const node = graphNode(nodeId);
+  if (!node) return;
+  if (!node.parent) {
+    navigateToScope(node.id);
+    return;
+  }
+  if (state.scope !== node.parent) {
+    state.scope = node.parent;
+    invalidateLayout();
+    renderBreadcrumbs();
+    updateGraphCount();
+  }
+  setSelection(node.id);
+}
+
+function activateTreeNode(nodeId) {
+  if (canEnterScope(nodeId)) {
+    state.treeExpanded.add(nodeId);
+    navigateToScope(nodeId);
+    return;
+  }
+  selectTreeNode(nodeId);
+}
+
+function treeIconText(kind) {
+  return { class: "C", function: "f", method: "m" }[kind] || "";
+}
+
+function appendTreeNode(parent, node, depth) {
+  const children = sortedTreeChildren(node.id);
+  const expanded = state.treeExpanded.has(node.id);
+  const item = document.createElement("li");
+  item.setAttribute("role", "none");
+  const row = document.createElement("div");
+  row.className = `tree-row ${node.status || "observed"}`;
+  row.dataset.nodeId = node.id;
+  row.style.setProperty("--depth", depth);
+
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = `tree-toggle${children.length ? "" : " placeholder"}`;
+  toggle.tabIndex = children.length ? 0 : -1;
+  toggle.setAttribute("aria-label", `${expanded ? "Collapse" : "Expand"} ${node.label}`);
+  if (children.length) toggle.setAttribute("aria-expanded", String(expanded));
+  toggle.addEventListener("click", () => {
+    if (!children.length) return;
+    if (expanded) state.treeExpanded.delete(node.id);
+    else state.treeExpanded.add(node.id);
+    renderFileTree();
+  });
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "tree-item";
+  button.setAttribute("role", "treeitem");
+  button.setAttribute("aria-level", depth + 1);
+  button.setAttribute("aria-selected", String(state.selected === node.id));
+  if (children.length) button.setAttribute("aria-expanded", String(expanded));
+  button.addEventListener("click", () => selectTreeNode(node.id));
+  button.addEventListener("dblclick", () => activateTreeNode(node.id));
+  button.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      activateTreeNode(node.id);
+    } else if (event.key === "ArrowRight" && children.length) {
+      event.preventDefault();
+      if (!expanded) { state.treeExpanded.add(node.id); renderFileTree(); }
+      else navigateToScope(node.id);
+    } else if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      if (expanded && node.id !== state.graph.root) { state.treeExpanded.delete(node.id); renderFileTree(); }
+      else if (node.parent) selectTreeNode(node.parent);
+    }
+  });
+
+  const icon = document.createElement("span");
+  icon.className = `tree-icon ${node.kind}`;
+  icon.setAttribute("aria-hidden", "true");
+  icon.textContent = treeIconText(node.kind);
+  const label = document.createElement("span");
+  label.className = "tree-item-label";
+  label.textContent = node.label;
+  button.append(icon, label);
+  row.append(toggle, button);
+  item.append(row);
+
+  if (children.length && expanded) {
+    const group = document.createElement("ul");
+    group.className = "tree-list";
+    group.setAttribute("role", "group");
+    children.forEach((child) => appendTreeNode(group, child, depth + 1));
+    item.append(group);
+  }
+  parent.append(item);
+}
+
+function renderFileTree() {
+  const tree = document.querySelector("#file-tree");
+  tree.replaceChildren();
+  const root = graphNode(state.graph.root || state.graph.nodes.find((node) => !node.parent)?.id);
+  if (!root) return;
+  const list = document.createElement("ul");
+  list.className = "tree-list";
+  list.setAttribute("role", "group");
+  appendTreeNode(list, root, 0);
+  tree.append(list);
+  syncTreeSelection();
+}
+
+function canEnterScope(nodeId) {
+  return scopeChildren(nodeId).length > 0 && graphNode(nodeId)?.status !== "removed";
+}
+
+function isDescendantOf(nodeId, ancestorId) {
+  let current = graphNode(nodeId);
+  while (current?.parent) {
+    if (current.parent === ancestorId) return true;
+    current = graphNode(current.parent);
+  }
+  return false;
+}
+
+function descendantIds(nodeId) {
+  const descendants = new Set();
+  const pending = [...scopeChildren(nodeId)];
+  while (pending.length) {
+    const node = pending.pop();
+    descendants.add(node.id);
+    pending.push(...scopeChildren(node.id));
+  }
+  return descendants;
+}
+
+function outgoingCallTrace(rootId, maxDepth = 1) {
+  const nodeDepths = new Map([[rootId, 0]]);
+  const edgeIds = new Set();
+  let frontier = [rootId];
+  for (let depth = 1; depth <= maxDepth && frontier.length; depth += 1) {
+    const next = [];
+    frontier.forEach((sourceId) => {
+      state.graph.edges.forEach((edge) => {
+        if (edge.kind !== "calls" || edge.status === "removed" || edge.source !== sourceId) return;
+        edgeIds.add(edge.id);
+        if (nodeDepths.has(edge.target)) return;
+        nodeDepths.set(edge.target, depth);
+        next.push(edge.target);
+      });
+    });
+    frontier = next;
+  }
+  return { rootId, maxDepth, nodeDepths, edgeIds };
+}
+
+function callTraceGraph() {
+  const trace = state.callTrace;
+  if (!trace) return { nodes: [], edges: [] };
+  const nodes = [...trace.nodeDepths].map(([nodeId, traceDepth]) => {
+    const node = graphNode(nodeId);
+    return node ? { ...node, context: false, traceDepth } : null;
+  }).filter(Boolean);
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const edges = state.graph.edges
+    .filter((edge) => trace.edgeIds.has(edge.id) && nodeIds.has(edge.source) && nodeIds.has(edge.target))
+    .map((edge) => ({
+      ...edge,
+      aggregate: false,
+      memberIds: [edge.id],
+      traced: true,
+      traceDepth: trace.nodeDepths.get(edge.target),
+    }));
+  return { nodes, edges };
+}
+
+function visibleHierarchyNodes(scopeId, expandedNodes = state.inlineExpanded) {
+  const nodes = [];
+  const appendChildren = (parentId) => {
+    scopeChildren(parentId).forEach((node) => {
+      if (state.hiddenGraphNodes.has(node.id)) return;
+      nodes.push({ ...node, context: false });
+      if (expandedNodes.has(node.id)) appendChildren(node.id);
+    });
+  };
+  appendChildren(scopeId);
+  return nodes;
+}
+
+function visibleRepresentative(nodeId, visibleIds) {
+  let current = graphNode(nodeId);
+  while (current && current.id !== state.scope) {
+    if (visibleIds.has(current.id)) return current;
+    current = graphNode(current.parent);
+  }
+  return null;
+}
+
+function flowGraph(expandedNodes = state.inlineExpanded) {
+  const scopeId = state.scope || state.graph.root;
+  const nodes = visibleHierarchyNodes(scopeId, expandedNodes);
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  state.callTrace?.nodeDepths.forEach((depth, nodeId) => {
+    if (nodeIds.has(nodeId)) return;
+    const node = graphNode(nodeId);
+    if (!node) return;
+    nodes.push({ ...node, context: true, traceDepth: depth });
+    nodeIds.add(nodeId);
+  });
+  const groupedEdges = new Map();
+  const directEdges = state.graph.edges
+    .filter((edge) => edge.kind === "contains" && nodeIds.has(edge.source) && nodeIds.has(edge.target))
+    .map((edge) => ({ ...edge, aggregate: false, memberIds: [edge.id] }));
+
+  state.graph.edges.filter((edge) => edge.kind !== "contains").forEach((edge) => {
+    const sourceBranch = visibleRepresentative(edge.source, nodeIds);
+    const targetBranch = visibleRepresentative(edge.target, nodeIds);
+    if (!sourceBranch && !targetBranch) return;
+    const sourceInsideScope = edge.source === scopeId || isDescendantOf(edge.source, scopeId);
+    const targetInsideScope = edge.target === scopeId || isDescendantOf(edge.target, scopeId);
+    const source = sourceBranch || (!sourceInsideScope && !state.hiddenGraphNodes.has(edge.source) ? graphNode(edge.source) : null);
+    const target = targetBranch || (!targetInsideScope && !state.hiddenGraphNodes.has(edge.target) ? graphNode(edge.target) : null);
+    if (!source || !target || source.id === target.id) return;
+    if (!nodeIds.has(source.id)) {
+      nodes.push({ ...source, context: true });
+      nodeIds.add(source.id);
+    }
+    if (!nodeIds.has(target.id)) {
+      nodes.push({ ...target, context: true });
+      nodeIds.add(target.id);
+    }
+    if (source.id === edge.source && target.id === edge.target) {
+      directEdges.push({ ...edge, aggregate: false, memberIds: [edge.id], traced: state.callTrace?.edgeIds.has(edge.id), traceDepth: state.callTrace?.nodeDepths.get(edge.target) });
+      return;
+    }
+    const status = edge.status || "observed";
+    const label = edge.label || "";
+    const properties = edge.properties || {};
+    const propertyKey = JSON.stringify(Object.entries(properties).sort());
+    const key = `${source.id}|${target.id}|${edge.kind}|${status}|${label}|${propertyKey}`;
+    const grouped = groupedEdges.get(key) || { source: source.id, target: target.id, kind: edge.kind, status, label, properties, count: 0, memberIds: [] };
+    grouped.count += 1;
+    grouped.memberIds.push(edge.id);
+    groupedEdges.set(key, grouped);
+  });
+
+  const edges = Array.from(groupedEdges.values()).map((edge) => ({
+    id: `aggregate:${scopeId}:${edge.source}:${edge.kind}:${edge.target}:${edge.status}`,
+    source: edge.source,
+    target: edge.target,
+    kind: edge.kind,
+    status: edge.status,
+    label: edge.label || (edge.count > 1 ? `${edge.count} ${edge.kind}` : edge.kind),
+    properties: edge.properties,
+    memberIds: edge.memberIds,
+    count: edge.count,
+    editLabel: edge.label || edge.kind,
+    aggregate: true,
+  }));
+  return { nodes, edges: [...directEdges, ...edges] };
+}
+
+function structureGraph() {
+  const nodes = visibleHierarchyNodes(state.scope || state.graph.root);
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const edges = state.graph.edges
+    .filter((edge) => edge.kind === "contains" && nodeIds.has(edge.source) && nodeIds.has(edge.target))
+    .map((edge) => ({ ...edge, aggregate: false, memberIds: [edge.id] }));
+  return { nodes, edges };
+}
+
+function focusGraph() {
+  const expandedNodes = new Set(state.inlineExpanded);
+  if (state.selected) expandedNodes.delete(state.selected);
+  const graph = flowGraph(expandedNodes);
+  if (!state.selected || !graph.nodes.some((node) => node.id === state.selected)) return graph;
+  const edges = graph.edges.filter((edge) => edge.kind === "calls" && (edge.source === state.selected || edge.target === state.selected));
+  const nodeIds = new Set([state.selected]);
+  edges.forEach((edge) => {
+    nodeIds.add(edge.source);
+    nodeIds.add(edge.target);
+  });
+  return { nodes: graph.nodes.filter((node) => nodeIds.has(node.id)), edges };
+}
+
+function flowTrailTo(nodeId) {
+  const trail = [];
+  let node = graphNode(nodeId);
+  while (node && node.id !== state.scope) {
+    trail.unshift(node.id);
+    node = graphNode(node.parent);
+  }
+  return node?.id === state.scope ? trail : [];
+}
+
+function flowJourneyGraph() {
+  const graph = flowGraph();
+  if (!state.flowTrail.length || state.callTrace) return graph;
+  const anchorId = state.flowTrail.at(-1);
+  const nodeIds = new Set(state.flowTrail);
+  scopeChildren(anchorId).forEach((node) => {
+    if (!state.hiddenGraphNodes.has(node.id)) nodeIds.add(node.id);
+  });
+  return {
+    nodes: graph.nodes.filter((node) => nodeIds.has(node.id)),
+    edges: graph.edges.filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target)),
+  };
+}
+
+function navigationGraph() {
+  if (state.callTrace) return callTraceGraph();
+  if (state.graphProjection) return state.graphProjection.graph;
+  if (state.layoutLocked && state.layoutSnapshot) return state.layoutSnapshot.graph;
+  if (state.view === "structure") return structureGraph();
+  if (state.view === "focus") return focusGraph();
+  return flowJourneyGraph();
+}
+
+function graphProjectionKey(graph) {
+  return `${graph.nodes.map((node) => node.id).join("|")}::${graph.edges.map((edge) => edge.id).join("|")}`;
+}
+
+function captureGraphViewState() {
+  if (!state.currentLayout) return;
+  state.viewStates[state.view] = {
+    layout: structuredClone(state.currentLayout),
+    selected: state.selected,
+    selectedRelation: state.selectedRelation,
+    zoom: state.graphZoom,
+    scrollLeft: graphViewport.scrollLeft,
+    scrollTop: graphViewport.scrollTop,
+  };
+}
+
+function invalidateLayout() {
+  releaseGraphLayout();
+  state.positions = {};
+  state.currentLayout = null;
+  state.viewStates = { structure: null, flow: null, focus: null };
+}
+
+function updateLayoutLockControl() {
+  const button = document.querySelector("#lock-layout");
+  button.setAttribute("aria-pressed", String(state.layoutLocked));
+  button.querySelector("span").textContent = state.layoutLocked ? "Unlock view" : "Lock view";
+  button.title = state.layoutLocked ? "Resume dynamic layout" : "Keep visible nodes fixed while inspecting";
+}
+
+function releaseGraphLayout() {
+  state.layoutLocked = false;
+  state.layoutSnapshot = null;
+  updateLayoutLockControl();
+}
+
+function toggleGraphLayoutLock() {
+  if (state.layoutLocked) {
+    releaseGraphLayout();
+  } else {
+    const graph = navigationGraph();
+    const positions = currentPositions(graph);
+    state.layoutSnapshot = {
+      graph: structuredClone(graph),
+      positions: structuredClone(positions),
+      width: state.graphWidth,
+      height: state.graphHeight,
+    };
+    state.layoutLocked = true;
+    updateLayoutLockControl();
+  }
+  updateGraphCount();
+  updateTools();
+  render();
+}
+
+function selectRelation(edge) {
+  if (state.graphProjection) {
+    document.querySelector("#graph-command-status").textContent = "Restore the normal graph before editing relationships.";
+    return;
+  }
+  state.selectedRelation = edge.id;
+  state.selected = null;
+  updateTools();
+  syncTreeSelection();
+  render();
+  dispatchEvent(new CustomEvent("graph-selection-changed"));
+  openRelationDialog("edit", edge);
+}
+
+function graphPoint(event) {
+  const bounds = graphElement.getBoundingClientRect();
+  return {
+    x: (event.clientX - bounds.left) * (state.graphWidth / bounds.width),
+    y: (event.clientY - bounds.top) * (state.graphHeight / bounds.height),
+  };
+}
+
+function startConnection(event, sourceId, start) {
+  event.preventDefault();
+  event.stopPropagation();
+  state.connection = { sourceId, start, pointerId: event.pointerId };
+  connectionPreview.hidden = false;
+  connectionPreview.setAttribute("d", curve(start, start));
+  graphElement.setPointerCapture(event.pointerId);
+}
+
+function moveConnection(event) {
+  if (!state.connection || event.pointerId !== state.connection.pointerId) return;
+  connectionPreview.setAttribute("d", curve(state.connection.start, graphPoint(event)));
+}
+
+function stopConnection(event) {
+  if (!state.connection || event.pointerId !== state.connection.pointerId) return;
+  const completed = state.connection;
+  state.connection = null;
+  connectionPreview.hidden = true;
+  graphElement.releasePointerCapture(event.pointerId);
+  const targetGroup = document.elementFromPoint(event.clientX, event.clientY)?.closest(".graph-node");
+  const targetId = targetGroup?.dataset.nodeId;
+  if (targetId && targetId !== completed.sourceId) openRelationDialog("add", null, completed.sourceId, targetId);
+}
+
+function startDrag(event, nodeId, position) {
+  event.stopPropagation();
+  state.drag = {
+    nodeId,
+    pointerId: event.pointerId,
+    startClientX: event.clientX,
+    startClientY: event.clientY,
+    startX: position.x,
+    startY: position.y,
+    moved: false,
+  };
+  graphElement.setPointerCapture(event.pointerId);
+}
+
+function dragNode(event) {
+  if (!state.drag || event.pointerId !== state.drag.pointerId) return;
+  if (state.layoutLocked) return;
+  const bounds = graphElement.getBoundingClientRect();
+  const deltaX = (event.clientX - state.drag.startClientX) * (state.graphWidth / bounds.width);
+  const deltaY = (event.clientY - state.drag.startClientY) * (state.graphHeight / bounds.height);
+  state.drag.moved ||= Math.abs(deltaX) + Math.abs(deltaY) > 4;
+  state.positions[state.drag.nodeId] = {
+    x: Math.max(40, Math.min(state.graphWidth - 40, state.drag.startX + deltaX)),
+    y: Math.max(40, Math.min(state.graphHeight - 40, state.drag.startY + deltaY)),
+  };
+  render();
+}
+
+function stopDrag(event) {
+  if (!state.drag || event.pointerId !== state.drag.pointerId) return;
+  const completedDrag = state.drag;
+  state.drag = null;
+  graphElement.releasePointerCapture(event.pointerId);
+  state.ignoreNextCanvasClick = true;
+  if (completedDrag.moved) {
+    saveDesign();
+    return;
+  }
+  const now = performance.now();
+  const isDoubleClick = state.lastNodeClick?.nodeId === completedDrag.nodeId && now - state.lastNodeClick.at < 350;
+  state.lastNodeClick = isDoubleClick ? null : { nodeId: completedDrag.nodeId, at: now };
+  if (isDoubleClick) {
+    setSelection(completedDrag.nodeId);
+    if (state.graphProjection) globalThis.HeroDiagrams?.expandProjection(completedDrag.nodeId);
+    else if (canEnterScope(completedDrag.nodeId)) expandSelectedNode();
+    fitGraphToView();
+  } else {
+    toggleSelection(completedDrag.nodeId);
+  }
+}
+
+function setSelection(nodeId) {
+  if (state.relationSource && nodeId && nodeId !== state.relationSource) {
+    const sourceId = state.relationSource;
+    state.relationSource = null;
+    document.body.classList.remove("relation-command-active");
+    document.querySelector("#graph-command-status").textContent = "";
+    openRelationDialog("add", null, sourceId, nodeId);
+  }
+  state.selected = nodeId;
+  state.selectedRelation = null;
+  const node = state.graph.nodes.find((candidate) => candidate.id === state.selected);
+  if (node?.source) renderCodePanel(node);
+  updateGraphCount();
+  updateTools();
+  syncTreeSelection();
+  if (state.view === "focus" && !state.graphProjection) render();
+  else updateGraphSelectionStyles();
+  dispatchEvent(new CustomEvent("graph-selection-changed"));
+}
+
+function toggleSelection(nodeId) {
+  setSelection(state.selected === nodeId ? null : nodeId);
+}
+
+function clearSelection() {
+  if (!state.selected && !state.selectedRelation) return;
+  state.selected = null;
+  state.selectedRelation = null;
+  updateGraphCount();
+  updateTools();
+  syncTreeSelection();
+  if (state.view === "focus" && !state.graphProjection) render();
+  else updateGraphSelectionStyles();
+  dispatchEvent(new CustomEvent("graph-selection-changed"));
+}
+
+function refreshSelection() {
+  setSelection(state.selected);
+}
+
+function updateGraphCount() {
+  const visibleGraph = navigationGraph();
+  const changedNodes = state.graph.nodes.filter((node) => (node.status || "observed") !== "observed").length;
+  const changedRelations = state.graph.edges.filter((edge) => (edge.status || "observed") !== "observed" && !edge.generated).length;
+  const proposals = changedNodes + changedRelations;
+  document.querySelector("#graph-count").textContent = `${visibleGraph.nodes.length} visible / ${state.graph.nodes.length} total / ${proposals} changes`;
+}
+
+function setGraphView(view) {
+  if (!["structure", "flow", "focus"].includes(view) || state.view === view) return;
+  if (state.callTrace) {
+    clearCallTrace();
+    render();
+  }
+  captureGraphViewState();
+  releaseGraphLayout();
+  state.view = view;
+  state.selectedRelation = null;
+  const savedView = state.viewStates[view];
+  if (savedView) {
+    state.selected = savedView.selected;
+    state.selectedRelation = savedView.selectedRelation;
+    state.graphZoom = savedView.zoom;
+  }
+  document.querySelectorAll("[data-graph-view]").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.graphView === view));
+  });
+  const viewLabel = view === "structure" ? "Hierarchy" : `${view[0].toUpperCase()}${view.slice(1)}`;
+  document.querySelector("#graph-view-label").textContent = `${viewLabel} Graph`;
+  updateGraphCount();
+  updateTools();
+  render();
+  if (savedView) {
+    graphViewport.scrollTo({ left: savedView.scrollLeft, top: savedView.scrollTop });
+  } else {
+    fitGraphToView();
+  }
+  refreshSelection();
+}
+
+function updateTools() {
+  const node = state.graph?.nodes.find((candidate) => candidate.id === state.selected);
+  const visibleNodeIds = state.graph ? new Set(navigationGraph().nodes.map((candidate) => candidate.id)) : new Set();
+  const inlineNode = node && visibleNodeIds.has(node.id) && isDescendantOf(node.id, state.scope);
+  const projectionActive = Boolean(state.graphProjection);
+  const traceButton = document.querySelector("#trace-calls");
+  const hasOutgoingCalls = node && ["function", "method"].includes(node.kind) && state.graph.edges.some((edge) => edge.kind === "calls" && edge.status !== "removed" && edge.source === node.id);
+  traceButton.disabled = Boolean(state.graphProjection) || state.view !== "flow" || (!state.callTrace && !hasOutgoingCalls);
+  traceButton.setAttribute("aria-pressed", String(Boolean(state.callTrace)));
+  traceButton.querySelector("span").textContent = state.callTrace ? "Restore view" : "Trace calls";
+  document.querySelector("#edit-node").disabled = projectionActive || !node || node.status === "removed";
+  document.querySelector("#delete-node").disabled = projectionActive || !node;
+  document.querySelector("#delete-node span").textContent = node?.status === "removed" ? "Restore" : "Delete";
+  const temporaryFocus = state.view === "focus" && !projectionActive;
+  document.querySelector("#expand-node").disabled = projectionActive ? !node : temporaryFocus || !inlineNode || !scopeChildren(node.id).length || state.inlineExpanded.has(node.id);
+  document.querySelector("#collapse-node").disabled = projectionActive ? !state.graphProjection.history.length : temporaryFocus || !inlineNode || !state.inlineExpanded.has(node.id);
+  document.querySelector("#expand-node span").textContent = projectionActive ? "Expand node" : "Expand";
+  document.querySelector("#collapse-node span").textContent = projectionActive ? "Back" : "Collapse";
+  document.querySelector("#hide-node").disabled = projectionActive || temporaryFocus || !node || !visibleNodeIds.has(node.id);
+  document.querySelector("#reset-view").disabled = projectionActive || !state.inlineExpanded.size && !state.hiddenGraphNodes.size && !Object.keys(state.positions).length;
+  document.querySelector("#reset-design").disabled = projectionActive;
+  globalThis.HeroCommands?.refresh();
+}
+
+function clearCallTrace({ restoreViewport = false } = {}) {
+  if (!state.callTrace) return;
+  const returnView = state.callTrace.returnView;
+  state.callTrace = null;
+  if (!returnView) {
+    invalidateLayout();
+    return;
+  }
+  state.positions = returnView.positions;
+  state.currentLayout = returnView.currentLayout;
+  state.viewStates = returnView.viewStates;
+  state.graphZoom = returnView.graphZoom;
+  state.selected = returnView.selected;
+  state.selectedRelation = returnView.selectedRelation;
+  state.layoutLocked = returnView.layoutLocked;
+  state.layoutSnapshot = returnView.layoutSnapshot;
+  updateLayoutLockControl();
+  syncTreeSelection();
+  if (restoreViewport) {
+    requestAnimationFrame(() => {
+      applyGraphScale();
+      graphViewport.scrollTo({ left: returnView.scrollLeft, top: returnView.scrollTop });
+    });
+  }
+}
+
+function toggleCallTrace() {
+  if (state.callTrace) {
+    clearCallTrace({ restoreViewport: true });
+  } else {
+    const trace = outgoingCallTrace(state.selected);
+    if (!trace.edgeIds.size) return;
+    trace.returnView = {
+      positions: structuredClone(state.positions),
+      currentLayout: structuredClone(state.currentLayout),
+      viewStates: structuredClone(state.viewStates),
+      graphZoom: state.graphZoom,
+      scrollLeft: graphViewport.scrollLeft,
+      scrollTop: graphViewport.scrollTop,
+      selected: state.selected,
+      selectedRelation: state.selectedRelation,
+      layoutLocked: state.layoutLocked,
+      layoutSnapshot: structuredClone(state.layoutSnapshot),
+    };
+    state.callTrace = trace;
+    state.positions = {};
+    state.currentLayout = null;
+    releaseGraphLayout();
+  }
+  updateGraphCount();
+  updateTools();
+  render();
+  if (state.callTrace) {
+    fitGraphToView();
+    document.querySelector("#graph-command-status").textContent = `${state.callTrace.nodeDepths.size} nodes in call trace. Press T again to restore the previous view.`;
+  } else {
+    document.querySelector("#graph-command-status").textContent = "Call trace cleared. Previous view restored.";
+    dispatchEvent(new CustomEvent("graph-selection-changed"));
+  }
+}
+
+function expandSelectedNode() {
+  if (state.graphProjection) {
+    globalThis.HeroDiagrams?.expandProjection(state.selected);
+    return;
+  }
+  if (state.view === "focus") return;
+  const node = graphNode(state.selected);
+  if (!node || !scopeChildren(node.id).length || !isDescendantOf(node.id, state.scope)) return;
+  state.inlineExpanded.add(node.id);
+  if (state.view === "flow") state.flowTrail = flowTrailTo(node.id);
+  invalidateLayout();
+  saveDesign();
+  renderBreadcrumbs();
+  updateGraphCount();
+  updateTools();
+  render();
+}
+
+function collapseSelectedNode() {
+  if (state.graphProjection) {
+    globalThis.HeroDiagrams?.backProjection();
+    return;
+  }
+  if (state.view === "focus") return;
+  const node = graphNode(state.selected);
+  if (!node) return;
+  state.inlineExpanded.delete(node.id);
+  descendantIds(node.id).forEach((nodeId) => state.inlineExpanded.delete(nodeId));
+  const trailIndex = state.flowTrail.indexOf(node.id);
+  if (trailIndex >= 0) state.flowTrail = state.flowTrail.slice(0, trailIndex);
+  invalidateLayout();
+  saveDesign();
+  renderBreadcrumbs();
+  updateGraphCount();
+  updateTools();
+  render();
+}
+
+function hideSelectedNode() {
+  const node = graphNode(state.selected);
+  if (!node) return;
+  if (state.callTrace?.nodeDepths.has(node.id)) clearCallTrace();
+  state.hiddenGraphNodes.add(node.id);
+  descendantIds(node.id).forEach((nodeId) => {
+    state.hiddenGraphNodes.add(nodeId);
+    state.inlineExpanded.delete(nodeId);
+  });
+  state.inlineExpanded.delete(node.id);
+  const trailIndex = state.flowTrail.indexOf(node.id);
+  if (trailIndex >= 0) state.flowTrail = state.flowTrail.slice(0, trailIndex);
+  invalidateLayout();
+  state.selected = null;
+  saveDesign();
+  syncTreeSelection();
+  updateTools();
+  render();
+}
+
+function resetGraphView() {
+  clearCallTrace();
+  state.inlineExpanded.clear();
+  state.flowTrail = [];
+  state.hiddenGraphNodes.clear();
+  invalidateLayout();
+  state.selected = null;
+  state.selectedRelation = null;
+  saveDesign();
+  syncTreeSelection();
+  updateTools();
+  render();
+}
+
+function scopePath() {
+  const path = [];
+  let node = graphNode(state.scope);
+  while (node) {
+    path.unshift(node);
+    node = graphNode(node.parent);
+  }
+  return path;
+}
+
+function renderBreadcrumbs() {
+  const breadcrumbs = document.querySelector("#scope-breadcrumbs");
+  breadcrumbs.replaceChildren();
+  scopePath().forEach((node) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "scope-crumb";
+    button.textContent = node.label;
+    button.addEventListener("click", () => navigateToScope(node.id));
+    breadcrumbs.append(button);
+  });
+  state.flowTrail.forEach((nodeId, index) => {
+    const node = graphNode(nodeId);
+    if (!node) return;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "scope-crumb trail-crumb";
+    button.textContent = node.label;
+    button.addEventListener("click", () => {
+      state.flowTrail.slice(index + 1).forEach((descendantId) => state.inlineExpanded.delete(descendantId));
+      state.flowTrail = state.flowTrail.slice(0, index + 1);
+      setSelection(node.id);
+      invalidateLayout();
+      saveDesign();
+      renderBreadcrumbs();
+      updateGraphCount();
+      updateTools();
+      render();
+    });
+    breadcrumbs.append(button);
+  });
+  breadcrumbs.scrollLeft = breadcrumbs.scrollWidth;
+  const parent = graphNode(state.scope)?.parent;
+  document.querySelector("#scope-up").disabled = !state.flowTrail.length && !parent;
+}
+
+function navigateGraphBack() {
+  if (!state.flowTrail.length) {
+    navigateToScope(graphNode(state.scope)?.parent);
+    return;
+  }
+  const removedId = state.flowTrail.pop();
+  state.inlineExpanded.delete(removedId);
+  descendantIds(removedId).forEach((nodeId) => state.inlineExpanded.delete(nodeId));
+  invalidateLayout();
+  saveDesign();
+  renderBreadcrumbs();
+  setSelection(state.flowTrail.at(-1) || null);
+  render();
+}
+
+function navigateToScope(scopeId) {
+  if (!scopeId || !graphNode(scopeId)) return;
+  clearCallTrace();
+  state.scope = scopeId;
+  state.selected = null;
+  state.selectedRelation = null;
+  state.lastNodeClick = null;
+  state.flowTrail = [];
+  invalidateLayout();
+  expandTreePath(scopeId);
+  renderFileTree();
+  renderBreadcrumbs();
+  updateGraphCount();
+  updateTools();
+  render();
+}
+
+function saveDesign() {
+  try {
+    localStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify({
+      source: state.graph.source,
+      graph: state.graph,
+      positions: state.positions,
+      inlineExpanded: [...state.inlineExpanded],
+      flowTrail: state.flowTrail,
+      hiddenGraphNodes: [...state.hiddenGraphNodes],
+    }));
+  } catch (error) {
+    console.warn("Could not save local graph design.", error);
+  }
+  renderFileTree();
+  updateGraphCount();
+}
+
+function markGraphDesignChanged() {
+  dispatchEvent(new CustomEvent("graph-design-changed"));
+}
+
+function restoreDesign(baseGraph) {
+  try {
+    const stored = JSON.parse(localStorage.getItem(DESIGN_STORAGE_KEY));
+    if (stored?.source === baseGraph.source && Array.isArray(stored.graph?.nodes) && Array.isArray(stored.graph?.edges)) {
+      state.positions = stored.positions?.flow || stored.positions || state.positions;
+      state.inlineExpanded = new Set(stored.inlineExpanded || []);
+      state.flowTrail = Array.isArray(stored.flowTrail) ? stored.flowTrail : [];
+      state.hiddenGraphNodes = new Set(stored.hiddenGraphNodes || []);
+      return stored.graph;
+    }
+  } catch (error) {
+    localStorage.removeItem(DESIGN_STORAGE_KEY);
+  }
+  return baseGraph;
+}
+
+function normalizeGraph(graph) {
+  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+  graph.nodes.forEach((node) => { node.status ||= "observed"; });
+  graph.edges.forEach((edge, index) => {
+    edge.id ||= `observed:${index}:${edge.source}:${edge.kind}:${edge.target}`;
+    edge.status ||= "observed";
+    edge.properties ||= {};
+    const target = nodeById.get(edge.target);
+    if (edge.status === "proposed" && edge.kind === "contains" && target?.status === "proposed" && !edge.label) edge.generated = true;
+  });
+  rebuildGraphIndexes(graph);
+  return graph;
+}
+
+async function loadExperiment({ restoreLocalDesign = true } = {}) {
+  try {
+    const [graphResponse, sourceResponse] = await Promise.all([fetch("/api/graph"), fetch("/api/source")]);
+    if (!graphResponse.ok || !sourceResponse.ok) throw new Error("Request failed");
+    const extractedGraph = await graphResponse.json();
+    state.source = await sourceResponse.json();
+    state.flowTrail = [];
+    state.viewStates = { structure: null, flow: null, focus: null };
+    state.currentLayout = null;
+    normalizeGraph(extractedGraph);
+    state.baseGraph = structuredClone(extractedGraph);
+    state.graph = normalizeGraph(restoreLocalDesign ? restoreDesign(extractedGraph) : extractedGraph);
+    state.scope = state.graph.root || state.graph.nodes.find((node) => !node.parent)?.id;
+    state.treeExpanded = new Set(state.graph.root ? [state.graph.root] : []);
+    document.querySelector("#source-name").textContent = state.graph.source;
+    updateGraphViewport(); renderFileTree(); renderBreadcrumbs(); updateGraphCount(); updateTools(); render();
+    dispatchEvent(new CustomEvent("graph-experiment-ready"));
+  } catch (error) {
+    graphElement.hidden = true; document.querySelector("#empty-state").hidden = false;
+  }
+}
+
+graphElement.addEventListener("pointermove", dragNode);
+graphElement.addEventListener("pointermove", moveConnection);
+graphElement.addEventListener("pointerup", stopDrag);
+graphElement.addEventListener("pointerup", stopConnection);
+graphElement.addEventListener("pointercancel", stopDrag);
+graphElement.addEventListener("pointercancel", stopConnection);
+graphElement.addEventListener("click", (event) => {
+  if (state.ignoreNextCanvasClick) {
+    state.ignoreNextCanvasClick = false;
+    return;
+  }
+  if (!event.target.closest(".graph-node")) clearSelection();
+});
+graphViewport.addEventListener("wheel", (event) => {
+  if (!event.ctrlKey) return;
+  event.preventDefault();
+  setGraphZoom(state.graphZoom * (event.deltaY < 0 ? 1.12 : .89), event.clientX, event.clientY);
+}, { passive: false });
+graphViewport.addEventListener("pointerdown", startGraphPan);
+graphViewport.addEventListener("pointermove", moveGraphPan);
+graphViewport.addEventListener("pointerup", stopGraphPan);
+graphViewport.addEventListener("pointercancel", stopGraphPan);
+document.querySelector("#zoom-out").addEventListener("click", () => setGraphZoom(state.graphZoom - .1));
+document.querySelector("#zoom-in").addEventListener("click", () => setGraphZoom(state.graphZoom + .1));
+document.querySelector("#zoom-fit").addEventListener("click", fitGraphToView);
+addEventListener("resize", () => requestAnimationFrame(() => {
+  applyPanelLayout();
+  updateGraphViewport();
+  render();
+}));
+document.querySelector("#scope-up").addEventListener("click", navigateGraphBack);
+document.querySelector("#collapse-tree").addEventListener("click", () => {
+  state.treeExpanded = new Set([state.graph.root]);
+  renderFileTree();
+});
+document.querySelector("#hide-node").addEventListener("click", hideSelectedNode);
+document.querySelector("#lock-layout").addEventListener("click", toggleGraphLayoutLock);
+document.querySelector("#reset-view").addEventListener("click", resetGraphView);
+
+const pythonTokenPattern = /(#[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b(?:from|import|class|def|return|if|else|elif|for|while|in|is|not|and|or|as|with|async|await|raise|try|except|finally|yield|lambda|pass|break|continue)\b|\b(?:True|False|None)\b|\b\d+(?:\.\d+)?\b)/g;
+
+function tokenClass(value) {
+  if (value.startsWith("#")) return "token-comment";
+  if (value.startsWith('"') || value.startsWith("'")) return "token-string";
+  if (/^\d/.test(value)) return "token-number";
+  if (["True", "False", "None"].includes(value)) return "token-constant";
+  return "token-keyword";
+}
+
+function appendHighlightedLine(container, sourceLine) {
+  let offset = 0;
+  for (const match of sourceLine.matchAll(pythonTokenPattern)) {
+    container.append(document.createTextNode(sourceLine.slice(offset, match.index)));
+    const token = document.createElement("span");
+    token.className = tokenClass(match[0]);
+    token.textContent = match[0];
+    container.append(token);
+    offset = match.index + match[0].length;
+  }
+  container.append(document.createTextNode(sourceLine.slice(offset)));
+}
+
+const codeSearchState = { matches: [], active: -1 };
+
+function clearCodeSearchHighlights() {
+  CSS.highlights?.delete("code-search-match");
+  CSS.highlights?.delete("code-search-active");
+  document.querySelectorAll(".code-line.search-match, .code-line.search-active").forEach((line) => {
+    line.classList.remove("search-match", "search-active");
+  });
+  codeSearchState.matches = [];
+  codeSearchState.active = -1;
+}
+
+function textRangeForOffsets(container, start, end) {
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  let offset = 0;
+  let startNode;
+  let startOffset;
+  let endNode;
+  let endOffset;
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const nextOffset = offset + node.textContent.length;
+    if (!startNode && start >= offset && start < nextOffset) {
+      startNode = node;
+      startOffset = start - offset;
+    }
+    if (end > offset && end <= nextOffset) {
+      endNode = node;
+      endOffset = end - offset;
+      break;
+    }
+    offset = nextOffset;
+  }
+  if (!startNode || !endNode) return null;
+  const range = new Range();
+  range.setStart(startNode, startOffset);
+  range.setEnd(endNode, endOffset);
+  return range;
+}
+
+function showCodeSearchMatch(index, { scroll = true } = {}) {
+  if (!codeSearchState.matches.length) return;
+  codeSearchState.active = (index + codeSearchState.matches.length) % codeSearchState.matches.length;
+  const activeMatch = codeSearchState.matches[codeSearchState.active];
+  document.querySelectorAll(".code-line.search-active").forEach((line) => line.classList.remove("search-active"));
+  activeMatch.line.classList.add("search-active");
+  if (CSS.highlights && globalThis.Highlight) CSS.highlights.set("code-search-active", new Highlight(activeMatch.range));
+  document.querySelector("#code-search-count").textContent = `${codeSearchState.active + 1}/${codeSearchState.matches.length}`;
+  if (scroll) activeMatch.line.scrollIntoView({ block: "center" });
+}
+
+function updateCodeSearch({ scroll = true } = {}) {
+  clearCodeSearchHighlights();
+  const query = document.querySelector("#code-search-input").value.trim().toLocaleLowerCase();
+  const count = document.querySelector("#code-search-count");
+  if (!query) {
+    count.textContent = "0/0";
+    document.querySelectorAll("#code-search-previous, #code-search-next, #code-search-clear").forEach((button) => { button.disabled = true; });
+    return;
+  }
+  document.querySelectorAll("#code-content .line-code").forEach((lineCode) => {
+    const text = lineCode.textContent;
+    const searchableText = text.toLocaleLowerCase();
+    let matchOffset = searchableText.indexOf(query);
+    while (matchOffset !== -1) {
+      const range = textRangeForOffsets(lineCode, matchOffset, matchOffset + query.length);
+      if (range) codeSearchState.matches.push({ range, line: lineCode.closest(".code-line") });
+      matchOffset = searchableText.indexOf(query, matchOffset + Math.max(query.length, 1));
+    }
+  });
+  const enabled = codeSearchState.matches.length > 0;
+  document.querySelectorAll("#code-search-previous, #code-search-next").forEach((button) => { button.disabled = !enabled; });
+  document.querySelector("#code-search-clear").disabled = false;
+  count.textContent = enabled ? `1/${codeSearchState.matches.length}` : "0/0";
+  if (!enabled) return;
+  codeSearchState.matches.forEach(({ line }) => line.classList.add("search-match"));
+  if (CSS.highlights && globalThis.Highlight) CSS.highlights.set("code-search-match", new Highlight(...codeSearchState.matches.map(({ range }) => range)));
+  showCodeSearchMatch(0, { scroll });
+}
+
+function setCodeSearchAvailable(available) {
+  const search = document.querySelector("#code-search");
+  const input = document.querySelector("#code-search-input");
+  search.hidden = false;
+  input.disabled = !available;
+  if (!available) {
+    input.value = "";
+    updateCodeSearch({ scroll: false });
+  }
+}
+
+function renderCodePanel(node = graphNode(state.selected)) {
+  if (!node || !state.source) return;
+  dispatchEvent(new CustomEvent("code-selection-opened"));
+  const source = state.source.sources?.[node.source] || (state.source.content ? state.source : null);
+  if (!source) return;
+  const status = node.status || "observed";
+  const statusElement = document.querySelector("#code-status");
+  statusElement.className = `code-status ${status}`;
+  statusElement.textContent = { observed: "CODE", proposed: "NEW", modified: "EDIT", removed: "DELETE" }[status];
+  document.querySelector("#code-title").textContent = node.label;
+  const content = document.querySelector("#code-content");
+  const empty = document.querySelector("#code-empty");
+  content.replaceChildren();
+  content.scrollTop = 0;
+  const hasSource = node.line > 0 && node.end_line >= node.line;
+  content.hidden = !hasSource;
+  empty.hidden = hasSource;
+  statusElement.hidden = false;
+  setCodeSearchAvailable(hasSource);
+  if (hasSource) {
+    const qualifier = status === "observed" ? "Current source" : "Current source; design change not applied";
+    document.querySelector("#code-meta").textContent = `${node.source} / lines ${node.line}-${node.end_line} / ${qualifier}`;
+    const sourceLines = source.content.split("\n");
+    for (let lineNumber = node.line; lineNumber <= node.end_line; lineNumber += 1) {
+      const row = document.createElement("div");
+      row.className = "code-line";
+      const number = document.createElement("span");
+      number.className = "line-number";
+      number.textContent = lineNumber;
+      const code = document.createElement("code");
+      code.className = "line-code";
+      appendHighlightedLine(code, sourceLines[lineNumber - 1] || "");
+      row.append(number, code);
+      content.append(row);
+    }
+    updateCodeSearch({ scroll: false });
+  } else {
+    document.querySelector("#code-meta").textContent = `${node.source || state.source.source} / design only`;
+  }
+}
+
+document.querySelector("#code-search-input").addEventListener("input", () => updateCodeSearch());
+document.querySelector("#code-search-input").addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || !codeSearchState.matches.length) return;
+  event.preventDefault();
+  showCodeSearchMatch(codeSearchState.active + (event.shiftKey ? -1 : 1));
+});
+document.querySelector("#code-search-previous").addEventListener("click", () => showCodeSearchMatch(codeSearchState.active - 1));
+document.querySelector("#code-search-next").addEventListener("click", () => showCodeSearchMatch(codeSearchState.active + 1));
+document.querySelector("#code-search-clear").addEventListener("click", () => {
+  const input = document.querySelector("#code-search-input");
+  input.value = "";
+  updateCodeSearch({ scroll: false });
+  input.focus();
+});
+addEventListener("mission-document-opened", () => {
+  document.querySelector("#code-search").hidden = true;
+  clearCodeSearchHighlights();
+});
+addEventListener("mission-document-closed", () => {
+  setCodeSearchAvailable(!document.querySelector("#code-content").hidden);
+});
+
+const relationDialog = document.querySelector("#relation-dialog");
+const relationForm = document.querySelector("#relation-form");
+
+function nodeName(nodeId) {
+  return state.graph.nodes.find((node) => node.id === nodeId)?.label || nodeId;
+}
+
+function propertiesText(properties) {
+  return Object.entries(properties || {}).map(([key, value]) => `${key}=${value}`).join("\n");
+}
+
+function parseProperties(text) {
+  const properties = {};
+  for (const line of text.split("\n").map((value) => value.trim()).filter(Boolean)) {
+    const separator = line.indexOf("=");
+    if (separator <= 0) throw new Error(`Invalid property: ${line}`);
+    const key = line.slice(0, separator).trim();
+    const value = line.slice(separator + 1).trim();
+    if (!key) throw new Error(`Invalid property: ${line}`);
+    properties[key] = value;
+  }
+  return properties;
+}
+
+function openRelationDialog(mode, edge = null, sourceId = null, targetId = null) {
+  const source = edge?.source || sourceId;
+  const target = edge?.target || targetId;
+  const edgeIds = edge ? edge.memberIds || [edge.id] : [];
+  state.relationDraft = { mode, edgeIds, source, target };
+  const grouped = edgeIds.length > 1;
+  document.querySelector("#relation-dialog-title").textContent = mode === "add" ? "Add relationship" : grouped ? `Edit ${edgeIds.length} grouped relationships` : "Edit relationship";
+  document.querySelector("#relation-source").textContent = nodeName(source);
+  document.querySelector("#relation-target").textContent = nodeName(target);
+  document.querySelector("#relation-name").value = edge ? edge.editLabel || relationText(edge) : "";
+  document.querySelector("#relation-type").value = edge?.kind || "calls";
+  document.querySelector("#relation-properties").value = propertiesText(edge?.properties);
+  document.querySelector("#relation-properties").setCustomValidity("");
+  const deleteButton = document.querySelector("#delete-relation");
+  deleteButton.hidden = mode === "add";
+  deleteButton.textContent = edge?.status === "removed" ? grouped ? "Restore relationships" : "Restore relationship" : grouped ? "Delete relationships" : "Delete relationship";
+  relationDialog.showModal();
+  document.querySelector("#relation-name").focus();
+}
+
+function deleteOrRestoreRelation() {
+  const edgeIds = new Set(state.relationDraft?.edgeIds || []);
+  const edges = state.graph.edges.filter((edge) => edgeIds.has(edge.id));
+  if (!edges.length) return;
+  const restoring = edges.every((edge) => edge.status === "removed");
+  if (restoring) {
+    edges.forEach((edge) => {
+      edge.status = edge.previousStatus || "observed";
+      delete edge.previousStatus;
+    });
+  } else {
+    const proposedIds = new Set();
+    edges.forEach((edge) => {
+      if (edge.status === "proposed") proposedIds.add(edge.id);
+      else {
+        edge.previousStatus = edge.status;
+        edge.status = "removed";
+      }
+    });
+    state.graph.edges = state.graph.edges.filter((edge) => !proposedIds.has(edge.id));
+  }
+  relationDialog.close();
+  state.relationDraft = null;
+  state.selectedRelation = null;
+  clearCallTrace();
+  invalidateLayout();
+  saveDesign();
+  markGraphDesignChanged();
+  render();
+}
+
+document.querySelector("#relation-close").addEventListener("click", () => relationDialog.close());
+document.querySelector("#delete-relation").addEventListener("click", deleteOrRestoreRelation);
+document.querySelector("#relation-properties").addEventListener("input", (event) => event.target.setCustomValidity(""));
+relationForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const propertiesField = document.querySelector("#relation-properties");
+  let properties;
+  try {
+    properties = parseProperties(propertiesField.value);
+  } catch (error) {
+    propertiesField.setCustomValidity(error.message);
+    propertiesField.reportValidity();
+    return;
+  }
+  const label = document.querySelector("#relation-name").value.trim();
+  const kind = document.querySelector("#relation-type").value;
+  if (state.relationDraft.mode === "add") {
+    state.graph.edges.push({
+      id: `relation:${crypto.randomUUID()}`,
+      source: state.relationDraft.source,
+      target: state.relationDraft.target,
+      kind,
+      label,
+      properties,
+      status: "proposed",
+    });
+  } else {
+    const edgeIds = new Set(state.relationDraft.edgeIds);
+    state.graph.edges.filter((edge) => edgeIds.has(edge.id)).forEach((edge) => {
+      edge.label = label;
+      edge.kind = kind;
+      edge.properties = properties;
+      if (edge.status === "observed") edge.status = "modified";
+    });
+  }
+  relationDialog.close();
+  state.relationDraft = null;
+  state.selectedRelation = null;
+  clearCallTrace();
+  invalidateLayout();
+  saveDesign();
+  markGraphDesignChanged();
+  render();
+});
+
+const nodeDialog = document.querySelector("#node-dialog");
+const nodeForm = document.querySelector("#node-form");
+
+function populateParents(excludedId = null) {
+  const parentSelect = document.querySelector("#node-parent");
+  parentSelect.replaceChildren();
+  const rootOption = document.createElement("option");
+  rootOption.value = ""; rootOption.textContent = "Graph root"; parentSelect.append(rootOption);
+  state.graph.nodes.filter((node) => node.id !== excludedId && node.status !== "removed").forEach((node) => {
+    const option = document.createElement("option");
+    option.value = node.id; option.textContent = `${node.label} (${node.kind})`; parentSelect.append(option);
+  });
+}
+
+function openNodeDialog(mode) {
+  const node = state.graph.nodes.find((candidate) => candidate.id === state.selected);
+  nodeForm.dataset.mode = mode;
+  populateParents(mode === "edit" ? node.id : null);
+  document.querySelector("#node-dialog-title").textContent = mode === "add" ? "Add proposed node" : "Edit as proposal";
+  document.querySelector("#node-name").value = mode === "edit" ? node.label : "";
+  document.querySelector("#node-type").value = mode === "edit" ? node.kind : "class";
+  document.querySelector("#node-parent").value = mode === "edit" ? node.parent || "" : node && node.status !== "removed" ? node.id : state.scope;
+  nodeDialog.showModal();
+  document.querySelector("#node-name").focus();
+}
+
+function removeOrRestoreSelected() {
+  const node = state.graph.nodes.find((candidate) => candidate.id === state.selected);
+  if (!node) return;
+  clearCallTrace();
+  if (node.status === "removed") {
+    node.status = node.previousStatus || "observed";
+    delete node.previousStatus;
+  } else if (node.status === "proposed") {
+    state.graph.nodes = state.graph.nodes.filter((candidate) => candidate.id !== node.id);
+    state.graph.edges = state.graph.edges.filter((edge) => edge.source !== node.id && edge.target !== node.id);
+    rebuildGraphIndexes();
+    delete state.positions[node.id];
+    state.selected = null;
+  } else {
+    node.previousStatus = node.status;
+    node.status = "removed";
+  }
+  invalidateLayout();
+  saveDesign(); markGraphDesignChanged(); refreshSelection();
+}
+
+document.querySelector("#edit-node").addEventListener("click", () => openNodeDialog("edit"));
+document.querySelector("#node-close").addEventListener("click", () => nodeDialog.close());
+document.querySelector("#reset-design").addEventListener("click", () => {
+  localStorage.removeItem(DESIGN_STORAGE_KEY);
+  state.graph = structuredClone(state.baseGraph);
+  rebuildGraphIndexes();
+  state.positions = {};
+  state.inlineExpanded.clear();
+  state.flowTrail = [];
+  state.hiddenGraphNodes.clear();
+  state.callTrace = null;
+  state.scope = state.graph.root || state.graph.nodes.find((node) => !node.parent)?.id;
+  state.treeExpanded = new Set(state.graph.nodes.filter((node) => node.kind === "package").map((node) => node.id));
+  state.selected = null;
+  state.selectedRelation = null;
+  invalidateLayout();
+  markGraphDesignChanged();
+  renderFileTree(); renderBreadcrumbs(); updateGraphCount(); updateTools(); render();
+});
+nodeForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const mode = nodeForm.dataset.mode;
+  const name = document.querySelector("#node-name").value.trim();
+  const kind = document.querySelector("#node-type").value;
+  const parent = document.querySelector("#node-parent").value || null;
+  clearCallTrace();
+  if (mode === "add") {
+    const nodeId = `proposal:${crypto.randomUUID()}`;
+    state.graph.nodes.push({ id: nodeId, kind, label: name, parent, line: 0, end_line: 0, source: "", status: "proposed" });
+    if (parent) state.graph.edges.push({ id: `containment:${crypto.randomUUID()}`, source: parent, target: nodeId, kind: "contains", status: "proposed", properties: {}, generated: true });
+    state.selected = nodeId;
+  } else {
+    const node = state.graph.nodes.find((candidate) => candidate.id === state.selected);
+    node.label = name; node.kind = kind; node.parent = parent;
+    if (node.status === "observed") node.status = "modified";
+    state.graph.edges = state.graph.edges.filter((edge) => !(edge.kind === "contains" && edge.target === node.id));
+    if (parent) state.graph.edges.push({ id: `containment:${crypto.randomUUID()}`, source: parent, target: node.id, kind: "contains", status: node.status === "proposed" ? "proposed" : "modified", properties: {}, generated: true });
+  }
+  rebuildGraphIndexes();
+  invalidateLayout();
+  nodeDialog.close(); saveDesign(); markGraphDesignChanged(); refreshSelection();
+});
+
+const dialog = document.querySelector("#feedback-dialog");
+document.querySelector("#feedback-toggle").addEventListener("click", () => dialog.showModal());
+document.querySelector("#feedback-close").addEventListener("click", () => dialog.close());
+document.querySelector("#friction").addEventListener("input", (event) => { document.querySelector("#friction-value").textContent = event.target.value; });
+document.querySelector("#feedback-form").addEventListener("submit", async (event) => {
+  event.preventDefault(); const status = document.querySelector("#form-status"); status.textContent = "Saving...";
+  const payload = { view: state.view, task: state.task, friction: Number(document.querySelector("#friction").value), decision: document.querySelector("#decision").value, notes: document.querySelector("#notes").value };
+  try {
+    const response = await fetch("/api/observations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    if (!response.ok) throw new Error((await response.json()).error);
+    event.target.reset(); document.querySelector("#friction-value").textContent = "3"; status.textContent = ""; dialog.close();
+  } catch (error) { status.textContent = error.message || "Could not save the finding."; }
+});
+initializePanelResizing();
+initializePanelTypography();
+loadExperiment();

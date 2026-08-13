@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hero-graph-lab"
+version = "0.1.0"
+description = "Disposable laboratory for comparing graphical software representations"
+requires-python = ">=3.12"
+
+[project.optional-dependencies]
+anthropic = ["anthropic>=0.40"]
+openai = ["openai>=1.50"]
+gemini = ["google-genai>=1.0,<3.0"]
+explore = ["anthropic>=0.40", "openai>=1.50", "google-genai>=1.0,<3.0"]
+
+[project.scripts]
+hero-graph-lab = "hero_graph_lab.server:main"
+
+[tool.setuptools.package-data]
+hero_graph_lab = ["static/*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
