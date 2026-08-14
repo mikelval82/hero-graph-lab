@@ -55,7 +55,36 @@
     return firstInvalid < 0 ? normalizeJourney(journey) : normalizeJourney(journey).slice(0, firstInvalid);
   }
 
-  const api = { appendStep, createStep, migrateLegacyJourney, normalizeJourney, pruneJourney, truncateJourney };
+  function collapseJourney(journey, nodeId, descendantNodeIds) {
+    const descendants = descendantNodeIds instanceof Set ? descendantNodeIds : new Set(descendantNodeIds || []);
+    const collapsed = normalizeJourney(journey).map((step) => (
+      step.nodeId === nodeId ? { ...step, expanded: false } : step
+    ));
+    const firstHiddenDescendant = collapsed.findIndex((step) => descendants.has(step.nodeId));
+    return firstHiddenDescendant < 0 ? collapsed : collapsed.slice(0, firstHiddenDescendant);
+  }
+
+  function nodeClickTransition({ selected = null, lastNodeClick = null, nodeId = null, now = 0, doubleClickWindow = 350 } = {}) {
+    if (!nodeId) return { isDoubleClick: false, selected, lastNodeClick: null };
+    const elapsed = now - Number(lastNodeClick?.at);
+    const isDoubleClick = lastNodeClick?.nodeId === nodeId && elapsed >= 0 && elapsed < doubleClickWindow;
+    return {
+      isDoubleClick,
+      selected: nodeId,
+      lastNodeClick: isDoubleClick ? null : { nodeId, at: now },
+    };
+  }
+
+  const api = {
+    appendStep,
+    collapseJourney,
+    createStep,
+    migrateLegacyJourney,
+    nodeClickTransition,
+    normalizeJourney,
+    pruneJourney,
+    truncateJourney,
+  };
   globalScope.HeroFlowNavigation = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof globalThis === "undefined" ? this : globalThis);

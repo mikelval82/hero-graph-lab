@@ -3,7 +3,9 @@ const test = require("node:test");
 
 const {
   appendStep,
+  collapseJourney,
   migrateLegacyJourney,
+  nodeClickTransition,
   pruneJourney,
   truncateJourney,
 } = require("../src/hero_graph_lab/static/flow-navigation.js");
@@ -58,4 +60,40 @@ test("migrates the legacy origin and hierarchy trail once", () => {
   assert.equal(journey[0].expanded, false);
   assert.equal(journey[1].expanded, true);
   assert.equal(journey[1].relation, null);
+});
+
+test("keeps a selected node stable through a later double-click sequence", () => {
+  const firstClick = nodeClickTransition({
+    selected: "save",
+    lastNodeClick: { nodeId: "save", at: 0 },
+    nodeId: "save",
+    now: 1000,
+  });
+  const secondClick = nodeClickTransition({
+    selected: firstClick.selected,
+    lastNodeClick: firstClick.lastNodeClick,
+    nodeId: "save",
+    now: 1100,
+  });
+
+  assert.equal(firstClick.isDoubleClick, false);
+  assert.equal(firstClick.selected, "save");
+  assert.deepEqual(firstClick.lastNodeClick, { nodeId: "save", at: 1000 });
+  assert.equal(secondClick.isDoubleClick, true);
+  assert.equal(secondClick.selected, "save");
+  assert.equal(secondClick.lastNodeClick, null);
+});
+
+test("collapse removes descendant journey steps and preserves the collapsed node", () => {
+  let journey = appendStep([], "infrastructure", { expanded: true });
+  journey = appendStep(journey, "repository", { fromNodeId: "infrastructure", expanded: true });
+  journey = appendStep(journey, "repository-class", { fromNodeId: "repository", expanded: true });
+  journey = appendStep(journey, "save", { fromNodeId: "repository-class" });
+
+  const collapsed = collapseJourney(journey, "repository", new Set(["repository-class", "save"]));
+
+  assert.deepEqual(collapsed.map((step) => step.nodeId), ["infrastructure", "repository"]);
+  assert.equal(collapsed.at(-1).expanded, false);
+  assert.equal(journey[1].expanded, true);
+  assert.equal(journey.length, 4);
 });

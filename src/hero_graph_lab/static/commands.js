@@ -45,8 +45,7 @@
   }
 
   function toggleExpansion() {
-    if (state.view === "flow" && state.flowEntryCandidate?.target === state.selected) expandSelectedNode();
-    else if (state.inlineExpanded.has(state.selected)) collapseSelectedNode();
+    if (state.inlineExpanded.has(state.selected)) collapseSelectedNode();
     else expandSelectedNode();
   }
 

@@ -487,16 +487,18 @@ function stopDrag(event) {
     saveDesign();
     return;
   }
-  const now = performance.now();
-  const isDoubleClick = state.lastNodeClick?.nodeId === completedDrag.nodeId && now - state.lastNodeClick.at < 350;
-  state.lastNodeClick = isDoubleClick ? null : { nodeId: completedDrag.nodeId, at: now };
-  if (isDoubleClick) {
-    setSelection(completedDrag.nodeId);
+  const clickTransition = flowNavigation.nodeClickTransition({
+    selected: state.selected,
+    lastNodeClick: state.lastNodeClick,
+    nodeId: completedDrag.nodeId,
+    now: performance.now(),
+  });
+  state.lastNodeClick = clickTransition.lastNodeClick;
+  setSelection(clickTransition.selected);
+  if (clickTransition.isDoubleClick) {
     if (state.graphProjection) globalThis.HeroDiagrams?.expandProjection(completedDrag.nodeId);
     else if (state.view === "flow" || canEnterScope(completedDrag.nodeId)) expandSelectedNode();
     fitGraphToView();
-  } else {
-    toggleSelection(completedDrag.nodeId);
   }
 }
 
@@ -534,10 +536,6 @@ function setSelection(nodeId) {
   if (state.view === "focus" && !state.graphProjection) render();
   else updateGraphSelectionStyles();
   dispatchEvent(new CustomEvent("graph-selection-changed"));
-}
-
-function toggleSelection(nodeId) {
-  setSelection(state.selected === nodeId ? null : nodeId);
 }
 
 function clearSelection() {
@@ -726,9 +724,11 @@ function collapseSelectedNode() {
   if (state.view === "focus") return;
   const node = graphNode(state.selected);
   if (!node) return;
+  const collapsedDescendants = descendantIds(node.id);
   state.inlineExpanded.delete(node.id);
-  descendantIds(node.id).forEach((nodeId) => state.inlineExpanded.delete(nodeId));
-  state.flowJourney = state.flowJourney.map((step) => step.nodeId === node.id ? { ...step, expanded: false } : step);
+  collapsedDescendants.forEach((nodeId) => state.inlineExpanded.delete(nodeId));
+  state.flowJourney = flowNavigation.collapseJourney(state.flowJourney, node.id, collapsedDescendants);
+  state.flowEntryCandidate = null;
   invalidateLayout();
   saveDesign();
   renderBreadcrumbs();
