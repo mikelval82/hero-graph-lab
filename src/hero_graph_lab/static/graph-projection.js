@@ -201,6 +201,7 @@
       updateTools();
       render();
       fitGraphToView();
+      focusRenderedGraphNode();
       document.querySelector("#graph-command-status").textContent = `${recommendation.label} opened. Select a node and press G, E, or double-click to expand it.`;
       dispatchEvent(new CustomEvent("graph-selection-changed"));
     }

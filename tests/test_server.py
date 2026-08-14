@@ -283,8 +283,10 @@ class LabServerTest(TestCase):
                 self.assertIn("function expandProjection", projection_script)
                 self.assertIn("function backProjection", projection_script)
                 self.assertIn("function restoreProjection", projection_script)
+                activate_projection_script = projection_script[projection_script.index("function activateProjection"):projection_script.index("function containmentExpansion")]
                 restore_projection_script = projection_script[projection_script.index("function restoreProjection"):projection_script.index("function backProjection")]
                 back_projection_script = projection_script[projection_script.index("function backProjection"):projection_script.index("function projectSelection")]
+                self.assertIn("focusRenderedGraphNode()", activate_projection_script)
                 self.assertIn("focusRenderedGraphNode()", restore_projection_script)
                 self.assertIn("focusRenderedGraphNode()", back_projection_script)
                 self.assertIn("function mergeGraphs", projection_script)

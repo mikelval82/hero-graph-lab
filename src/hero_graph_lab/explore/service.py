@@ -35,6 +35,8 @@ PROPOSE MODE IS ACTIVE. The user explicitly enabled graph design changes for thi
 Treat requests to improve, add, introduce, integrate, redesign, or connect application behavior as authorization to stage concrete graph proposals.
 For those requests, do not stop at advice, hypothetical code, or a statement that you cannot modify the application.
 Inspect the relevant graph and source evidence, then MUST use ProposeNode and/or ProposeRelation to represent the improvement in the graph.
+Preserve every graph element kind explicitly requested by the user. Do not substitute package for module, class for function, or another available kind merely because it is structurally plausible.
+When the user explicitly requests relationships, inspect the graph for valid endpoints and MUST use ProposeRelation for those relationships after creating any referenced nodes.
 Create proposed nodes before relationships that reference them, and use the node_id returned by ProposeNode in a later tool call.
 Your final answer must summarize the graph proposals actually staged and clearly state that source code was not changed.
 If the user only asks for explanation or analysis, do not create proposals.
