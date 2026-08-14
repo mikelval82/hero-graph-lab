@@ -460,6 +460,66 @@ class LabServerTest(TestCase):
                 server.server_close()
                 thread.join()
 
+    def test_mcp_tool_gateway_and_proposal_delivery_contract(self) -> None:
+        with TemporaryDirectory() as directory:
+            state = LabState(FIXTURE, Path(directory) / "observations.json")
+            server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(state))
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            try:
+                base_url = f"http://127.0.0.1:{server.server_port}"
+                with urlopen(f"{base_url}/api/mcp/tools") as response:
+                    tools = json.load(response)
+                self.assertIn("GraphSearch", {tool["name"] for tool in tools["tools"]})
+
+                parent = next(node for node in state.graph()["nodes"] if node["kind"] == "module")
+                proposal_request = Request(
+                    f"{base_url}/api/mcp/tools/ProposeNode",
+                    data=json.dumps(
+                        {
+                            "arguments": {
+                                "label": "TelegramGateway",
+                                "kind": "class",
+                                "parent_id": parent["id"],
+                            }
+                        }
+                    ).encode(),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urlopen(proposal_request) as response:
+                    proposed = json.load(response)
+                self.assertEqual(proposed["actions"][0]["op"], "add_node")
+
+                with urlopen(f"{base_url}/api/mcp/proposals") as response:
+                    pending = json.load(response)
+                self.assertEqual(pending["items"][0]["revision"], 1)
+
+                ack_request = Request(
+                    f"{base_url}/api/mcp/proposals/ack",
+                    data=json.dumps({"revisions": [1]}).encode(),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urlopen(ack_request) as response:
+                    acknowledged = json.load(response)
+                self.assertEqual(acknowledged["items"], [])
+
+                invalid_request = Request(
+                    f"{base_url}/api/mcp/tools/ProposeNode",
+                    data=json.dumps({"arguments": []}).encode(),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with self.assertRaises(HTTPError) as raised:
+                    urlopen(invalid_request)
+                self.assertEqual(raised.exception.code, 400)
+                self.assertIn("arguments must be a JSON object", json.load(raised.exception)["error"])
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join()
+
     def test_proxies_harness_without_exposing_worker_credentials(self) -> None:
         class FakeHarnessHost:
             def __init__(self) -> None:

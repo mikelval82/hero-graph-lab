@@ -68,12 +68,13 @@ class ExploreAssistantService:
         graph_provider: Callable[[], dict[str, Any]],
         *,
         max_turns: int = 8,
+        tools: ExploreToolRegistry | None = None,
     ) -> None:
         self.client = client
         self.project_provider = project_provider
         self.graph_provider = graph_provider
         self.max_turns = max_turns
-        self.tools = ExploreToolRegistry()
+        self.tools = tools or ExploreToolRegistry()
         self._sessions: dict[str, ExploreSession] = {}
         self._lock = threading.RLock()
 

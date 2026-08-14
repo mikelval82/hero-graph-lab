@@ -14,6 +14,7 @@ from uuid import uuid4
 
 from hero_graph_lab.extractor import extract_python_graph, python_source_files
 from hero_graph_lab.explore import ExploreAssistantService, create_model_client
+from hero_graph_lab.explore.gateway import MCP_INSTRUCTIONS, GraphToolGateway
 from hero_graph_lab.explore.models import ModelClient
 from hero_graph_lab.harness_host import HarnessHostError, HarnessWorkerHost
 
@@ -43,10 +44,12 @@ class LabState:
         self._lock = threading.RLock()
         self._graph_cache: dict[str, Any] | None = None
         self._graph_fixture: Path | None = None
+        self.graph_tools = GraphToolGateway(lambda: self.fixture, self.graph)
         self.explore = ExploreAssistantService(
             explore_client or create_model_client("fake"),
             lambda: self.fixture,
             self.graph,
+            tools=self.graph_tools.registry,
         )
 
     def graph(self) -> dict[str, Any]:
@@ -127,6 +130,7 @@ class LabState:
             self.project_selected = True
             self._graph_cache = None
             self._graph_fixture = None
+            self.graph_tools.reset()
         return self.harness_status()
 
     def harness_status(self) -> dict[str, object]:
@@ -169,6 +173,12 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
             if path == "/api/explore/status":
                 self._send_json(state.explore.status())
                 return
+            if path == "/api/mcp/tools":
+                self._send_json({"instructions": MCP_INSTRUCTIONS, "tools": state.graph_tools.tool_specs()})
+                return
+            if path == "/api/mcp/proposals":
+                self._send_json(state.graph_tools.pending_proposals())
+                return
             session_id = self._explore_session_id(path)
             if session_id:
                 try:
@@ -191,6 +201,13 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
                 return
             if parsed.path == "/api/explore/sessions":
                 self._send_json(state.explore.create_session(), HTTPStatus.CREATED)
+                return
+            tool_name = self._mcp_tool_name(parsed.path)
+            if tool_name:
+                self._execute_mcp_tool(tool_name)
+                return
+            if parsed.path == "/api/mcp/proposals/ack":
+                self._acknowledge_mcp_proposals()
                 return
             session_id = self._explore_message_session_id(parsed.path)
             if session_id:
@@ -255,6 +272,35 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
                 self._send_json({"error": str(error)}, HTTPStatus.BAD_GATEWAY)
                 return
             self._send_json(response)
+
+        def _execute_mcp_tool(self, tool_name: str) -> None:
+            try:
+                payload = self._read_json(max_bytes=128_000)
+                arguments = payload.get("arguments", {})
+                if not isinstance(arguments, dict):
+                    raise ValueError("arguments must be a JSON object")
+                result = state.graph_tools.execute(tool_name, arguments)
+            except (OSError, ValueError, json.JSONDecodeError) as error:
+                self._send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+                return
+            self._send_json(result)
+
+        def _acknowledge_mcp_proposals(self) -> None:
+            try:
+                payload = self._read_json(max_bytes=16_000)
+                revisions = payload.get("revisions")
+                if not isinstance(revisions, list):
+                    raise ValueError("revisions must be an array of integers")
+                result = state.graph_tools.acknowledge_proposals(revisions)
+            except (ValueError, json.JSONDecodeError) as error:
+                self._send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+                return
+            self._send_json(result)
+
+        @staticmethod
+        def _mcp_tool_name(path: str) -> str | None:
+            segments = path.strip("/").split("/")
+            return segments[3] if len(segments) == 4 and segments[:3] == ["api", "mcp", "tools"] else None
 
         @staticmethod
         def _explore_session_id(path: str) -> str | None:
