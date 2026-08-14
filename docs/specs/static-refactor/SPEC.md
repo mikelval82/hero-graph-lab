@@ -1,6 +1,6 @@
 # Static JavaScript refactor specification
 
-Status: Structural implementation complete; agent proposal integrity correction verified
+Status: Structural implementation complete; agent proposal integrity verified; projection activation focus defect open
 Baseline: `4bcaacc`  
 Scope: `src/hero_graph_lab/static`
 
@@ -131,6 +131,7 @@ Focus is a temporary contextual view anchored to the current selection, not an i
 - Focus shall not remain active without an anchor. Clearing the selection with `Esc` or a canvas click returns to the view from which Focus was entered; **Reset view** returns to a clean Flow root.
 - **Expand**, **Collapse**, and `E` remain unavailable in normal Focus. Double-clicking a Focus node does not mutate Flow journey or expansion state.
 - A rendered `G` Back or Restore transition restores keyboard focus to its selected node, or to the graph viewport when no node is selected, so consecutive `Esc` transitions remain available.
+- Opening a `G` projection shall focus its selected rendered node, or the graph viewport when no node is selected, so the first keyboard Back/Restore command works without another pointer action.
 
 ### SFR-013 — Reviewable agent proposal drafts
 
@@ -175,6 +176,7 @@ Agent proposals shall remain bounded graph-design actions with an explicit persi
 | UI-025 | Reload after accepting agent proposals | The same proposals return from the browser-local draft without any source-file change; **Save map** is still required for HARNESS synchronization. |
 | UI-026 | Delete a proposed parent with only proposed descendants | The whole proposed subtree and every incident relationship disappear from state, storage, Explorer, and the rendered graph with no orphan nodes. |
 | UI-027 | Try to delete a proposed parent containing a non-proposed descendant | Removal is refused with an actionable status and the graph remains unchanged. |
+| UI-028 | Open `G` from a proposed node and immediately press `Esc` | The projection restores its source view without requiring a click inside the newly rendered graph. |
 
 ## Delivery sequence
 

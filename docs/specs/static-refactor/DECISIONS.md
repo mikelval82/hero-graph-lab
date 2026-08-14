@@ -139,3 +139,12 @@ Commit: `205f47b`
 Rendered testing exposed two coupled coordinator defects: accepted proposals changed state without a graph render, and deleting a proposed parent removed only that parent while retaining its proposed descendants as orphans. A nested proposal could also become the selected node while remaining outside the rendered navigation graph.
 
 The correction will reuse `expandTreePath`, `inlineExpanded`, `navigationGraph`, `descendantIds`, and the existing render/persistence path in `app.js`. Proposed-subtree deletion will be atomic and will refuse a mixed-status subtree. A new module is not justified because the work coordinates existing application state and has no independent reusable domain boundary.
+
+## D-018 — Classify the first-key failure as projection activation
+
+Status: Accepted
+Date: 2026-08-14
+
+The Gemini E2E navigation run showed that proposed nodes participate correctly in Flow, Hierarchy, Focus, Explorer, and `G` graph generation. However, opening `G` leaves focus on `BODY`; an immediate `Esc` is ignored until a pointer action restores graph focus.
+
+This is a projection-activation focus defect, not an agent-proposal integrity defect: the proposed node is present, selected, and rendered in the projection. The future correction belongs at the existing `G` activation/render boundary and should reuse `focusRenderedGraphNode`; no proposal-specific branch or new module is justified.
