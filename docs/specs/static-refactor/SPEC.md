@@ -1,6 +1,6 @@
 # Static JavaScript refactor specification
 
-Status: Structural implementation complete; agent proposal integrity correction specified
+Status: Structural implementation complete; agent proposal integrity correction verified
 Baseline: `4bcaacc`  
 Scope: `src/hero_graph_lab/static`
 

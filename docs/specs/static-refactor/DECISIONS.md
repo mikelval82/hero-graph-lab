@@ -124,6 +124,7 @@ Focus will remain inside the existing `app.js` coordinator. The current source-v
 
 Status: Accepted
 Date: 2026-08-14
+Commit: `205f47b`
 
 The proposal tools themselves only emit validated actions, but `applyAgentGraphProposals` immediately incorporates accepted actions into the graph and `saveDesign` stores that graph in browser storage. The prior model prompt's statement that proposals are not persisted until **Save map** conflicts with this runtime behavior.
 
@@ -133,6 +134,7 @@ The contract will name both boundaries: automatic browser-local draft persistenc
 
 Status: Accepted
 Date: 2026-08-14
+Commit: `205f47b`
 
 Rendered testing exposed two coupled coordinator defects: accepted proposals changed state without a graph render, and deleting a proposed parent removed only that parent while retaining its proposed descendants as orphans. A nested proposal could also become the selected node while remaining outside the rendered navigation graph.
 

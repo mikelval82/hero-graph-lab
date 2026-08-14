@@ -16,7 +16,7 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | SFR-010 | D-004, D-006, D-010, D-011, D-013, D-014 | `flow-navigation.js`, `app.js`, `commands.js` click, toggle, collapse, candidate-reset, and focus transitions | 6 focused Flow tests; 22 Node tests; 23 Python tests | UI-008 through UI-012 and UI-016 passed on 223-node graph; zero current console warnings/errors | Verified |
 | SFR-011 | D-012 | Shared `project-dialog` in `index.html`; `mission.js` entry points; JSON path validation in `server.py` | Static contract plus empty/relative/missing/valid server-path tests; 22 Node and 23 Python tests | UI-013 through UI-015 pending: no browser instance available | In progress |
 | SFR-012 | D-015 | `app.js` anchor/return transitions; `graph-projection.js` Back/Restore focus restoration | Served Focus contracts; 22 Node tests; 23 Python tests; all static JavaScript syntax valid | UI-017 through UI-022 passed on the 223-node graph; Flow and Hierarchy return paths passed; zero current console warnings/errors | Verified |
-| SFR-013 | D-016, D-017 | Planned: proposal application/deletion coordination in `app.js`; corrected model/tool persistence wording | Planned source-contract and service-prompt tests | UI-023 through UI-027 pending | Planned |
+| SFR-013 | D-016, D-017 | `app.js` proposal reveal/selection/render and atomic subtree deletion; corrected service/tool persistence wording | Focused red/green contracts; 22 Node tests; 23 Python tests; all static JavaScript syntax valid | UI-023 through UI-027 passed on the 223-node graph through the public browser proposal API; no model-provider E2E claimed | Verified |
 
 ## Evidence log
 
@@ -53,6 +53,10 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | 2026-08-14 | `6b6bec3` | Playwright UI-021 and UI-022 plus Hierarchy return | Consecutive `Esc` restored the prior `G` step and then exact Focus; normal Focus double-click/`E` were state-stable; `Esc` also restored Hierarchy; zero current console warnings/errors |
 | 2026-08-14 | pre-SFR-013 fix | Playwright nested agent-proposal batch on the 223-node graph | Three nodes and one relation entered state and browser storage, but no `NEW` node rendered; the selected nested function was outside the navigation graph and Explorer; model persistence wording contradicted automatic local draft storage |
 | 2026-08-14 | pre-SFR-013 fix | Playwright deletion of the proposed parent | The parent and incident edges left state, but two proposed descendants remained orphaned in state/storage and the deleted parent remained stale in the DOM until another render |
+| 2026-08-14 | `205f47b` | SFR-013 automated validation | Focused service and served-source contracts changed from 2 failing to 2 passing; all static JavaScript syntax valid; 22 Node tests; 23 Python tests; `git diff --check` clean |
+| 2026-08-14 | `205f47b` | Playwright UI-023 and UI-025 on `hero-graph-lab` | A nested module/class/function batch rendered all three `NEW` nodes immediately, selected the final function, opened Explorer ancestry, stored the draft locally, and restored three nodes plus one relation after reload |
+| 2026-08-14 | `205f47b` | Playwright UI-024, UI-026, and UI-027 on `hero-graph-lab` | An excluding Flow journey retained its rendered selection and exposed the proposal in Explorer; subtree deletion removed state/storage/DOM orphans and relations; a mixed-status subtree was refused without mutation |
+| 2026-08-14 | `205f47b` | Post-SFR-013 browser cleanup and console check | Reset restored 3/223 root Flow with zero changes and no local draft; the current page recorded zero warnings/errors |
 
 ## Post-refactor size evidence
 
@@ -60,7 +64,7 @@ Physical line counts are descriptive, not success criteria:
 
 | File | Baseline | Current | Boundary outcome |
 |---|---:|---:|---|
-| `app.js` | 1,850 | 1,453 | Panel ownership and pure view construction removed; coordination retained. |
+| `app.js` | 1,850 | 1,522 | Panel ownership and pure view construction removed; proposal integrity remains in the coordination boundary. |
 | `diagrams.js` | 849 | 531 | Interactive `G` lifecycle removed; Mermaid Studio retained. |
 | `graph-projection.js` | — | 437 | Dedicated interactive projection controller and transition model. |
 | `panel-layout.js` | — | 284 | Dedicated layout, collapse, typography, and persistence controller. |
