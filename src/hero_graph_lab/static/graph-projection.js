@@ -50,6 +50,10 @@
     };
   }
 
+  function restoreView(projection) {
+    return copy(projection.returnView);
+  }
+
   function expandState(projection, { anchorId, addition, viewState }) {
     const graph = mergeGraphs(projection.graph, addition);
     const changed = graph.nodes.length !== projection.graph.nodes.length
@@ -98,6 +102,7 @@
     mergeGraphs,
     normalizeGraph,
     replaceDepth,
+    restoreView,
   });
 
   function installBrowserController() {
@@ -303,7 +308,7 @@
     function restoreProjection() {
       const projection = state.graphProjection;
       if (!projection) return;
-      const previous = projection.returnView;
+      const previous = restoreView(projection);
       state.graphProjection = null;
       state.view = previous.view;
       state.positions = previous.positions;
