@@ -1,13 +1,7 @@
 (() => {
   const dialog = document.querySelector("#diagram-dialog");
-  const projectionDialog = document.querySelector("#projection-dialog");
-  const projectionForm = document.querySelector("#projection-form");
-  const projectionCreateDepthSelect = document.querySelector("#projection-depth");
-  const projectionCreateButton = document.querySelector("#projection-open");
-  const projectionCreateStatus = document.querySelector("#projection-status");
   const typeSelect = document.querySelector("#diagram-type");
   const depthSelect = document.querySelector("#diagram-depth");
-  const projectionDepthSelect = document.querySelector("#graph-projection-depth");
   const fromSelect = document.querySelector("#diagram-path-from");
   const toSelect = document.querySelector("#diagram-path-to");
   const pathControls = document.querySelector("#diagram-path-controls");
@@ -18,7 +12,6 @@
   const confidence = document.querySelector("#diagram-confidence");
   const inferredCache = new Map();
   const MAX_DIAGRAM_NODES = 90;
-  let pendingProjection = null;
 
   function selectedNode() {
     return state.graph?.nodes.find((node) => node.id === state.selected) || null;
@@ -422,316 +415,6 @@
     };
   }
 
-  function normalizedProjectionGraph(graph) {
-    return {
-      nodes: graph.nodes.map((node) => ({ ...node, context: false })),
-      edges: graph.edges.map((edge) => ({
-        ...edge,
-        id: edge.id || `projection:${edge.source}:${edge.kind}:${edge.target}`,
-        memberIds: edge.memberIds || [edge.id],
-        aggregate: Boolean(edge.aggregate || edge.memberIds?.length > 1),
-      })),
-    };
-  }
-
-  function captureInteractiveView() {
-    return {
-      view: state.view,
-      positions: structuredClone(state.positions),
-      currentLayout: structuredClone(state.currentLayout),
-      viewStates: structuredClone(state.viewStates),
-      graphZoom: state.graphZoom,
-      scrollLeft: graphViewport.scrollLeft,
-      scrollTop: graphViewport.scrollTop,
-      selected: state.selected,
-      selectedRelation: state.selectedRelation,
-      layoutLocked: state.layoutLocked,
-      layoutSnapshot: structuredClone(state.layoutSnapshot),
-    };
-  }
-
-  function setProjectionView(view, label) {
-    state.view = view;
-    document.querySelectorAll("[data-graph-view]").forEach((button) => {
-      button.setAttribute("aria-pressed", String(button.dataset.graphView === view));
-    });
-    document.querySelector("#graph-view-label").textContent = `${label} / ${view === "focus" ? "Focus" : "Flow"}`;
-  }
-
-  function renderProjectionBar() {
-    const bar = document.querySelector("#graph-projection-bar");
-    const projection = state.graphProjection;
-    bar.hidden = !projection;
-    if (!projection) return;
-    document.querySelector("#graph-projection-title").textContent = projection.label;
-    document.querySelector("#graph-projection-meta").textContent = `${projection.graph.nodes.length} nodes / depth ${projection.depth} / ${projection.history.length + 1} step${projection.history.length ? "s" : ""}`;
-    projectionDepthSelect.value = String(projection.depth);
-    document.querySelector("#graph-projection-back").disabled = !projection.history.length;
-  }
-
-  function projectionDefinition(type) {
-    return definitions.find((item) => item.id === type);
-  }
-
-  function recommendedProjection() {
-    const current = selectedNode();
-    if (!current && exploreState.pinnedNodeIds.size >= 2) {
-      const [fromId, toId] = [...exploreState.pinnedNodeIds];
-      return { type: "path", view: "focus", label: "Pinned path", options: { fromId, toId } };
-    }
-    if (!current) throw new Error("Select a node or pin two nodes to create a graph projection.");
-    if (current.kind === "package") return { type: "hierarchy", view: "flow", label: "Package hierarchy", options: { anchorId: current.id } };
-    if (current.kind === "module") return { type: "neighborhood", view: "flow", label: "Module neighborhood", options: { anchorId: current.id } };
-    if (current.kind === "class") return { type: "classes", view: "focus", label: "Class collaborators", options: { anchorId: current.id } };
-    if (["function", "method"].includes(current.kind)) return { type: "calls", view: "flow", label: "Call graph", options: { anchorId: current.id } };
-    return { type: "neighborhood", view: "focus", label: "Selection neighborhood", options: { anchorId: current.id } };
-  }
-
-  function activateProjection(recommendation) {
-    if (state.callTrace) clearCallTrace();
-    const item = projectionDefinition(recommendation.type);
-    const depth = Number(depthSelect.value);
-    const result = item.generate(depth, recommendation.options);
-    state.graphProjection = {
-      type: recommendation.type,
-      label: recommendation.label,
-      view: recommendation.view,
-      options: recommendation.options,
-      depth,
-      graph: normalizedProjectionGraph(result.graph),
-      history: [],
-      activeAnchor: state.selected,
-      savedLayout: null,
-      returnView: captureInteractiveView(),
-    };
-    state.positions = {};
-    state.currentLayout = null;
-    state.selectedRelation = null;
-    releaseGraphLayout();
-    setProjectionView(recommendation.view, recommendation.label);
-    renderProjectionBar();
-    updateGraphCount();
-    updateTools();
-    render();
-    fitGraphToView();
-    document.querySelector("#graph-command-status").textContent = `${recommendation.label} opened. Select a node and press G, E, or double-click to expand it.`;
-    dispatchEvent(new CustomEvent("graph-selection-changed"));
-  }
-
-  function containmentExpansion(anchorId) {
-    const byId = nodeMap();
-    const anchor = byId.get(anchorId);
-    if (!anchor) throw new Error("The selected node is no longer available.");
-    const childNodes = nodes().filter((node) => node.parent === anchorId);
-    const nodeIds = new Set([anchorId, ...childNodes.map((node) => node.id)]);
-    return {
-      nodes: [anchor, ...childNodes],
-      edges: edges().filter((edge) => edge.kind === "contains" && nodeIds.has(edge.source) && nodeIds.has(edge.target)),
-    };
-  }
-
-  function classExpansion(anchorId) {
-    const result = classDiagram(state.graphProjection?.depth || 1, { anchorId });
-    const root = classFor(anchorId);
-    if (!root) return result.graph;
-    const methods = nodes().filter((node) => node.parent === root.id && node.kind === "method");
-    const nodeIds = new Set([root.id, ...methods.map((node) => node.id)]);
-    const containment = edges().filter((edge) => edge.kind === "contains" && nodeIds.has(edge.source) && nodeIds.has(edge.target));
-    return {
-      nodes: [...result.graph.nodes, ...methods],
-      edges: [...result.graph.edges, ...containment],
-    };
-  }
-
-  function expansionGraph(projection, anchorId) {
-    if (projection.type === "hierarchy") return containmentExpansion(anchorId);
-    if (projection.type === "classes") return classExpansion(anchorId);
-    if (projection.type === "path") return neighborhoodDiagram(projection.depth, { anchorId }).graph;
-    return projectionDefinition(projection.type).generate(projection.depth, { ...projection.options, anchorId }).graph;
-  }
-
-  function setProjectionDepth() {
-    const projection = state.graphProjection;
-    if (!projection) return;
-    const depth = Number(projectionDepthSelect.value);
-    try {
-      const result = projectionDefinition(projection.type).generate(depth, projection.options);
-      projection.depth = depth;
-      projection.graph = normalizedProjectionGraph(result.graph);
-      projection.history = [];
-      projection.activeAnchor = projection.options.anchorId || state.selected;
-      projection.savedLayout = null;
-      depthSelect.value = String(depth);
-      state.selected = projection.activeAnchor;
-      state.positions = {};
-      state.currentLayout = null;
-      releaseGraphLayout();
-      renderProjectionBar();
-      syncTreeSelection();
-      updateGraphCount();
-      updateTools();
-      render();
-      fitGraphToView();
-      document.querySelector("#graph-command-status").textContent = `${projection.label} regenerated at depth ${depth}.`;
-      dispatchEvent(new CustomEvent("graph-selection-changed"));
-    } catch (error) {
-      projectionDepthSelect.value = String(projection.depth);
-      document.querySelector("#graph-command-status").textContent = error.message || "Could not change projection depth.";
-    }
-  }
-
-  function mergeProjectionGraphs(current, addition) {
-    const mergedNodes = new Map(current.nodes.map((node) => [node.id, node]));
-    const mergedEdges = new Map(current.edges.map((edge) => [edge.id, edge]));
-    normalizedProjectionGraph(addition).nodes.forEach((node) => mergedNodes.set(node.id, node));
-    normalizedProjectionGraph(addition).edges.forEach((edge) => mergedEdges.set(edge.id, edge));
-    return { nodes: [...mergedNodes.values()], edges: [...mergedEdges.values()] };
-  }
-
-  function expandProjection(anchorId = state.selected) {
-    const projection = state.graphProjection;
-    if (!projection || !anchorId) return;
-    try {
-      const addition = expansionGraph(projection, anchorId);
-      const merged = mergeProjectionGraphs(projection.graph, addition);
-      if (merged.nodes.length === projection.graph.nodes.length && merged.edges.length === projection.graph.edges.length) {
-        document.querySelector("#graph-command-status").textContent = "This node has no additional elements for the active projection.";
-        return;
-      }
-      projection.history.push({
-        graph: structuredClone(projection.graph),
-        currentLayout: structuredClone(state.currentLayout),
-        graphZoom: state.graphZoom,
-        scrollLeft: graphViewport.scrollLeft,
-        scrollTop: graphViewport.scrollTop,
-        selected: projection.activeAnchor,
-      });
-      projection.graph = merged;
-      projection.activeAnchor = anchorId;
-      projection.savedLayout = null;
-      state.positions = {};
-      state.currentLayout = null;
-      releaseGraphLayout();
-      renderProjectionBar();
-      updateGraphCount();
-      updateTools();
-      render();
-      fitGraphToView();
-      document.querySelector("#graph-command-status").textContent = `${graphNode(anchorId)?.label || "Node"} expanded in ${projection.label}.`;
-    } catch (error) {
-      document.querySelector("#graph-command-status").textContent = error.message || "This node cannot be expanded in the active projection.";
-    }
-  }
-
-  function restoreProjection() {
-    const projection = state.graphProjection;
-    if (!projection) return;
-    const previous = projection.returnView;
-    state.graphProjection = null;
-    state.view = previous.view;
-    state.positions = previous.positions;
-    state.currentLayout = previous.currentLayout;
-    state.viewStates = previous.viewStates;
-    state.graphZoom = previous.graphZoom;
-    state.selected = previous.selected;
-    state.selectedRelation = previous.selectedRelation;
-    state.layoutLocked = previous.layoutLocked;
-    state.layoutSnapshot = previous.layoutSnapshot;
-    document.querySelectorAll("[data-graph-view]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.graphView === state.view)));
-    const viewLabel = state.view === "structure" ? "Hierarchy" : `${state.view[0].toUpperCase()}${state.view.slice(1)}`;
-    document.querySelector("#graph-view-label").textContent = `${viewLabel} Graph`;
-    updateLayoutLockControl();
-    renderProjectionBar();
-    syncTreeSelection();
-    updateGraphCount();
-    updateTools();
-    render();
-    requestAnimationFrame(() => {
-      applyGraphScale();
-      graphViewport.scrollTo({ left: previous.scrollLeft, top: previous.scrollTop });
-    });
-    document.querySelector("#graph-command-status").textContent = "Interactive projection closed. Previous view restored.";
-    dispatchEvent(new CustomEvent("graph-selection-changed"));
-  }
-
-  function backProjection() {
-    const projection = state.graphProjection;
-    if (!projection) return;
-    if (!projection.history.length) {
-      restoreProjection();
-      return;
-    }
-    const previous = projection.history.pop();
-    projection.graph = previous.graph;
-    projection.activeAnchor = previous.selected;
-    projection.savedLayout = previous.currentLayout;
-    state.currentLayout = previous.currentLayout;
-    state.graphZoom = previous.graphZoom;
-    state.selected = previous.selected;
-    renderProjectionBar();
-    syncTreeSelection();
-    updateGraphCount();
-    updateTools();
-    render();
-    requestAnimationFrame(() => {
-      applyGraphScale();
-      graphViewport.scrollTo({ left: previous.scrollLeft, top: previous.scrollTop });
-    });
-    document.querySelector("#graph-command-status").textContent = "Returned to the previous projection step.";
-    dispatchEvent(new CustomEvent("graph-selection-changed"));
-  }
-
-  function projectSelection() {
-    if (state.graphProjection) {
-      expandProjection(state.selected);
-      return;
-    }
-    try {
-      pendingProjection = recommendedProjection();
-      document.querySelector("#projection-kind").textContent = pendingProjection.label;
-      projectionCreateDepthSelect.value = depthSelect.value;
-      if (!projectionDialog.open) projectionDialog.showModal();
-      validateProjectionChoice();
-      projectionCreateDepthSelect.focus();
-    } catch (error) {
-      document.querySelector("#graph-command-status").textContent = error.message || "Could not create the interactive projection.";
-    }
-  }
-
-  function validateProjectionChoice() {
-    if (!pendingProjection) return;
-    const depth = Number(projectionCreateDepthSelect.value);
-    try {
-      const result = projectionDefinition(pendingProjection.type).generate(depth, pendingProjection.options);
-      projectionCreateStatus.textContent = `${result.graph.nodes.length} nodes at depth ${depth}.`;
-      projectionCreateStatus.classList.remove("invalid");
-      projectionCreateButton.disabled = false;
-    } catch (error) {
-      projectionCreateStatus.textContent = error.message || "This projection cannot be created at the selected depth.";
-      projectionCreateStatus.classList.add("invalid");
-      projectionCreateButton.disabled = true;
-    }
-  }
-
-  function closeProjectionDialog() {
-    pendingProjection = null;
-    projectionDialog.close();
-  }
-
-  function confirmProjection(event) {
-    event.preventDefault();
-    if (!pendingProjection || projectionCreateButton.disabled) return;
-    depthSelect.value = projectionCreateDepthSelect.value;
-    projectionDepthSelect.value = projectionCreateDepthSelect.value;
-    const recommendation = pendingProjection;
-    closeProjectionDialog();
-    try {
-      activateProjection(recommendation);
-    } catch (error) {
-      document.querySelector("#graph-command-status").textContent = error.message || "Could not create the interactive projection.";
-    }
-  }
-
   const definitions = [
     { id: "hierarchy", label: "Package and module hierarchy", deterministic: true, generate: hierarchyDiagram },
     { id: "classes", label: "Class diagram", deterministic: true, generate: classDiagram },
@@ -819,13 +502,8 @@
   }
 
   document.querySelector("#diagram-close").addEventListener("click", () => dialog.close());
-  document.querySelector("#projection-close").addEventListener("click", closeProjectionDialog);
-  document.querySelector("#projection-cancel").addEventListener("click", closeProjectionDialog);
-  projectionCreateDepthSelect.addEventListener("change", validateProjectionChoice);
-  projectionForm.addEventListener("submit", confirmProjection);
   typeSelect.addEventListener("change", () => { updateControls(); generate(); });
   depthSelect.addEventListener("change", () => {
-    projectionDepthSelect.value = depthSelect.value;
     generate();
   });
   fromSelect.addEventListener("change", generate);
@@ -840,9 +518,13 @@
       status.textContent = "Clipboard access was denied. Mermaid source selected for manual copy.";
     }
   });
-  document.querySelector("#graph-projection-back").addEventListener("click", backProjection);
-  document.querySelector("#graph-projection-restore").addEventListener("click", restoreProjection);
-  projectionDepthSelect.addEventListener("change", setProjectionDepth);
-
-  globalThis.HeroDiagrams = Object.freeze({ open, generate, definitions, projectSelection, expandProjection, backProjection, restoreProjection });
+  globalThis.HeroDiagrams = Object.freeze({
+    open,
+    generate,
+    definitions,
+    projectSelection: (...args) => globalThis.HeroGraphProjection?.projectSelection(...args),
+    expandProjection: (...args) => globalThis.HeroGraphProjection?.expandProjection(...args),
+    backProjection: (...args) => globalThis.HeroGraphProjection?.backProjection(...args),
+    restoreProjection: (...args) => globalThis.HeroGraphProjection?.restoreProjection(...args),
+  });
 })();
