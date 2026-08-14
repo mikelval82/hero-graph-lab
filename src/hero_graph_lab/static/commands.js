@@ -146,12 +146,6 @@
     return graphViewport === event.target || graphViewport.contains(event.target) || graphViewport.contains(document.activeElement);
   }
 
-  function restoreSelectedGraphFocus() {
-    const selectedNode = Array.from(graphViewport.querySelectorAll(".graph-node"))
-      .find((node) => node.dataset.nodeId === state.selected);
-    (selectedNode || graphViewport).focus();
-  }
-
   document.addEventListener("click", (event) => {
     const commandButton = event.target.closest("[data-command]");
     if (commandButton) execute(commandButton.dataset.command);
@@ -172,7 +166,7 @@
     const commandId = shortcuts[event.key.toLocaleLowerCase()];
     if (commandId && execute(commandId)) {
       event.preventDefault();
-      if (commandId === "node.toggle-expansion") restoreSelectedGraphFocus();
+      if (commandId === "node.toggle-expansion") focusRenderedGraphNode();
     }
   });
   document.querySelector("#command-search").addEventListener("input", renderPalette);

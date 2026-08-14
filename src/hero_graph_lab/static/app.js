@@ -477,6 +477,12 @@ function dragNode(event) {
   render();
 }
 
+function focusRenderedGraphNode(nodeId = state.selected) {
+  const node = Array.from(nodeLayer.querySelectorAll(".graph-node"))
+    .find((candidate) => candidate.dataset.nodeId === nodeId);
+  (node || graphViewport).focus();
+}
+
 function stopDrag(event) {
   if (!state.drag || event.pointerId !== state.drag.pointerId) return;
   const completedDrag = state.drag;
@@ -499,6 +505,7 @@ function stopDrag(event) {
     if (state.graphProjection) globalThis.HeroDiagrams?.expandProjection(completedDrag.nodeId);
     else if (state.view === "flow" || canEnterScope(completedDrag.nodeId)) expandSelectedNode();
     fitGraphToView();
+    focusRenderedGraphNode(completedDrag.nodeId);
   }
 }
 
