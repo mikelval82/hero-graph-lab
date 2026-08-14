@@ -241,6 +241,8 @@ class LabServerTest(TestCase):
                 self.assertIn('id: "selection.diagram"', commands_script)
                 self.assertIn('id: "selection.project"', commands_script)
                 self.assertIn('g: "selection.project"', commands_script)
+                self.assertIn("function restoreSelectedGraphFocus", commands_script)
+                self.assertIn('commandId === "node.toggle-expansion"', commands_script)
                 self.assertIn('id: "relation.add"', commands_script)
                 self.assertIn("function editableTarget", commands_script)
                 self.assertIn("function graphHasFocus", commands_script)
