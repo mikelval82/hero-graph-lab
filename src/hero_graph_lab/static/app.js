@@ -1209,9 +1209,23 @@ function parseProperties(text) {
   return properties;
 }
 
+function revealAgentProposal(nodeId) {
+  if (!nodeId || !graphNode(nodeId)) return false;
+  expandTreePath(nodeId);
+  if (state.view !== "focus" && isDescendantOf(nodeId, state.scope)) {
+    let node = graphNode(nodeId);
+    while (node?.parent && node.id !== state.scope) {
+      state.inlineExpanded.add(node.parent);
+      node = graphNode(node.parent);
+    }
+  }
+  return navigationGraph().nodes.some((node) => node.id === nodeId);
+}
+
 function applyAgentGraphProposals(actions) {
   if (!state.graph || !Array.isArray(actions) || !actions.length) return { nodes: 0, relations: 0, rejected: 0 };
   if (state.graphProjection) globalThis.HeroDiagrams?.restoreProjection();
+  const previousSelection = state.selected;
   const allowedNodeKinds = new Set(["package", "module", "class", "function", "method"]);
   const allowedRelationKinds = new Set(["calls", "uses", "depends_on", "publishes", "contains", "custom"]);
   let nodes = 0;
@@ -1265,14 +1279,21 @@ function applyAgentGraphProposals(actions) {
   });
 
   if (nodes || relations) {
-    state.selected = lastNodeId || state.selected;
     clearCallTrace();
     rebuildGraphIndexes();
+    const proposalRendered = revealAgentProposal(lastNodeId);
+    state.selected = lastNodeId ? (proposalRendered ? lastNodeId : previousSelection) : previousSelection;
+    if (state.selected && !navigationGraph().nodes.some((node) => node.id === state.selected)) state.selected = null;
+    state.selectedRelation = null;
+    state.flowEntryCandidate = null;
     invalidateLayout();
     saveDesign();
     markGraphDesignChanged();
-    renderFileTree();
-    refreshSelection();
+    updateTools();
+    render();
+    syncTreeSelection();
+    dispatchEvent(new CustomEvent("graph-selection-changed"));
+    if (state.selected === lastNodeId) focusRenderedGraphNode(lastNodeId);
   }
   return { nodes, relations, rejected };
 }
@@ -1404,26 +1425,41 @@ function openNodeDialog(mode) {
 function removeOrRestoreSelected() {
   const node = state.graph.nodes.find((candidate) => candidate.id === state.selected);
   if (!node) return;
-  clearCallTrace();
   if (node.status === "removed") {
+    clearCallTrace();
     node.status = node.previousStatus || "observed";
     delete node.previousStatus;
   } else if (node.status === "proposed") {
     const removedNodeIds = descendantIds(node.id);
     removedNodeIds.add(node.id);
-    state.graph.nodes = state.graph.nodes.filter((candidate) => candidate.id !== node.id);
-    state.graph.edges = state.graph.edges.filter((edge) => edge.source !== node.id && edge.target !== node.id);
+    const nonProposedDescendants = [...removedNodeIds]
+      .map((nodeId) => graphNode(nodeId))
+      .filter((candidate) => candidate && candidate.status !== "proposed");
+    if (nonProposedDescendants.length) {
+      document.querySelector("#design-sync-status").textContent = "Cannot delete: proposal contains non-proposed nodes";
+      return;
+    }
+    clearCallTrace();
+    state.graph.nodes = state.graph.nodes.filter((candidate) => !removedNodeIds.has(candidate.id));
+    state.graph.edges = state.graph.edges.filter((edge) => !removedNodeIds.has(edge.source) && !removedNodeIds.has(edge.target));
     rebuildGraphIndexes();
     state.flowJourney = flowNavigation.pruneJourney(state.flowJourney, removedNodeIds);
     state.flowEntryCandidate = null;
-    delete state.positions[node.id];
+    removedNodeIds.forEach((nodeId) => {
+      delete state.positions[nodeId];
+      state.inlineExpanded.delete(nodeId);
+      state.hiddenGraphNodes.delete(nodeId);
+      state.treeExpanded.delete(nodeId);
+    });
     state.selected = null;
   } else {
+    clearCallTrace();
     node.previousStatus = node.status;
     node.status = "removed";
   }
   invalidateLayout();
-  saveDesign(); markGraphDesignChanged(); renderBreadcrumbs(); refreshSelection();
+  saveDesign(); markGraphDesignChanged(); renderBreadcrumbs(); updateTools(); render(); syncTreeSelection();
+  dispatchEvent(new CustomEvent("graph-selection-changed"));
 }
 
 document.querySelector("#edit-node").addEventListener("click", () => openNodeDialog("edit"));

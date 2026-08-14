@@ -74,6 +74,11 @@ Explore renders assistant Markdown through the same sanitized renderer used by
 Mission documents. HTML is sanitized with DOMPurify, Mermaid uses its strict
 security profile, and invalid diagrams remain visible as controlled errors.
 
+In **Propose** mode, the assistant can emit reviewable module, class, function,
+method, and relationship proposals. Accepted actions are saved automatically in
+the browser-local design draft and never edit project source files. **Save map**
+is the separate explicit step that synchronizes the draft to HARNESS.
+
 ## Graph commands
 
 Graph actions are registered once and invoked by toolbar buttons, keyboard

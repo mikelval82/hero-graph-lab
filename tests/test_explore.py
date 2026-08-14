@@ -213,6 +213,9 @@ class ExploreAssistantTest(TestCase):
         self.assertEqual(result["actions"][1]["kind"], "depends_on")
         self.assertIn("PROPOSE MODE IS ACTIVE", client.requests[0].system_prompt)
         self.assertIn("MUST use ProposeNode", client.requests[0].system_prompt)
+        self.assertIn("browser-local draft", client.requests[0].system_prompt)
+        self.assertIn("Save map", client.requests[0].system_prompt)
+        self.assertNotIn("not persisted until the user saves", client.requests[0].system_prompt)
         self.assertNotIn("actions", service.session(session_id))
 
     def test_when_propose_mode_returns_only_advice_expect_corrective_retry(self) -> None:
