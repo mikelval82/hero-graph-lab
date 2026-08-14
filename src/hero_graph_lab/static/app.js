@@ -2,6 +2,7 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const DESIGN_STORAGE_KEY = "hero-graph-lab-design-v1";
 const LAYOUT_STORAGE_KEY = "hero-graph-lab-layout-v1";
 const TYPOGRAPHY_STORAGE_KEY = "hero-graph-lab-typography-v1";
+const flowNavigation = globalThis.HeroFlowNavigation;
 const state = {
   graph: null,
   baseGraph: null,
@@ -14,7 +15,8 @@ const state = {
   positions: {},
   treeExpanded: new Set(),
   inlineExpanded: new Set(),
-  flowTrail: [],
+  flowJourney: [],
+  flowEntryCandidate: null,
   hiddenGraphNodes: new Set(),
   callTrace: null,
   graphProjection: null,
@@ -384,7 +386,10 @@ function selectTreeNode(nodeId) {
     return;
   }
   if (state.scope !== node.parent) {
+    clearCallTrace();
     state.scope = node.parent;
+    state.flowJourney = [];
+    state.flowEntryCandidate = null;
     invalidateLayout();
     renderBreadcrumbs();
     updateGraphCount();
@@ -659,27 +664,66 @@ function focusGraph() {
   return { nodes: graph.nodes.filter((node) => nodeIds.has(node.id)), edges };
 }
 
-function flowTrailTo(nodeId) {
-  const trail = [];
-  let node = graphNode(nodeId);
-  while (node && node.id !== state.scope) {
-    trail.unshift(node.id);
-    node = graphNode(node.parent);
-  }
-  return node?.id === state.scope ? trail : [];
+function flowActiveNodeId() {
+  return state.flowJourney.at(-1)?.nodeId || null;
+}
+
+function flowRelationSnapshot(edge) {
+  if (!edge) return null;
+  return {
+    id: edge.id,
+    source: edge.source,
+    target: edge.target,
+    kind: edge.kind,
+    label: edge.label || "",
+    status: edge.status || "observed",
+    memberIds: edge.memberIds || [edge.id],
+  };
 }
 
 function flowJourneyGraph() {
   const graph = flowGraph();
-  if (!state.flowTrail.length || state.callTrace) return graph;
-  const anchorId = state.flowTrail.at(-1);
-  const nodeIds = new Set(state.flowTrail);
-  scopeChildren(anchorId).forEach((node) => {
-    if (!state.hiddenGraphNodes.has(node.id)) nodeIds.add(node.id);
+  if (!state.flowJourney.length || state.callTrace) return graph;
+  const journeyNodeIds = new Set(state.flowJourney.map((step) => step.nodeId));
+  const nodeIds = new Set(journeyNodeIds);
+  const activeNodeId = flowActiveNodeId();
+  if (state.inlineExpanded.has(activeNodeId)) {
+    scopeChildren(activeNodeId).forEach((node) => {
+      if (!state.hiddenGraphNodes.has(node.id)) nodeIds.add(node.id);
+    });
+  }
+  const edgeIds = new Set();
+  graph.edges.forEach((edge) => {
+    const touchesJourney = journeyNodeIds.has(edge.source) || journeyNodeIds.has(edge.target);
+    const connectsRetainedNodes = nodeIds.has(edge.source) && nodeIds.has(edge.target);
+    if (touchesJourney) {
+      nodeIds.add(edge.source);
+      nodeIds.add(edge.target);
+      edgeIds.add(edge.id);
+    } else if (edge.kind === "contains" && connectsRetainedNodes) {
+      edgeIds.add(edge.id);
+    }
+  });
+  const nodes = new Map(graph.nodes.filter((node) => nodeIds.has(node.id)).map((node) => [node.id, node]));
+  journeyNodeIds.forEach((nodeId) => {
+    const node = graphNode(nodeId);
+    if (node && !state.hiddenGraphNodes.has(nodeId)) nodes.set(nodeId, { ...node, context: false, journey: true });
+  });
+  const edges = new Map(graph.edges.filter((edge) => edgeIds.has(edge.id)).map((edge) => [edge.id, edge]));
+  state.flowJourney.forEach((step) => {
+    if (!step.relation || !nodes.has(step.relation.source) || !nodes.has(step.relation.target)) return;
+    const relationId = step.relation.id || `journey:${step.fromNodeId}:${step.nodeId}`;
+    edges.set(relationId, {
+      ...step.relation,
+      id: relationId,
+      aggregate: step.relation.memberIds.length > 1,
+      memberIds: step.relation.memberIds,
+      journey: true,
+    });
   });
   return {
-    nodes: graph.nodes.filter((node) => nodeIds.has(node.id)),
-    edges: graph.edges.filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target)),
+    nodes: [...nodes.values()],
+    edges: [...edges.values()].filter((edge) => nodes.has(edge.source) && nodes.has(edge.target)),
   };
 }
 
@@ -839,7 +883,7 @@ function stopDrag(event) {
   if (isDoubleClick) {
     setSelection(completedDrag.nodeId);
     if (state.graphProjection) globalThis.HeroDiagrams?.expandProjection(completedDrag.nodeId);
-    else if (canEnterScope(completedDrag.nodeId)) expandSelectedNode();
+    else if (state.view === "flow" || canEnterScope(completedDrag.nodeId)) expandSelectedNode();
     fitGraphToView();
   } else {
     toggleSelection(completedDrag.nodeId);
@@ -847,6 +891,22 @@ function stopDrag(event) {
 }
 
 function setSelection(nodeId) {
+  const previousNodeId = state.selected;
+  if (state.view === "flow" && previousNodeId && nodeId && previousNodeId !== nodeId) {
+    const visibleGraph = navigationGraph();
+    const connectedEdge = visibleGraph.edges.find((edge) => (
+      edge.source === previousNodeId && edge.target === nodeId
+    ) || (
+      edge.source === nodeId && edge.target === previousNodeId
+    ));
+    state.flowEntryCandidate = connectedEdge ? {
+      source: previousNodeId,
+      target: nodeId,
+      relation: flowRelationSnapshot(connectedEdge),
+    } : null;
+  } else if (state.view === "flow" && (!nodeId || state.flowEntryCandidate?.target !== nodeId)) {
+    state.flowEntryCandidate = null;
+  }
   if (state.relationSource && nodeId && nodeId !== state.relationSource) {
     const sourceId = state.relationSource;
     state.relationSource = null;
@@ -874,6 +934,7 @@ function clearSelection() {
   if (!state.selected && !state.selectedRelation) return;
   state.selected = null;
   state.selectedRelation = null;
+  state.flowEntryCandidate = null;
   updateGraphCount();
   updateTools();
   syncTreeSelection();
@@ -940,9 +1001,13 @@ function updateTools() {
   document.querySelector("#delete-node").disabled = projectionActive || !node;
   document.querySelector("#delete-node span").textContent = node?.status === "removed" ? "Restore" : "Delete";
   const temporaryFocus = state.view === "focus" && !projectionActive;
-  document.querySelector("#expand-node").disabled = projectionActive ? !node : temporaryFocus || !inlineNode || !scopeChildren(node.id).length || state.inlineExpanded.has(node.id);
+  const canFollow = state.view === "flow" && inlineNode && (
+    state.flowEntryCandidate?.target === node.id || !state.flowJourney.length
+  );
+  const canExpand = inlineNode && scopeChildren(node?.id).length && !state.inlineExpanded.has(node.id);
+  document.querySelector("#expand-node").disabled = projectionActive ? !node : temporaryFocus || !canExpand && !canFollow;
   document.querySelector("#collapse-node").disabled = projectionActive ? !state.graphProjection.history.length : temporaryFocus || !inlineNode || !state.inlineExpanded.has(node.id);
-  document.querySelector("#expand-node span").textContent = projectionActive ? "Expand node" : "Expand";
+  document.querySelector("#expand-node span").textContent = projectionActive ? "Expand node" : canFollow && !canExpand ? "Follow" : "Expand";
   document.querySelector("#collapse-node span").textContent = projectionActive ? "Back" : "Collapse";
   document.querySelector("#hide-node").disabled = projectionActive || temporaryFocus || !node || !visibleNodeIds.has(node.id);
   document.querySelector("#reset-view").disabled = projectionActive || !state.inlineExpanded.size && !state.hiddenGraphNodes.size && !Object.keys(state.positions).length;
@@ -1018,9 +1083,23 @@ function expandSelectedNode() {
   }
   if (state.view === "focus") return;
   const node = graphNode(state.selected);
-  if (!node || !scopeChildren(node.id).length || !isDescendantOf(node.id, state.scope)) return;
-  state.inlineExpanded.add(node.id);
-  if (state.view === "flow") state.flowTrail = flowTrailTo(node.id);
+  if (!node || !isDescendantOf(node.id, state.scope)) return;
+  const hasChildren = scopeChildren(node.id).length > 0;
+  const expandsNode = hasChildren && !state.inlineExpanded.has(node.id);
+  if (state.view === "flow") {
+    const candidate = state.flowEntryCandidate?.target === node.id ? state.flowEntryCandidate : null;
+    if (!candidate && state.flowJourney.length && flowActiveNodeId() !== node.id && !expandsNode) return;
+    if (candidate && !state.flowJourney.some((step) => step.nodeId === candidate.source)) {
+      state.flowJourney = flowNavigation.appendStep(state.flowJourney, candidate.source);
+    }
+    state.flowJourney = flowNavigation.appendStep(state.flowJourney, node.id, {
+      fromNodeId: candidate?.source || flowActiveNodeId(),
+      relation: candidate?.relation || null,
+      expanded: expandsNode,
+    });
+  }
+  if (expandsNode) state.inlineExpanded.add(node.id);
+  state.flowEntryCandidate = null;
   invalidateLayout();
   saveDesign();
   renderBreadcrumbs();
@@ -1039,8 +1118,7 @@ function collapseSelectedNode() {
   if (!node) return;
   state.inlineExpanded.delete(node.id);
   descendantIds(node.id).forEach((nodeId) => state.inlineExpanded.delete(nodeId));
-  const trailIndex = state.flowTrail.indexOf(node.id);
-  if (trailIndex >= 0) state.flowTrail = state.flowTrail.slice(0, trailIndex);
+  state.flowJourney = state.flowJourney.map((step) => step.nodeId === node.id ? { ...step, expanded: false } : step);
   invalidateLayout();
   saveDesign();
   renderBreadcrumbs();
@@ -1054,17 +1132,20 @@ function hideSelectedNode() {
   if (!node) return;
   if (state.callTrace?.nodeDepths.has(node.id)) clearCallTrace();
   state.hiddenGraphNodes.add(node.id);
+  const hiddenNodeIds = descendantIds(node.id);
   descendantIds(node.id).forEach((nodeId) => {
     state.hiddenGraphNodes.add(nodeId);
     state.inlineExpanded.delete(nodeId);
   });
   state.inlineExpanded.delete(node.id);
-  const trailIndex = state.flowTrail.indexOf(node.id);
-  if (trailIndex >= 0) state.flowTrail = state.flowTrail.slice(0, trailIndex);
+  hiddenNodeIds.add(node.id);
+  state.flowJourney = flowNavigation.pruneJourney(state.flowJourney, hiddenNodeIds);
+  state.flowEntryCandidate = null;
   invalidateLayout();
   state.selected = null;
   saveDesign();
   syncTreeSelection();
+  renderBreadcrumbs();
   updateTools();
   render();
 }
@@ -1072,7 +1153,8 @@ function hideSelectedNode() {
 function resetGraphView() {
   clearCallTrace();
   state.inlineExpanded.clear();
-  state.flowTrail = [];
+  state.flowJourney = [];
+  state.flowEntryCandidate = null;
   state.hiddenGraphNodes.clear();
   invalidateLayout();
   state.selected = null;
@@ -1104,17 +1186,25 @@ function renderBreadcrumbs() {
     button.addEventListener("click", () => navigateToScope(node.id));
     breadcrumbs.append(button);
   });
-  state.flowTrail.forEach((nodeId, index) => {
-    const node = graphNode(nodeId);
+  state.flowJourney.forEach((step, index) => {
+    const node = graphNode(step.nodeId);
     if (!node) return;
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "scope-crumb trail-crumb";
-    button.textContent = node.label;
+    button.className = `scope-crumb trail-crumb${index === 0 ? " origin-crumb" : ""}`;
+    const arrow = step.direction === "reverse" ? "<-" : "->";
+    button.textContent = index ? `${arrow} ${node.label}` : node.label;
+    button.title = step.relation
+      ? `${graphNode(step.fromNodeId)?.label || step.fromNodeId} ${step.relation.kind} ${arrow} ${node.label}`
+      : index ? `Continue at ${node.label}` : "Flow journey origin";
     button.addEventListener("click", () => {
-      state.flowTrail.slice(index + 1).forEach((descendantId) => state.inlineExpanded.delete(descendantId));
-      state.flowTrail = state.flowTrail.slice(0, index + 1);
+      state.flowJourney.slice(index + 1).filter((candidate) => candidate.expanded).forEach((candidate) => {
+        state.inlineExpanded.delete(candidate.nodeId);
+        descendantIds(candidate.nodeId).forEach((descendantId) => state.inlineExpanded.delete(descendantId));
+      });
+      state.flowJourney = flowNavigation.truncateJourney(state.flowJourney, index);
       setSelection(node.id);
+      state.flowEntryCandidate = null;
       invalidateLayout();
       saveDesign();
       renderBreadcrumbs();
@@ -1126,21 +1216,24 @@ function renderBreadcrumbs() {
   });
   breadcrumbs.scrollLeft = breadcrumbs.scrollWidth;
   const parent = graphNode(state.scope)?.parent;
-  document.querySelector("#scope-up").disabled = !state.flowTrail.length && !parent;
+  document.querySelector("#scope-up").disabled = !state.flowJourney.length && !parent;
 }
 
 function navigateGraphBack() {
-  if (!state.flowTrail.length) {
+  if (!state.flowJourney.length) {
     navigateToScope(graphNode(state.scope)?.parent);
     return;
   }
-  const removedId = state.flowTrail.pop();
-  state.inlineExpanded.delete(removedId);
-  descendantIds(removedId).forEach((nodeId) => state.inlineExpanded.delete(nodeId));
+  const removedStep = state.flowJourney.pop();
+  if (removedStep.expanded) {
+    state.inlineExpanded.delete(removedStep.nodeId);
+    descendantIds(removedStep.nodeId).forEach((nodeId) => state.inlineExpanded.delete(nodeId));
+  }
   invalidateLayout();
   saveDesign();
   renderBreadcrumbs();
-  setSelection(state.flowTrail.at(-1) || null);
+  setSelection(flowActiveNodeId());
+  state.flowEntryCandidate = null;
   render();
 }
 
@@ -1151,7 +1244,8 @@ function navigateToScope(scopeId) {
   state.selected = null;
   state.selectedRelation = null;
   state.lastNodeClick = null;
-  state.flowTrail = [];
+  state.flowJourney = [];
+  state.flowEntryCandidate = null;
   invalidateLayout();
   expandTreePath(scopeId);
   renderFileTree();
@@ -1168,7 +1262,7 @@ function saveDesign() {
       graph: state.graph,
       positions: state.positions,
       inlineExpanded: [...state.inlineExpanded],
-      flowTrail: state.flowTrail,
+      flowJourney: state.flowJourney,
       hiddenGraphNodes: [...state.hiddenGraphNodes],
     }));
   } catch (error) {
@@ -1188,7 +1282,9 @@ function restoreDesign(baseGraph) {
     if (stored?.source === baseGraph.source && Array.isArray(stored.graph?.nodes) && Array.isArray(stored.graph?.edges)) {
       state.positions = stored.positions?.flow || stored.positions || state.positions;
       state.inlineExpanded = new Set(stored.inlineExpanded || []);
-      state.flowTrail = Array.isArray(stored.flowTrail) ? stored.flowTrail : [];
+      state.flowJourney = Array.isArray(stored.flowJourney)
+        ? flowNavigation.normalizeJourney(stored.flowJourney)
+        : flowNavigation.migrateLegacyJourney(stored.flowOrigin, stored.flowTrail);
       state.hiddenGraphNodes = new Set(stored.hiddenGraphNodes || []);
       return stored.graph;
     }
@@ -1218,7 +1314,8 @@ async function loadExperiment({ restoreLocalDesign = true } = {}) {
     if (!graphResponse.ok || !sourceResponse.ok) throw new Error("Request failed");
     const extractedGraph = await graphResponse.json();
     state.source = await sourceResponse.json();
-    state.flowTrail = [];
+    state.flowJourney = [];
+    state.flowEntryCandidate = null;
     state.viewStates = { structure: null, flow: null, focus: null };
     state.currentLayout = null;
     normalizeGraph(extractedGraph);
@@ -1473,6 +1570,76 @@ function parseProperties(text) {
   return properties;
 }
 
+function applyAgentGraphProposals(actions) {
+  if (!state.graph || !Array.isArray(actions) || !actions.length) return { nodes: 0, relations: 0, rejected: 0 };
+  if (state.graphProjection) globalThis.HeroDiagrams?.restoreProjection();
+  const allowedNodeKinds = new Set(["package", "module", "class", "function", "method"]);
+  const allowedRelationKinds = new Set(["calls", "uses", "depends_on", "publishes", "contains", "custom"]);
+  let nodes = 0;
+  let relations = 0;
+  let rejected = 0;
+  let lastNodeId = null;
+
+  actions.filter((action) => action?.op === "add_node").forEach((action) => {
+    const parent = action.parent_id || null;
+    if (!action.node_id || !action.label?.trim() || !allowedNodeKinds.has(action.kind) || state.graph.nodes.some((node) => node.id === action.node_id) || (parent && !graphNode(parent))) {
+      rejected += 1;
+      return;
+    }
+    state.graph.nodes.push({
+      id: action.node_id,
+      kind: action.kind,
+      label: action.label.trim(),
+      parent,
+      line: 0,
+      end_line: 0,
+      source: "",
+      status: "proposed",
+      designDescription: action.description || "",
+      designProvenance: "AGENT",
+    });
+    if (parent) {
+      state.graph.edges.push({ id: `containment:${crypto.randomUUID()}`, source: parent, target: action.node_id, kind: "contains", status: "proposed", properties: {}, generated: true, designProvenance: "AGENT" });
+      state.treeExpanded.add(parent);
+    }
+    lastNodeId = action.node_id;
+    nodes += 1;
+    rebuildGraphIndexes();
+  });
+
+  actions.filter((action) => action?.op === "add_relation").forEach((action) => {
+    if (!action.relation_id || !allowedRelationKinds.has(action.kind) || action.source_id === action.target_id || !graphNode(action.source_id) || !graphNode(action.target_id) || state.graph.edges.some((edge) => edge.id === action.relation_id)) {
+      rejected += 1;
+      return;
+    }
+    state.graph.edges.push({
+      id: action.relation_id,
+      source: action.source_id,
+      target: action.target_id,
+      kind: action.kind,
+      label: action.label || "",
+      properties: action.properties || {},
+      status: "proposed",
+      designProvenance: "AGENT",
+    });
+    relations += 1;
+  });
+
+  if (nodes || relations) {
+    state.selected = lastNodeId || state.selected;
+    clearCallTrace();
+    rebuildGraphIndexes();
+    invalidateLayout();
+    saveDesign();
+    markGraphDesignChanged();
+    renderFileTree();
+    refreshSelection();
+  }
+  return { nodes, relations, rejected };
+}
+
+globalThis.applyAgentGraphProposals = applyAgentGraphProposals;
+
 function openRelationDialog(mode, edge = null, sourceId = null, targetId = null) {
   const source = edge?.source || sourceId;
   const target = edge?.target || targetId;
@@ -1603,9 +1770,13 @@ function removeOrRestoreSelected() {
     node.status = node.previousStatus || "observed";
     delete node.previousStatus;
   } else if (node.status === "proposed") {
+    const removedNodeIds = descendantIds(node.id);
+    removedNodeIds.add(node.id);
     state.graph.nodes = state.graph.nodes.filter((candidate) => candidate.id !== node.id);
     state.graph.edges = state.graph.edges.filter((edge) => edge.source !== node.id && edge.target !== node.id);
     rebuildGraphIndexes();
+    state.flowJourney = flowNavigation.pruneJourney(state.flowJourney, removedNodeIds);
+    state.flowEntryCandidate = null;
     delete state.positions[node.id];
     state.selected = null;
   } else {
@@ -1613,7 +1784,7 @@ function removeOrRestoreSelected() {
     node.status = "removed";
   }
   invalidateLayout();
-  saveDesign(); markGraphDesignChanged(); refreshSelection();
+  saveDesign(); markGraphDesignChanged(); renderBreadcrumbs(); refreshSelection();
 }
 
 document.querySelector("#edit-node").addEventListener("click", () => openNodeDialog("edit"));
@@ -1624,7 +1795,8 @@ document.querySelector("#reset-design").addEventListener("click", () => {
   rebuildGraphIndexes();
   state.positions = {};
   state.inlineExpanded.clear();
-  state.flowTrail = [];
+  state.flowJourney = [];
+  state.flowEntryCandidate = null;
   state.hiddenGraphNodes.clear();
   state.callTrace = null;
   state.scope = state.graph.root || state.graph.nodes.find((node) => !node.parent)?.id;

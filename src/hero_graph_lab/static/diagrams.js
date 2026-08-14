@@ -1,7 +1,13 @@
 (() => {
   const dialog = document.querySelector("#diagram-dialog");
+  const projectionDialog = document.querySelector("#projection-dialog");
+  const projectionForm = document.querySelector("#projection-form");
+  const projectionCreateDepthSelect = document.querySelector("#projection-depth");
+  const projectionCreateButton = document.querySelector("#projection-open");
+  const projectionCreateStatus = document.querySelector("#projection-status");
   const typeSelect = document.querySelector("#diagram-type");
   const depthSelect = document.querySelector("#diagram-depth");
+  const projectionDepthSelect = document.querySelector("#graph-projection-depth");
   const fromSelect = document.querySelector("#diagram-path-from");
   const toSelect = document.querySelector("#diagram-path-to");
   const pathControls = document.querySelector("#diagram-path-controls");
@@ -12,6 +18,7 @@
   const confidence = document.querySelector("#diagram-confidence");
   const inferredCache = new Map();
   const MAX_DIAGRAM_NODES = 90;
+  let pendingProjection = null;
 
   function selectedNode() {
     return state.graph?.nodes.find((node) => node.id === state.selected) || null;
@@ -381,7 +388,7 @@
     const selected = selectedNode();
     const pins = [...exploreState.pinnedNodeIds].map((id) => byId.get(id)).filter(Boolean);
     const anchors = [selected, ...pins].filter(Boolean).map((node) => `${node.kind} ${node.label} (${node.id})`).join("; ");
-    return `Genera un diagrama Mermaid sequenceDiagram sobre el flujo de negocio plausible alrededor de estos elementos: ${anchors}. Usa únicamente el contexto acotado y las herramientas de lectura necesarias. Profundidad conceptual máxima: ${depth}. Responde en español con una breve lista de supuestos y un único bloque Mermaid. Marca el resultado como INFERRED. El extractor conserva relaciones calls pero no el orden de las llamadas: no presentes la secuencia como determinista ni inventes identificadores o locators. No escribas archivos ni propongas operaciones de edición.`;
+    return `Genera un diagrama Mermaid sequenceDiagram sobre el flujo de negocio plausible alrededor de estos elementos: ${anchors}. Usa únicamente interacciones con flechas dirigidas que indiquen claramente emisor y receptor. Usa únicamente el contexto acotado y las herramientas de lectura necesarias. Profundidad conceptual máxima: ${depth}. Responde en español con una breve lista de supuestos y un único bloque Mermaid. Marca el resultado como INFERRED. El extractor conserva relaciones calls pero no el orden de las llamadas: no presentes la secuencia como determinista ni inventes identificadores o locators. No escribas archivos ni propongas operaciones de edición.`;
   }
 
   function graphSignature(visibleIds) {
@@ -457,7 +464,8 @@
     bar.hidden = !projection;
     if (!projection) return;
     document.querySelector("#graph-projection-title").textContent = projection.label;
-    document.querySelector("#graph-projection-meta").textContent = `${projection.graph.nodes.length} nodes / ${projection.history.length + 1} step${projection.history.length ? "s" : ""}`;
+    document.querySelector("#graph-projection-meta").textContent = `${projection.graph.nodes.length} nodes / depth ${projection.depth} / ${projection.history.length + 1} step${projection.history.length ? "s" : ""}`;
+    projectionDepthSelect.value = String(projection.depth);
     document.querySelector("#graph-projection-back").disabled = !projection.history.length;
   }
 
@@ -473,7 +481,7 @@
     }
     if (!current) throw new Error("Select a node or pin two nodes to create a graph projection.");
     if (current.kind === "package") return { type: "hierarchy", view: "flow", label: "Package hierarchy", options: { anchorId: current.id } };
-    if (current.kind === "module") return { type: "modules", view: "flow", label: "Module dependencies", options: { anchorId: current.id } };
+    if (current.kind === "module") return { type: "neighborhood", view: "flow", label: "Module neighborhood", options: { anchorId: current.id } };
     if (current.kind === "class") return { type: "classes", view: "focus", label: "Class collaborators", options: { anchorId: current.id } };
     if (["function", "method"].includes(current.kind)) return { type: "calls", view: "flow", label: "Call graph", options: { anchorId: current.id } };
     return { type: "neighborhood", view: "focus", label: "Selection neighborhood", options: { anchorId: current.id } };
@@ -482,12 +490,14 @@
   function activateProjection(recommendation) {
     if (state.callTrace) clearCallTrace();
     const item = projectionDefinition(recommendation.type);
-    const result = item.generate(1, recommendation.options);
+    const depth = Number(depthSelect.value);
+    const result = item.generate(depth, recommendation.options);
     state.graphProjection = {
       type: recommendation.type,
       label: recommendation.label,
       view: recommendation.view,
       options: recommendation.options,
+      depth,
       graph: normalizedProjectionGraph(result.graph),
       history: [],
       activeAnchor: state.selected,
@@ -521,7 +531,7 @@
   }
 
   function classExpansion(anchorId) {
-    const result = classDiagram(1, { anchorId });
+    const result = classDiagram(state.graphProjection?.depth || 1, { anchorId });
     const root = classFor(anchorId);
     if (!root) return result.graph;
     const methods = nodes().filter((node) => node.parent === root.id && node.kind === "method");
@@ -536,8 +546,38 @@
   function expansionGraph(projection, anchorId) {
     if (projection.type === "hierarchy") return containmentExpansion(anchorId);
     if (projection.type === "classes") return classExpansion(anchorId);
-    if (projection.type === "path") return neighborhoodDiagram(1, { anchorId }).graph;
-    return projectionDefinition(projection.type).generate(1, { ...projection.options, anchorId }).graph;
+    if (projection.type === "path") return neighborhoodDiagram(projection.depth, { anchorId }).graph;
+    return projectionDefinition(projection.type).generate(projection.depth, { ...projection.options, anchorId }).graph;
+  }
+
+  function setProjectionDepth() {
+    const projection = state.graphProjection;
+    if (!projection) return;
+    const depth = Number(projectionDepthSelect.value);
+    try {
+      const result = projectionDefinition(projection.type).generate(depth, projection.options);
+      projection.depth = depth;
+      projection.graph = normalizedProjectionGraph(result.graph);
+      projection.history = [];
+      projection.activeAnchor = projection.options.anchorId || state.selected;
+      projection.savedLayout = null;
+      depthSelect.value = String(depth);
+      state.selected = projection.activeAnchor;
+      state.positions = {};
+      state.currentLayout = null;
+      releaseGraphLayout();
+      renderProjectionBar();
+      syncTreeSelection();
+      updateGraphCount();
+      updateTools();
+      render();
+      fitGraphToView();
+      document.querySelector("#graph-command-status").textContent = `${projection.label} regenerated at depth ${depth}.`;
+      dispatchEvent(new CustomEvent("graph-selection-changed"));
+    } catch (error) {
+      projectionDepthSelect.value = String(projection.depth);
+      document.querySelector("#graph-command-status").textContent = error.message || "Could not change projection depth.";
+    }
   }
 
   function mergeProjectionGraphs(current, addition) {
@@ -647,7 +687,46 @@
       return;
     }
     try {
-      activateProjection(recommendedProjection());
+      pendingProjection = recommendedProjection();
+      document.querySelector("#projection-kind").textContent = pendingProjection.label;
+      projectionCreateDepthSelect.value = depthSelect.value;
+      if (!projectionDialog.open) projectionDialog.showModal();
+      validateProjectionChoice();
+      projectionCreateDepthSelect.focus();
+    } catch (error) {
+      document.querySelector("#graph-command-status").textContent = error.message || "Could not create the interactive projection.";
+    }
+  }
+
+  function validateProjectionChoice() {
+    if (!pendingProjection) return;
+    const depth = Number(projectionCreateDepthSelect.value);
+    try {
+      const result = projectionDefinition(pendingProjection.type).generate(depth, pendingProjection.options);
+      projectionCreateStatus.textContent = `${result.graph.nodes.length} nodes at depth ${depth}.`;
+      projectionCreateStatus.classList.remove("invalid");
+      projectionCreateButton.disabled = false;
+    } catch (error) {
+      projectionCreateStatus.textContent = error.message || "This projection cannot be created at the selected depth.";
+      projectionCreateStatus.classList.add("invalid");
+      projectionCreateButton.disabled = true;
+    }
+  }
+
+  function closeProjectionDialog() {
+    pendingProjection = null;
+    projectionDialog.close();
+  }
+
+  function confirmProjection(event) {
+    event.preventDefault();
+    if (!pendingProjection || projectionCreateButton.disabled) return;
+    depthSelect.value = projectionCreateDepthSelect.value;
+    projectionDepthSelect.value = projectionCreateDepthSelect.value;
+    const recommendation = pendingProjection;
+    closeProjectionDialog();
+    try {
+      activateProjection(recommendation);
     } catch (error) {
       document.querySelector("#graph-command-status").textContent = error.message || "Could not create the interactive projection.";
     }
@@ -740,8 +819,15 @@
   }
 
   document.querySelector("#diagram-close").addEventListener("click", () => dialog.close());
+  document.querySelector("#projection-close").addEventListener("click", closeProjectionDialog);
+  document.querySelector("#projection-cancel").addEventListener("click", closeProjectionDialog);
+  projectionCreateDepthSelect.addEventListener("change", validateProjectionChoice);
+  projectionForm.addEventListener("submit", confirmProjection);
   typeSelect.addEventListener("change", () => { updateControls(); generate(); });
-  depthSelect.addEventListener("change", generate);
+  depthSelect.addEventListener("change", () => {
+    projectionDepthSelect.value = depthSelect.value;
+    generate();
+  });
   fromSelect.addEventListener("change", generate);
   toSelect.addEventListener("change", generate);
   generateButton.addEventListener("click", generate);
@@ -756,6 +842,7 @@
   });
   document.querySelector("#graph-projection-back").addEventListener("click", backProjection);
   document.querySelector("#graph-projection-restore").addEventListener("click", restoreProjection);
+  projectionDepthSelect.addEventListener("change", setProjectionDepth);
 
   globalThis.HeroDiagrams = Object.freeze({ open, generate, definitions, projectSelection, expandProjection, backProjection, restoreProjection });
 })();

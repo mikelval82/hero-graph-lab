@@ -9,6 +9,7 @@ const exploreState = {
   listening: false,
   speakResponses: false,
   voiceInputBase: "",
+  agentMode: "read",
 };
 
 document.body.dataset.chatMode = "explore";
@@ -50,17 +51,26 @@ async function exploreRequest(path, options = {}) {
   return payload;
 }
 
+function updateExploreBusyState() {
+  const busy = exploreState.starting || exploreState.pending;
+  document.body.classList.toggle("model-pending", busy);
+  document.body.setAttribute("aria-busy", String(busy));
+}
+
 function currentExploreContext() {
   const selected = graphNode(state.selected);
   const visibleSource = selected?.source
     ? { path: selected.source, startLine: selected.line || 1, endLine: selected.end_line || selected.line || 1 }
     : null;
   return {
+    assistantMode: exploreState.agentMode,
     selectedNodeId: selected?.id || null,
     selectedRelationId: state.selectedRelation || null,
     scopeId: state.scope || null,
     visibleNodeIds: state.graph ? navigationGraph().nodes.map((node) => node.id) : [],
     pinnedNodeIds: [...exploreState.pinnedNodeIds],
+    proposalNodes: state.graph ? state.graph.nodes.filter((node) => node.status === "proposed").map((node) => ({ id: node.id, label: node.label, kind: node.kind, parent: node.parent || null })) : [],
+    proposalEdges: state.graph ? state.graph.edges.filter((edge) => edge.status === "proposed").map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.kind, label: edge.label || "" })) : [],
     visibleSource,
   };
 }
@@ -166,8 +176,8 @@ function renderExploreChat() {
   document.querySelector("#chat-phase").textContent = exploreState.provider
     ? `${exploreState.provider} / ${exploreState.model}`
     : "Unavailable";
-  document.querySelector("#chat-input-label").textContent = "Ask about this code";
-  document.querySelector("#chat-input").placeholder = "Ask about the selected code or graph";
+  document.querySelector("#chat-input-label").textContent = exploreState.agentMode === "propose" ? "Ask or propose graph changes" : "Ask about this code";
+  document.querySelector("#chat-input").placeholder = exploreState.agentMode === "propose" ? "Describe nodes or relationships to propose" : "Ask about the selected code or graph";
   document.querySelector("#chat-input").disabled = !exploreState.sessionId || exploreState.pending;
   document.querySelector("#chat-form button[type='submit']").disabled = !exploreState.sessionId || exploreState.pending;
   document.querySelector("#chat-done").hidden = true;
@@ -192,6 +202,7 @@ function setChatMode(mode) {
 async function startExploreSession() {
   if (exploreState.starting || exploreState.sessionId) return;
   exploreState.starting = true;
+  updateExploreBusyState();
   if (document.body.dataset.chatMode === "explore") {
     document.querySelector("#chat-phase").textContent = "Connecting";
   }
@@ -205,6 +216,7 @@ async function startExploreSession() {
     document.querySelector("#chat-status").textContent = error.message;
   } finally {
     exploreState.starting = false;
+    updateExploreBusyState();
   }
   renderExploreChat();
   dispatchEvent(new CustomEvent("explore-state-changed"));
@@ -227,6 +239,7 @@ async function submitExplorePrompt(text, context = currentExploreContext()) {
   if (!exploreState.sessionId) await startExploreSession();
   if (!exploreState.sessionId) return;
   exploreState.pending = true;
+  updateExploreBusyState();
   document.querySelector("#chat-status").textContent = "Exploring";
   renderExploreChat();
   dispatchEvent(new CustomEvent("explore-state-changed"));
@@ -238,13 +251,18 @@ async function submitExplorePrompt(text, context = currentExploreContext()) {
       body: JSON.stringify({ message: question, context }),
     });
     exploreState.messages = session.messages || [];
-    document.querySelector("#chat-status").textContent = "";
+    const proposalResult = globalThis.applyAgentGraphProposals(session.actions || []);
+    const proposalCount = proposalResult.nodes + proposalResult.relations;
+    document.querySelector("#chat-status").textContent = proposalCount
+      ? `${proposalResult.nodes} node and ${proposalResult.relations} relationship proposal${proposalCount === 1 ? "" : "s"} added to the local draft${proposalResult.rejected ? `; ${proposalResult.rejected} rejected` : ""}.`
+      : proposalResult.rejected ? `${proposalResult.rejected} invalid graph proposal${proposalResult.rejected === 1 ? " was" : "s were"} rejected.` : "";
     answer = latestAssistantMessage();
     speakExploreResponse(answer);
   } catch (error) {
     document.querySelector("#chat-status").textContent = error.message;
   } finally {
     exploreState.pending = false;
+    updateExploreBusyState();
     renderExploreChat();
     dispatchEvent(new CustomEvent("explore-state-changed"));
   }
@@ -255,6 +273,13 @@ document.querySelectorAll("[data-chat-mode]").forEach((button) => {
   button.addEventListener("click", () => {
     setChatMode(button.dataset.chatMode);
     if (button.dataset.chatMode === "explore" && !exploreState.sessionId) startExploreSession();
+  });
+});
+document.querySelectorAll("[data-explore-agent-mode]").forEach((button) => {
+  button.addEventListener("click", () => {
+    exploreState.agentMode = button.dataset.exploreAgentMode;
+    document.querySelectorAll("[data-explore-agent-mode]").forEach((candidate) => candidate.setAttribute("aria-pressed", String(candidate === button)));
+    renderExploreChat();
   });
 });
 addEventListener("explore-chat-required", () => setChatMode("explore"));

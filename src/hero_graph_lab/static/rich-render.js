@@ -86,6 +86,16 @@
     });
   }
 
+  function emphasizeDirectionMarkers(container) {
+    container.querySelectorAll("marker").forEach((marker) => {
+      marker.setAttribute("markerWidth", String(Math.max(12, Number(marker.getAttribute("markerWidth")) || 0)));
+      marker.setAttribute("markerHeight", String(Math.max(12, Number(marker.getAttribute("markerHeight")) || 0)));
+    });
+    container.querySelectorAll("path[marker-end]").forEach((path) => {
+      path.style.strokeWidth = String(Math.max(2, Number.parseFloat(getComputedStyle(path).strokeWidth) || 0));
+    });
+  }
+
   async function render(container, source, { prefix = "rich-mermaid" } = {}) {
     const sequence = (renderSequences.get(container) || 0) + 1;
     renderSequences.set(container, sequence);
@@ -115,6 +125,7 @@
           USE_PROFILES: { svg: true, svgFilters: true },
         });
         applySafeNodeLabels(diagram, labels);
+        emphasizeDirectionMarkers(diagram);
         result.bindFunctions?.(diagram);
       } catch (error) {
         diagram.classList.add("mermaid-error");

@@ -5,15 +5,18 @@ import json
 import os
 import re
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
+from uuid import uuid4
 
 from hero_graph_lab.explore.models import ToolSpec
 from hero_graph_lab.extractor import EXCLUDED_DIRECTORY_NAMES
 
 
 MAX_TOOL_OUTPUT = 40_000
+PROPOSAL_NODE_KINDS = {"package", "module", "class", "function", "method"}
+PROPOSAL_RELATION_KINDS = {"calls", "uses", "depends_on", "publishes", "contains", "custom"}
 
 
 def _schema(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
@@ -51,6 +54,8 @@ class GraphIndex:
 class ToolEnvironment:
     project_root: Path
     graph: GraphIndex
+    allow_proposals: bool = False
+    actions: list[dict[str, Any]] = field(default_factory=list)
 
     def resolve(self, value: str) -> Path:
         root = self.project_root.resolve()
@@ -58,6 +63,12 @@ class ToolEnvironment:
         if candidate != root and root not in candidate.parents:
             raise ValueError("path is outside the selected project")
         return candidate
+
+    def has_node(self, node_id: str) -> bool:
+        return node_id in self.graph.nodes or any(
+            action.get("op") == "add_node" and action.get("node_id") == node_id
+            for action in self.actions
+        )
 
 
 @dataclass(frozen=True)
@@ -70,8 +81,12 @@ class ExploreToolRegistry:
     def __init__(self) -> None:
         self._tools = {tool.spec.name: tool for tool in _default_tools()}
 
-    def specs(self) -> tuple[ToolSpec, ...]:
-        return tuple(tool.spec for tool in self._tools.values())
+    def specs(self, allow_proposals: bool = False) -> tuple[ToolSpec, ...]:
+        return tuple(
+            tool.spec
+            for tool in self._tools.values()
+            if allow_proposals or not tool.spec.name.startswith("Propose")
+        )
 
     def execute(self, name: str, arguments: dict[str, Any], environment: ToolEnvironment) -> str:
         if name not in self._tools:
@@ -217,6 +232,67 @@ def _graph_scope(arguments: dict[str, Any], environment: ToolEnvironment) -> dic
     }
 
 
+def _required_text(arguments: dict[str, Any], name: str, maximum: int = 120) -> str:
+    value = str(arguments.get(name, "")).strip()
+    if not value:
+        raise ValueError(f"{name} must not be empty")
+    if len(value) > maximum:
+        raise ValueError(f"{name} is too long")
+    return value
+
+
+def _propose_node(arguments: dict[str, Any], environment: ToolEnvironment) -> dict[str, Any]:
+    if not environment.allow_proposals:
+        raise ValueError("graph proposal mode is disabled")
+    kind = str(arguments["kind"])
+    if kind not in PROPOSAL_NODE_KINDS:
+        raise ValueError(f"unsupported node kind: {kind}")
+    parent_id = arguments.get("parent_id")
+    if parent_id is not None:
+        parent_id = str(parent_id)
+        if not environment.has_node(parent_id):
+            raise ValueError(f"unknown parent node: {parent_id}")
+    action = {
+        "op": "add_node",
+        "node_id": f"agent-proposal:{uuid4()}",
+        "label": _required_text(arguments, "label", 80),
+        "kind": kind,
+        "parent_id": parent_id,
+        "description": str(arguments.get("description", "")).strip()[:500],
+    }
+    environment.actions.append(action)
+    return action
+
+
+def _propose_relation(arguments: dict[str, Any], environment: ToolEnvironment) -> dict[str, Any]:
+    if not environment.allow_proposals:
+        raise ValueError("graph proposal mode is disabled")
+    source_id = str(arguments["source_id"])
+    target_id = str(arguments["target_id"])
+    if source_id == target_id:
+        raise ValueError("a relationship requires two different nodes")
+    for node_id in (source_id, target_id):
+        if not environment.has_node(node_id):
+            raise ValueError(f"unknown graph node: {node_id}")
+    kind = str(arguments["kind"])
+    if kind not in PROPOSAL_RELATION_KINDS:
+        raise ValueError(f"unsupported relationship kind: {kind}")
+    properties = arguments.get("properties", {})
+    if not isinstance(properties, dict):
+        raise ValueError("properties must be an object")
+    action = {
+        "op": "add_relation",
+        "relation_id": f"agent-relation:{uuid4()}",
+        "source_id": source_id,
+        "target_id": target_id,
+        "kind": kind,
+        "label": str(arguments.get("label", "")).strip()[:80],
+        "properties": {str(key)[:80]: str(value)[:200] for key, value in list(properties.items())[:20]},
+    }
+    environment.actions.append(action)
+    return action
+
+
 def _default_tools() -> list[ExploreTool]:
     return [
         ExploreTool(ToolSpec("Read", "Read a UTF-8 project file with line numbers.", _schema({"path": {"type": "string"}, "start_line": {"type": "integer"}, "limit": {"type": "integer"}}, ["path"])), _read),
@@ -227,4 +303,6 @@ def _default_tools() -> list[ExploreTool]:
         ExploreTool(ToolSpec("GraphNeighbors", "Get incoming/outgoing neighboring nodes and relationships.", _schema({"node_id": {"type": "string"}, "direction": {"type": "string", "enum": ["incoming", "outgoing", "both"]}, "relation": {"type": "string"}}, ["node_id"])), _graph_neighbors),
         ExploreTool(ToolSpec("GraphPath", "Find the shortest undirected path between two graph nodes.", _schema({"source_id": {"type": "string"}, "target_id": {"type": "string"}, "relation": {"type": "string"}}, ["source_id", "target_id"])), _graph_path),
         ExploreTool(ToolSpec("GraphScope", "Return a containment subtree from a graph node.", _schema({"node_id": {"type": "string"}, "depth": {"type": "integer"}}, ["node_id"])), _graph_scope),
+        ExploreTool(ToolSpec("ProposeNode", "Add a reviewable node proposal to the graph. This does not edit source files or persist the design.", _schema({"label": {"type": "string"}, "kind": {"type": "string", "enum": sorted(PROPOSAL_NODE_KINDS)}, "parent_id": {"type": "string"}, "description": {"type": "string"}}, ["label", "kind"])), _propose_node),
+        ExploreTool(ToolSpec("ProposeRelation", "Add a reviewable relationship proposal between existing or newly proposed graph nodes. This does not edit source files or persist the design.", _schema({"source_id": {"type": "string"}, "target_id": {"type": "string"}, "kind": {"type": "string", "enum": sorted(PROPOSAL_RELATION_KINDS)}, "label": {"type": "string"}, "properties": {"type": "object"}}, ["source_id", "target_id", "kind"])), _propose_relation),
     ]

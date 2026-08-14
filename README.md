@@ -149,7 +149,7 @@ The lab uses a deterministic AST graph extracted from the nested `fixtures/order
 The graph offers three coordinated views over the same selection and scope:
 
 - **Hierarchy** shows containment without call relationships or edge labels.
-- **Flow** keeps an ordered traversal trail and shows the direct children of its current endpoint.
+- **Flow** keeps an ordered journey of visited nodes and the relationships followed between them. It shows the direct children and related context of its current endpoint without dropping earlier branches.
 - **Focus** temporarily reduces Flow to the direct callers and callees of the selected node, placing callers on the left and callees on the right. Returning to Flow restores its nodes, positions, zoom, and scroll.
 
 All views support inline exploration through package, module, class, and method levels:
@@ -157,8 +157,9 @@ All views support inline exploration through package, module, class, and method 
 - Use the Explorer panel to browse folders, files, classes, functions, and methods.
 - Click a tree item to reveal it in Flow; use its caret to expand or collapse it.
 - Single-click a graph node to inspect it without changing the visible topology or layout.
-- Double-click a container or select it and use **Expand** to advance the Flow trail and reveal its children.
-- Use the highlighted trail breadcrumbs or the back arrow to return to an earlier traversal step.
+- Double-click a container or select it and use **Expand** to add it to the Flow journey and reveal its children.
+- Double-click a related leaf, or select it and use **Follow**, to advance through a relationship without requiring children.
+- Use the highlighted journey breadcrumbs or the back arrow to return to an earlier visited node. Relationship direction is retained even when traversed in reverse.
 - Use **Collapse** to remove a container's descendants from the visualization without changing the current scope.
 - Use **Hide** to remove a selected node from the visualization only.
 - Use **Reset view** to restore hidden nodes and collapse inline expansions.
@@ -175,7 +176,7 @@ All views support inline exploration through package, module, class, and method 
 
 Try the navigation tasks shown in the interface and record concrete friction or discoveries with **Record finding**. Observations are stored locally in `state/observations.json` and should drive the next iteration.
 
-Nodes can be repositioned in Flow. Manual positions remain until the visible topology changes; expanding, collapsing, hiding, changing scope, or editing graph structure triggers a fresh automatic layout. Selecting a node only updates inspection emphasis; use Focus to isolate its immediate call relationships. Selecting the canvas background clears inspection without changing the Flow trail.
+Nodes can be repositioned in Flow. Manual positions remain until the visible topology changes; expanding, collapsing, hiding, changing scope, or editing graph structure triggers a fresh automatic layout. Single-clicking a node only updates inspection emphasis. Double-click or **Follow** advances the Flow journey; use Focus to isolate immediate call relationships. Selecting the canvas background clears inspection without changing the journey.
 
 The vertical boundaries between Explorer, Flow Graph, Code, and Inspector are resizable. Drag a boundary, focus it and use the arrow keys, or double-click it to restore its default position. Panel sizes persist in browser storage.
 

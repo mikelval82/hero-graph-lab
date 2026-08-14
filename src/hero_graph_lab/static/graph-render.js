@@ -268,9 +268,26 @@ function focusLayout(nodes, edges) {
   return { width, height, positions };
 }
 
-function curve(source, target) {
-  const midpoint = (source.x + target.x) / 2;
-  return `M ${source.x} ${source.y} C ${midpoint} ${source.y}, ${midpoint} ${target.y}, ${target.x} ${target.y}`;
+function nodeBoundaryPoint(origin, destination, node, padding = 0) {
+  const deltaX = destination.x - origin.x;
+  const deltaY = destination.y - origin.y;
+  if (!deltaX && !deltaY) return { ...origin };
+  const metrics = graphNodeMetrics(node);
+  const halfWidth = metrics.width / 2 + padding;
+  const halfHeight = metrics.height / 2 + padding;
+  const scale = 1 / Math.max(Math.abs(deltaX) / halfWidth, Math.abs(deltaY) / halfHeight);
+  return { x: origin.x + deltaX * scale, y: origin.y + deltaY * scale };
+}
+
+function curve(source, target, sourceNode, targetNode) {
+  const start = nodeBoundaryPoint(source, target, sourceNode);
+  const end = nodeBoundaryPoint(target, source, targetNode, 3);
+  const midpoint = (start.x + end.x) / 2;
+  return `M ${start.x} ${start.y} C ${midpoint} ${start.y}, ${midpoint} ${end.y}, ${end.x} ${end.y}`;
+}
+
+function edgeMarker(status) {
+  return `url(#arrow-${["proposed", "modified", "removed"].includes(status) ? status : "observed"})`;
 }
 
 function currentPositions(graph) {
@@ -381,14 +398,17 @@ function render() {
   visibleGraph.edges.forEach((edge) => {
     const source = positions[edge.source]; const target = positions[edge.target];
     if (!source || !target) return;
-    const pathData = curve(source, target);
+    const sourceNode = visibleGraph.nodes.find((node) => node.id === edge.source);
+    const targetNode = visibleGraph.nodes.find((node) => node.id === edge.target);
+    if (!sourceNode || !targetNode) return;
+    const pathData = curve(source, target, sourceNode, targetNode);
     const relationSelected = state.selectedRelation === edge.id;
     const traceDimmed = state.callTrace && !edge.memberIds.some((edgeId) => state.callTrace.edgeIds.has(edgeId));
     const nodeDimmed = traceDimmed || (!state.callTrace && dimSelection && !(related.has(edge.source) && related.has(edge.target))) ? " dimmed" : "";
     const relationDimmed = state.selectedRelation && !relationSelected ? " relation-dimmed" : "";
     const dimmed = `${nodeDimmed}${relationDimmed}`;
     const traced = edge.memberIds.some((edgeId) => state.callTrace?.edgeIds.has(edgeId));
-    const visiblePath = svgElement("path", { d: pathData, class: `graph-edge ${edge.kind} ${edge.status || "observed"}${traced ? " traced" : ""}${relationSelected ? " selected" : ""}${dimmed}`, "data-edge-id": edge.id });
+    const visiblePath = svgElement("path", { d: pathData, class: `graph-edge ${edge.kind} ${edge.status || "observed"}${edge.journey ? " journey" : ""}${traced ? " traced" : ""}${relationSelected ? " selected" : ""}${dimmed}`, "marker-end": edgeMarker(edge.status), "data-edge-id": edge.id });
     const title = svgElement("title"); title.textContent = relationDetails(edge); visiblePath.append(title);
     edgeLayer.append(visiblePath);
     const hitPath = svgElement("path", { d: pathData, class: `edge-hit${dimmed}`, "data-edge-id": edge.id });
@@ -403,7 +423,7 @@ function render() {
     const labelHeight = 20 * textScale;
     const displayedText = text.length > 24 ? `${text.slice(0, 22)}...` : text;
     const width = Math.max(42 * textScale, graphTextWidth(displayedText, Math.max(11, graphFontSize() - 2)) + 16 * textScale);
-    const labelAttributes = { class: `edge-label ${edge.status || "observed"}${edge.aggregate ? " aggregate" : ""}${relationSelected ? " selected" : ""}${dimmed}`, transform: `translate(${midpoint.x} ${midpoint.y})`, "aria-label": `relationship ${text}`, tabindex: "0", role: "button", "data-edge-id": edge.id };
+    const labelAttributes = { class: `edge-label ${edge.status || "observed"}${edge.aggregate ? " aggregate" : ""}${edge.journey ? " journey" : ""}${relationSelected ? " selected" : ""}${dimmed}`, transform: `translate(${midpoint.x} ${midpoint.y})`, "aria-label": `relationship ${text}`, tabindex: "0", role: "button", "data-edge-id": edge.id };
     const label = svgElement("g", labelAttributes);
     label.append(svgElement("rect", { x: -width / 2, y: -labelHeight / 2, width, height: labelHeight, rx: 3 }));
     const labelText = svgElement("text", { x: 0, y: 3 * textScale, "text-anchor": "middle" }); labelText.textContent = displayedText;
@@ -418,7 +438,7 @@ function render() {
     const traceDepth = state.callTrace?.nodeDepths.get(node.id);
     const traceClass = traceDepth === 0 ? " trace-root" : traceDepth !== undefined ? " traced" : "";
     const traceDimmed = state.callTrace && traceDepth === undefined;
-    const group = svgElement("g", { class: `graph-node ${status}${node.context ? " context" : ""}${traceClass}${state.selected === node.id ? " selected" : ""}${traceDimmed || (!state.callTrace && dimSelection && !related.has(node.id)) ? " dimmed" : ""}`, transform: `translate(${position.x} ${position.y})`, tabindex: "0", role: "button", "aria-label": `${status} ${node.kind} ${node.label}`, "data-node-id": node.id });
+    const group = svgElement("g", { class: `graph-node ${status}${node.context ? " context" : ""}${node.journey ? " journey" : ""}${traceClass}${state.selected === node.id ? " selected" : ""}${traceDimmed || (!state.callTrace && dimSelection && !related.has(node.id)) ? " dimmed" : ""}`, transform: `translate(${position.x} ${position.y})`, tabindex: "0", role: "button", "aria-label": `${status} ${node.kind} ${node.label}`, "data-node-id": node.id });
     const { width, height, scale } = graphNodeMetrics(node);
     group.append(svgElement("rect", { x: -width / 2, y: -height / 2, width, height, rx: 3, class: `node-shape ${node.kind}` }));
     const dark = node.kind === "package" || node.kind === "module" || node.kind === "class";

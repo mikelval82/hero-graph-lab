@@ -185,6 +185,88 @@ class ExploreAssistantTest(TestCase):
         self.assertIn(contains["target"], {node["id"] for node in neighbors["neighbors"]})
         self.assertIn(contains["target"], {node["id"] for node in scope["nodes"]})
 
+    def test_when_agent_proposes_graph_changes_expect_reviewable_actions(self) -> None:
+        graph = extract_python_graph(FIXTURE)
+        nodes = graph["nodes"][:2]
+        client = FakeModelClient(
+            [
+                ModelResponse(
+                    tool_calls=(
+                        ToolCall("call-1", "ProposeNode", {"label": "PaymentPolicy", "kind": "class", "parent_id": nodes[0]["id"], "description": "Own payment rules"}),
+                        ToolCall("call-2", "ProposeRelation", {"source_id": nodes[0]["id"], "target_id": nodes[1]["id"], "kind": "depends_on", "label": "uses policy"}),
+                    )
+                ),
+                ModelResponse("He añadido dos cambios en modo propuesta."),
+            ]
+        )
+        service = ExploreAssistantService(client, lambda: FIXTURE, lambda: graph)
+        session_id = service.create_session()["id"]
+
+        result = service.send_message(
+            session_id,
+            "Propón un nodo y una relación",
+            {"assistantMode": "propose"},
+        )
+
+        self.assertEqual([action["op"] for action in result["actions"]], ["add_node", "add_relation"])
+        self.assertEqual(result["actions"][0]["label"], "PaymentPolicy")
+        self.assertEqual(result["actions"][1]["kind"], "depends_on")
+        self.assertIn("PROPOSE MODE IS ACTIVE", client.requests[0].system_prompt)
+        self.assertIn("MUST use ProposeNode", client.requests[0].system_prompt)
+        self.assertNotIn("actions", service.session(session_id))
+
+    def test_when_propose_mode_returns_only_advice_expect_corrective_retry(self) -> None:
+        graph = extract_python_graph(FIXTURE)
+        parent = graph["nodes"][0]
+        client = FakeModelClient(
+            [
+                ModelResponse("No puedo modificar la aplicación, pero te sugiero un enfoque."),
+                ModelResponse(tool_calls=(ToolCall("call-1", "ProposeNode", {"label": "TelegramNotifier", "kind": "class", "parent_id": parent["id"]}),)),
+                ModelResponse("He añadido TelegramNotifier al grafo como propuesta."),
+            ]
+        )
+        service = ExploreAssistantService(client, lambda: FIXTURE, lambda: graph)
+        session_id = service.create_session()["id"]
+
+        result = service.send_message(
+            session_id,
+            "¿Cómo mejorarías la aplicación para notificar una venta?",
+            {"assistantMode": "propose"},
+        )
+
+        self.assertEqual(result["actions"][0]["label"], "TelegramNotifier")
+        self.assertEqual(result["messages"][-1]["content"], "He añadido TelegramNotifier al grafo como propuesta.")
+        self.assertIn("staged no graph changes", client.requests[1].messages[-1].content)
+
+    def test_when_proposal_references_unknown_node_expect_tool_error(self) -> None:
+        graph = GraphIndex(extract_python_graph(FIXTURE))
+        environment = ToolEnvironment(FIXTURE.resolve(), graph, allow_proposals=True)
+        registry = ExploreToolRegistry()
+
+        with self.assertRaisesRegex(ValueError, "unknown parent node"):
+            registry.execute(
+                "ProposeNode",
+                {"label": "Orphan", "kind": "class", "parent_id": "missing"},
+                environment,
+            )
+
+    def test_when_read_mode_expect_proposal_tools_hidden_and_draft_visible(self) -> None:
+        graph = extract_python_graph(FIXTURE)
+        draft_id = "agent-proposal:existing"
+        client = FakeModelClient([ModelResponse("Puedo ver el borrador.")])
+        service = ExploreAssistantService(client, lambda: FIXTURE, lambda: graph)
+        session_id = service.create_session()["id"]
+
+        service.send_message(
+            session_id,
+            "Describe el borrador",
+            {"proposalNodes": [{"id": draft_id, "label": "DraftPolicy", "kind": "class", "parent": graph["nodes"][0]["id"]}]},
+        )
+
+        self.assertNotIn("ProposeNode", {tool.name for tool in client.requests[0].tools})
+        self.assertNotIn("PROPOSE MODE IS ACTIVE", client.requests[0].system_prompt)
+        self.assertIn(draft_id, client.requests[0].messages[0].content)
+
     def test_rejects_unknown_sessions_empty_messages_and_excessive_tool_turns(self) -> None:
         graph = extract_python_graph(FIXTURE)
         client = FakeModelClient(

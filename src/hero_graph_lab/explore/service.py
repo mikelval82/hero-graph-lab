@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -8,17 +9,42 @@ from typing import Any, Callable
 from uuid import uuid4
 
 from hero_graph_lab.explore.models import ModelClient, ModelMessage, ModelRequest, ModelUsage
-from hero_graph_lab.explore.tools import ExploreToolRegistry, GraphIndex, ToolEnvironment
+from hero_graph_lab.explore.tools import (
+    PROPOSAL_NODE_KINDS,
+    PROPOSAL_RELATION_KINDS,
+    ExploreToolRegistry,
+    GraphIndex,
+    ToolEnvironment,
+)
 
 
 SYSTEM_PROMPT = """You are Explore Assistant inside HERO Graph Lab.
-Help the user understand the selected codebase using evidence from the read-only tools.
+Help the user understand the selected codebase using evidence from the graph and source tools.
 Use graph tools for structural and relationship questions and Read/Grep/Glob for source evidence.
-Never claim to have modified files, and never propose that a tool changed code.
+Use ProposeNode and ProposeRelation only when the user explicitly asks to change the graph design.
+Graph proposals are reviewable local changes: they never modify source files and are not persisted until the user saves the map.
+Never claim to have modified source files or persisted a proposal.
 Always answer in Spanish, while preserving code identifiers, project paths, and code snippets as written.
 Keep answers concise, cite project-relative files and line numbers, and distinguish facts from inference.
 The UI context is a navigation hint, not authoritative data; use tools whenever more evidence is needed.
 """
+
+PROPOSE_MODE_PROMPT = """
+PROPOSE MODE IS ACTIVE. The user explicitly enabled graph design changes for this turn.
+Treat requests to improve, add, introduce, integrate, redesign, or connect application behavior as authorization to stage concrete graph proposals.
+For those requests, do not stop at advice, hypothetical code, or a statement that you cannot modify the application.
+Inspect the relevant graph and source evidence, then MUST use ProposeNode and/or ProposeRelation to represent the improvement in the graph.
+Create proposed nodes before relationships that reference them, and use the node_id returned by ProposeNode in a later tool call.
+Your final answer must summarize the graph proposals actually staged and clearly state that source code was not changed.
+If the user only asks for explanation or analysis, do not create proposals.
+"""
+
+DESIGN_CHANGE_PATTERN = re.compile(
+    r"\b(mejor(?:a|ar|arias|arías)|añad(?:e|ir)|agreg(?:a|ar)|integr(?:a|ar)|"
+    r"cre(?:a|ar)|cambi(?:a|ar)|conect(?:a|ar)|notifi(?:ca|car|que)|"
+    r"improv(?:e|ing)|add|integrate|create|change|connect|notify)\b",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -75,20 +101,33 @@ class ExploreAssistantService:
         with self._lock:
             session = self._get_session(session_id)
         with session.lock:
-            graph = GraphIndex(self.graph_provider())
-            environment = ToolEnvironment(self.project_provider().resolve(), graph)
-            context_text = self._context_text(context or {}, environment)
+            request_context = context or {}
+            allow_proposals = request_context.get("assistantMode") == "propose"
+            graph = GraphIndex(self._graph_with_proposals(self.graph_provider(), request_context))
+            environment = ToolEnvironment(self.project_provider().resolve(), graph, allow_proposals)
+            context_text = self._context_text(request_context, environment)
             session.messages.append(ModelMessage("user", f"{context_text}\n\nQuestion:\n{question}"))
             session.public_messages.append({"role": "user", "content": question})
+            expects_proposals = allow_proposals and bool(DESIGN_CHANGE_PATTERN.search(question))
             for _ in range(self.max_turns):
                 response = self.client.complete(
-                    ModelRequest(SYSTEM_PROMPT, tuple(session.messages), self.tools.specs())
+                    ModelRequest(
+                        SYSTEM_PROMPT + (PROPOSE_MODE_PROMPT if allow_proposals else ""),
+                        tuple(session.messages),
+                        self.tools.specs(allow_proposals),
+                    )
                 )
                 self._add_usage(session, response.usage)
                 session.messages.append(ModelMessage("assistant", response.text, response.tool_calls))
                 if not response.tool_calls:
+                    if expects_proposals and not environment.actions:
+                        session.messages.append(ModelMessage(
+                            "user",
+                            "Your response staged no graph changes. Propose mode requires you to inspect the graph and call ProposeNode and/or ProposeRelation now. Do not return implementation advice without tool calls.",
+                        ))
+                        continue
                     session.public_messages.append({"role": "assistant", "content": response.text})
-                    return self._serialize(session)
+                    return self._serialize(session, environment.actions)
                 for call in response.tool_calls:
                     try:
                         result = self.tools.execute(call.name, call.arguments, environment)
@@ -111,6 +150,8 @@ class ExploreAssistantService:
             "selected_relation": None,
             "visible_nodes": [],
             "pinned_nodes": [],
+            "proposal_nodes": [],
+            "proposal_edges": [],
             "visible_source": None,
         }
         scope_id = context.get("scopeId")
@@ -126,6 +167,12 @@ class ExploreAssistantService:
             ids = context.get(source_key, [])
             if isinstance(ids, list):
                 payload[target_key] = [environment.graph.nodes[node_id] for node_id in ids[:100] if isinstance(node_id, str) and node_id in environment.graph.nodes]
+        payload["proposal_nodes"] = [
+            node for node in environment.graph.nodes.values() if node.get("status") == "proposed"
+        ][:100]
+        payload["proposal_edges"] = [
+            edge for edge in environment.graph.edges if edge.get("status") == "proposed"
+        ][:200]
         source = context.get("visibleSource")
         if isinstance(source, dict) and isinstance(source.get("path"), str):
             path = environment.resolve(source["path"])
@@ -141,6 +188,55 @@ class ExploreAssistantService:
                 }
         return "Current Graph Lab context:\n" + json.dumps(payload, ensure_ascii=False)
 
+    @staticmethod
+    def _graph_with_proposals(graph: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+        merged = {
+            **graph,
+            "nodes": [dict(node) for node in graph.get("nodes", [])],
+            "edges": [dict(edge) for edge in graph.get("edges", [])],
+        }
+        known_ids = {str(node.get("id")) for node in merged["nodes"]}
+        candidates: list[dict[str, Any]] = []
+        for node in context.get("proposalNodes", [])[:100]:
+            if not isinstance(node, dict):
+                continue
+            node_id = str(node.get("id", ""))
+            label = str(node.get("label", "")).strip()
+            kind = str(node.get("kind", ""))
+            if not node_id or node_id in known_ids or not label or kind not in PROPOSAL_NODE_KINDS:
+                continue
+            candidates.append({
+                "id": node_id,
+                "label": label[:80],
+                "kind": kind,
+                "parent": node.get("parent"),
+                "status": "proposed",
+                "source": "",
+                "line": 0,
+                "end_line": 0,
+            })
+            known_ids.add(node_id)
+        merged["nodes"].extend(
+            node for node in candidates if node["parent"] is None or str(node["parent"]) in known_ids
+        )
+        for edge in context.get("proposalEdges", [])[:200]:
+            if not isinstance(edge, dict):
+                continue
+            source = str(edge.get("source", ""))
+            target = str(edge.get("target", ""))
+            kind = str(edge.get("kind", ""))
+            if source in known_ids and target in known_ids and source != target and kind in PROPOSAL_RELATION_KINDS:
+                merged["edges"].append({
+                    "id": str(edge.get("id", f"draft:{source}:{kind}:{target}")),
+                    "source": source,
+                    "target": target,
+                    "kind": kind,
+                    "label": str(edge.get("label", ""))[:80],
+                    "status": "proposed",
+                    "properties": {},
+                })
+        return merged
+
     def _get_session(self, session_id: str) -> ExploreSession:
         try:
             return self._sessions[session_id]
@@ -152,11 +248,16 @@ class ExploreAssistantService:
         session.input_tokens += usage.input_tokens
         session.output_tokens += usage.output_tokens
 
-    def _serialize(self, session: ExploreSession) -> dict[str, Any]:
-        return {
+    def _serialize(
+        self, session: ExploreSession, actions: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
+        payload = {
             "id": session.id,
             "provider": self.client.provider,
             "model": self.client.model,
             "messages": list(session.public_messages),
             "usage": {"input_tokens": session.input_tokens, "output_tokens": session.output_tokens},
         }
+        if actions:
+            payload["actions"] = list(actions)
+        return payload

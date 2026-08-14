@@ -762,7 +762,7 @@ function desiredDesignState() {
     id: designIds.get(node.id),
     label: node.label,
     level: visualLevel(node),
-    provenance: backendNodes.get(designIds.get(node.id))?.provenance || "HUMAN",
+    provenance: node.designProvenance || backendNodes.get(designIds.get(node.id))?.provenance || "HUMAN",
     location: "IN_REPOSITORY",
     intent: statusIntent(node.status),
     parent_id: designIds.get(node.parent) || null,
@@ -773,7 +773,7 @@ function desiredDesignState() {
     source: designIds.get(edge.source),
     target: designIds.get(edge.target),
     relation: edge.label?.trim() || edge.kind,
-    provenance: "HUMAN",
+    provenance: edge.designProvenance || "HUMAN",
     intent: statusIntent(edge.status),
   })).filter((edge) => edge.source && edge.target);
   return { nodes, edges };

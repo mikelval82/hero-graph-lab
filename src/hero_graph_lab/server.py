@@ -373,6 +373,7 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
             body = candidate.read_bytes()
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", content_types.get(candidate.suffix, "application/octet-stream"))
+            self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)

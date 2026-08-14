@@ -45,7 +45,8 @@
   }
 
   function toggleExpansion() {
-    if (state.inlineExpanded.has(state.selected)) collapseSelectedNode();
+    if (state.view === "flow" && state.flowEntryCandidate?.target === state.selected) expandSelectedNode();
+    else if (state.inlineExpanded.has(state.selected)) collapseSelectedNode();
     else expandSelectedNode();
   }
 
@@ -91,8 +92,8 @@
   register({ id: "view.focus", label: "Focus view", shortcut: "F", description: "Show direct callers and callees", isEnabled: () => Boolean(selectedNode()) && !state.graphProjection, execute: () => setGraphView("focus") });
   register({ id: "view.structure", label: "Hierarchy view", description: "Show containment hierarchy", isEnabled: () => !state.graphProjection, execute: () => setGraphView("structure") });
   register({ id: "view.flow", label: "Flow view", description: "Show the navigation flow", isEnabled: () => !state.graphProjection, execute: () => setGraphView("flow") });
-  register({ id: "node.toggle-expansion", label: "Expand or collapse", shortcut: "E", description: "Toggle children for the selected node", isEnabled: () => !document.querySelector("#expand-node").disabled || !document.querySelector("#collapse-node").disabled, execute: toggleExpansion });
-  register({ id: "node.expand", label: "Expand", description: "Reveal children", isEnabled: () => !document.querySelector("#expand-node").disabled, execute: expandSelectedNode });
+  register({ id: "node.toggle-expansion", label: "Follow, expand, or collapse", shortcut: "E", description: "Follow a relationship or toggle children for the selected node", isEnabled: () => !document.querySelector("#expand-node").disabled || !document.querySelector("#collapse-node").disabled, execute: toggleExpansion });
+  register({ id: "node.expand", label: "Follow or expand", description: "Advance Flow or reveal children", isEnabled: () => !document.querySelector("#expand-node").disabled, execute: expandSelectedNode });
   register({ id: "node.collapse", label: "Collapse", description: "Hide expanded children", isEnabled: () => !document.querySelector("#collapse-node").disabled, execute: collapseSelectedNode });
   register({ id: "selection.pin", label: "Pin context", shortcut: "P", description: "Pin or unpin the selected node in Explore", isEnabled: () => Boolean(selectedNode()), execute: togglePin });
   register({ id: "node.add", label: "Add child proposal", shortcut: "A", description: "Add a proposed child node", isEnabled: () => Boolean(state.graph) && !state.graphProjection, execute: () => openNodeDialog("add") });
