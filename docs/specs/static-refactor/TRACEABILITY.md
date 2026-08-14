@@ -12,8 +12,8 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | SFR-006 | D-002 | Classic script loading; conditional CommonJS exports in pure modules | `node --check`; server asset and order tests | Browser load pending | In progress |
 | SFR-007 | D-003 | `diagrams.js`, `rich-render.js` contract preserved | Existing server assertions and Python suite | UI-007 pending | In progress |
 | SFR-008 | D-007, D-008 | `mission.js` reviewed and intentionally unchanged | Post-refactor coupling and test review | Not applicable | Deferred |
-| SFR-009 | D-004, D-006, D-009 | All implementation milestones | 20 Node tests, 23 Python tests, `git diff --check`, HTTP 200 | UI-001 through UI-007 pending: no browser instance available | In progress |
-| SFR-010 | D-004, D-006, D-010 | Flow click, toggle, and collapse transitions | Regression tests pending | UI-008 through UI-011 reproduced pre-fix | In progress |
+| SFR-009 | D-004, D-006, D-009 | All implementation milestones | 22 Node tests, 23 Python tests, `git diff --check`, HTTP 200 | UI-001 through UI-007 remain pending; Flow checks UI-008 through UI-012 passed | In progress |
+| SFR-010 | D-004, D-006, D-010, D-011 | `flow-navigation.js`, `app.js`, `commands.js` click, toggle, collapse, and candidate-reset transitions | 6 focused Flow tests; 22 Node tests; 23 Python tests | UI-008 through UI-012 passed in Playwright; zero console warnings/errors | Verified |
 
 ## Evidence log
 
@@ -29,6 +29,9 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | 2026-08-14 | post-`46475fd` | Local application health check | HTTP 200 at `127.0.0.1:8765` |
 | 2026-08-14 | post-`46475fd` | Rendered UI gate | Pending: browser runtime reported zero available instances |
 | 2026-08-14 | pre-SFR-010 fix | Playwright Flow interaction matrix | Selected-leaf double-click lost navigation; selected reverse relation lost direction; `E` followed an expanded ancestor; Collapse retained descendant journey context |
+| 2026-08-14 | `6c5d62c` | SFR-010 automated validation | 6 focused Flow tests; 22 Node tests; 23 Python tests; all static JavaScript syntax valid |
+| 2026-08-14 | `6c5d62c` | Playwright UI-008 through UI-011 | Directed double-clicks preserved; `E` toggled without extra steps; Collapse pruned hidden descendant context |
+| 2026-08-14 | `6c5d62c` | Playwright UI-012 and root restoration | Collapse cleared the pending candidate; double-click re-expanded in place; two Back actions restored 6/24 root view with no selection or dimming; zero console warnings/errors |
 
 ## Post-refactor size evidence
 

@@ -74,3 +74,12 @@ Date: 2026-08-14
 Rendered testing exposed one shared interaction defect rather than three independent features: a repeated click can clear `flowEntryCandidate`, `E` can follow instead of collapsing an already expanded node, and Collapse can retain descendants through the journey graph.
 
 The correction will extend the existing `flow-navigation.js` transition boundary instead of introducing another module. `app.js` remains responsible for pointer coordination, while `flow-navigation.js` owns the small deterministic click and collapse transitions. `commands.js` will make the documented toggle precedence explicit. This is the smallest boundary that permits unit coverage without adding a browser framework or build dependency.
+
+## D-011 — Invalidate pending Follow state on Collapse
+
+Status: Accepted
+Date: 2026-08-14
+
+Post-fix rendered validation exposed a narrower sequence: after collapsing a selected ancestor, double-clicking it could reuse the relationship captured while selecting it from a descendant. That stale candidate appended a reverse visit instead of re-expanding the existing journey step.
+
+Collapse is therefore a navigation boundary that clears `flowEntryCandidate`. The correction is a single coordinator-state reset in `app.js`; no new abstraction is justified. UI-012 records the rendered regression check.

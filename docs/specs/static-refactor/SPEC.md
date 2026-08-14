@@ -1,6 +1,6 @@
 # Static JavaScript refactor specification
 
-Status: Structural implementation complete; Flow interaction correction in progress
+Status: Structural implementation complete; Flow interaction correction verified
 Baseline: `4bcaacc`  
 Scope: `src/hero_graph_lab/static`
 
@@ -108,6 +108,7 @@ Flow navigation shall apply the same state invariants across pointer and keyboar
 - Double-clicking a previously selected related node must retain the relationship and direction used to append the next journey step.
 - `E` toggles the selected node's expansion state. If the selected node is already expanded, collapse takes precedence over following a relationship.
 - Collapsing a container removes its expanded descendants and truncates journey steps that point into those hidden descendants, while keeping the collapsed container selected.
+- Collapse clears any pending Follow candidate; a subsequent double-click re-expands the container without appending or reversing a journey step.
 - The explicit **Follow/Expand** and **Collapse** buttons retain their distinct actions.
 
 ## Rendered-UI acceptance checks
@@ -125,6 +126,7 @@ Flow navigation shall apply the same state invariants across pointer and keyboar
 | UI-009 | Select a reverse-related container, then double-click it | The journey records the reverse relationship and renders a `<-` breadcrumb. |
 | UI-010 | Press `E` on an expanded active node, then press it again | The first press collapses and the second re-expands the same node without adding journey steps. |
 | UI-011 | Select an expanded ancestor while a descendant is active and press `E` or Collapse | The ancestor collapses, descendant journey steps are removed, and hidden descendants do not remain as journey context. |
+| UI-012 | Collapse an ancestor, then double-click that still-selected ancestor | The ancestor re-expands in place; no stale Follow candidate adds or reverses a journey step. |
 
 ## Delivery sequence
 
