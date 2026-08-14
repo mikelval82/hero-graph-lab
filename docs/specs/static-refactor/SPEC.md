@@ -138,6 +138,7 @@ Focus is a temporary contextual view anchored to the current selection, not an i
 Agent proposals shall remain bounded graph-design actions with an explicit persistence boundary:
 
 - `ProposeNode` and `ProposeRelation` emit validated actions only. They do not edit source files or write browser/HARNESS state themselves.
+- When the user explicitly requests graph element kinds or relationships, Propose mode preserves those requested kinds (`module` is not substituted with `package`) and stages the requested relationships when valid endpoints can be established from graph evidence.
 - Once the browser accepts those actions, it persists them automatically in the existing browser-local design draft. **Save map** remains the separate explicit synchronization step to HARNESS.
 - Applying a valid batch rebuilds and renders the graph immediately. For a proposed node inside the current scope, its Explorer ancestry is opened; its graph ancestry is expanded when the current view permits it.
 - Selection shall not point to a proposal absent from the rendered graph. If an active Flow journey excludes the proposal, the journey is preserved and the previous rendered selection remains active; the proposal remains discoverable in Explorer.
@@ -177,6 +178,7 @@ Agent proposals shall remain bounded graph-design actions with an explicit persi
 | UI-026 | Delete a proposed parent with only proposed descendants | The whole proposed subtree and every incident relationship disappear from state, storage, Explorer, and the rendered graph with no orphan nodes. |
 | UI-027 | Try to delete a proposed parent containing a non-proposed descendant | Removal is refused with an actionable status and the graph remains unchanged. |
 | UI-028 | Open `G` from a proposed node and immediately press `Esc` | The projection restores its source view without requiring a click inside the newly rendered graph. |
+| UI-029 | Ask Propose mode for a module, two functions, and an existing-component relationship | The first accepted batch uses those requested node kinds and includes the explicit relationship; it does not require a corrective second prompt. |
 
 ## Delivery sequence
 

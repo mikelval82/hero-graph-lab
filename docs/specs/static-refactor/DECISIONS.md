@@ -148,3 +148,12 @@ Date: 2026-08-14
 The Gemini E2E navigation run showed that proposed nodes participate correctly in Flow, Hierarchy, Focus, Explorer, and `G` graph generation. However, opening `G` leaves focus on `BODY`; an immediate `Esc` is ignored until a pointer action restores graph focus.
 
 This is a projection-activation focus defect, not an agent-proposal integrity defect: the proposed node is present, selected, and rendered in the projection. The future correction belongs at the existing `G` activation/render boundary and should reuse `focusRenderedGraphNode`; no proposal-specific branch or new module is justified.
+
+## D-019 — Reinforce explicit proposal kinds in the model contract
+
+Status: Accepted
+Date: 2026-08-14
+
+The first Gemini E2E request explicitly asked for a module, functional elements, and relationships with existing components, but the model staged a package plus two classes and no explicit relationship. The tool schemas were valid and the second, more prescriptive prompt produced the intended structure, so the defect is in instruction fidelity rather than graph mutation.
+
+Propose mode will explicitly require preservation of user-requested node kinds and relationships. A general natural-language validator or automatic rollback is not justified: semantic intent is broader than the bounded graph schema, and every proposal remains reviewable and reversible in the UI.
