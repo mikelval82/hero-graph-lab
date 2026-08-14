@@ -107,7 +107,7 @@ Flow navigation shall apply the same state invariants across pointer and keyboar
 - Repeated single-click selection is idempotent. The first click of a double-click sequence must not clear the selected node or its pending relationship.
 - Double-clicking a previously selected related node must retain the relationship and direction used to append the next journey step.
 - `E` toggles the selected node's expansion state. If the selected node is already expanded, collapse takes precedence over following a relationship.
-- A render caused by `E` must restore graph focus to the selected node so a second consecutive `E` performs the inverse transition.
+- A render caused by `E` or double-click must restore graph focus to the selected node so the next keyboard transition remains available.
 - Collapsing a container removes its expanded descendants and truncates journey steps that point into those hidden descendants, while keeping the collapsed container selected.
 - Collapse clears any pending Follow candidate; a subsequent double-click re-expands the container without appending or reversing a journey step.
 - The explicit **Follow/Expand** and **Collapse** buttons retain their distinct actions.
@@ -141,6 +141,7 @@ Project changes shall not depend on a native window created by the Python server
 | UI-013 | Use **Open project** or mission **Browse** | A web dialog opens without invoking an operating-system folder picker. |
 | UI-014 | Submit a valid absolute project path | The dialog closes and the graph/source panels reload for the selected project. |
 | UI-015 | Submit an empty, relative, or missing path | The dialog remains open, shows an actionable error, and leaves the current project unchanged. |
+| UI-016 | Double-click an expandable node, then press `E` without another pointer action | The expanded node retains focus and collapses without adding a journey step. |
 
 ## Delivery sequence
 

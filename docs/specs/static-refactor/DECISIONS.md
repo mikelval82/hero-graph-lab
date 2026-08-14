@@ -101,3 +101,12 @@ Date: 2026-08-14
 Rendered navigation on the 223-node `hero-graph-lab` graph showed that the first `E` correctly collapses an expanded node, but the synchronous render replaces the focused SVG element. Focus falls back to `BODY`, so the command registry rejects the immediately following `E` because the graph no longer has focus.
 
 Focus restoration belongs to the keyboard-command boundary, not the general renderer: after a successful `node.toggle-expansion`, `commands.js` will focus the newly rendered node matching `state.selected`, with the graph viewport as a fallback. Pointer-triggered Collapse and other renders keep their existing focus behavior.
+
+## D-014 — Share focus restoration with double-click navigation
+
+Status: Accepted
+Date: 2026-08-14
+
+Post-D-013 validation showed the same DOM replacement before the first keyboard command: double-click expands the selected node, replaces its SVG element, and leaves focus on `BODY`. An immediate `E` is therefore ignored unless the user clicks the node again.
+
+The small focus helper will live with the graph coordinator in `app.js` and be reused by `commands.js`. Double-click and successful `E` transitions restore the selected rendered node; the general renderer and unrelated commands remain unchanged.
