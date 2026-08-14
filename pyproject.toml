@@ -13,9 +13,11 @@ anthropic = ["anthropic>=0.40"]
 openai = ["openai>=1.50"]
 gemini = ["google-genai>=1.0,<3.0"]
 explore = ["anthropic>=0.40", "openai>=1.50", "google-genai>=1.0,<3.0"]
+mcp = ["mcp>=1.0,<2.0"]
 
 [project.scripts]
 hero-graph-lab = "hero_graph_lab.server:main"
+hero-graph-lab-mcp = "hero_graph_lab.mcp_server:main"
 
 [tool.setuptools.package-data]
 hero_graph_lab = ["static/*"]
