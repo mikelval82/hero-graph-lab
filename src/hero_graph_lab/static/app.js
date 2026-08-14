@@ -915,6 +915,55 @@ function saveDesign() {
   updateGraphCount();
 }
 
+function reconcileStoredDesign(baseGraph, storedGraph) {
+  const reconciled = structuredClone(baseGraph);
+  const nodesById = new Map(reconciled.nodes.map((node) => [node.id, node]));
+  const proposedNodes = [];
+  for (const storedNode of storedGraph.nodes || []) {
+    const current = nodesById.get(storedNode.id);
+    if (!current) {
+      if (storedNode.status === "proposed") proposedNodes.push(structuredClone(storedNode));
+      continue;
+    }
+    const evidence = { source: current.source, line: current.line, end_line: current.end_line };
+    Object.assign(current, structuredClone(storedNode), evidence);
+  }
+  let added = true;
+  while (added && proposedNodes.length) {
+    added = false;
+    for (let index = proposedNodes.length - 1; index >= 0; index -= 1) {
+      const node = proposedNodes[index];
+      if (node.parent && !nodesById.has(node.parent)) continue;
+      reconciled.nodes.push(node);
+      nodesById.set(node.id, node);
+      proposedNodes.splice(index, 1);
+      added = true;
+    }
+  }
+
+  const storedNodesById = new Map((storedGraph.nodes || []).map((node) => [node.id, node]));
+  reconciled.edges = reconciled.edges.filter((edge) => {
+    if (edge.kind !== "contains") return true;
+    const storedTarget = storedNodesById.get(edge.target);
+    return !storedTarget || storedTarget.status !== "modified" || storedTarget.parent === edge.source;
+  });
+  const edgesById = new Map(reconciled.edges.map((edge) => [edge.id, edge]));
+  for (const storedEdge of storedGraph.edges || []) {
+    const current = edgesById.get(storedEdge.id);
+    if (current) {
+      const endpoints = { source: current.source, target: current.target };
+      Object.assign(current, structuredClone(storedEdge), endpoints);
+      continue;
+    }
+    if (!["proposed", "modified"].includes(storedEdge.status)) continue;
+    if (!nodesById.has(storedEdge.source) || !nodesById.has(storedEdge.target)) continue;
+    const edge = structuredClone(storedEdge);
+    reconciled.edges.push(edge);
+    edgesById.set(edge.id, edge);
+  }
+  return reconciled;
+}
+
 function markGraphDesignChanged() {
   dispatchEvent(new CustomEvent("graph-design-changed"));
 }
@@ -929,7 +978,7 @@ function restoreDesign(baseGraph) {
         ? flowNavigation.normalizeJourney(stored.flowJourney)
         : flowNavigation.migrateLegacyJourney(stored.flowOrigin, stored.flowTrail);
       state.hiddenGraphNodes = new Set(stored.hiddenGraphNodes || []);
-      return stored.graph;
+      return reconcileStoredDesign(baseGraph, stored.graph);
     }
   } catch (error) {
     localStorage.removeItem(DESIGN_STORAGE_KEY);

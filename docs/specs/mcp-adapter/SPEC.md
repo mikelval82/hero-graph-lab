@@ -87,6 +87,10 @@ provenance. Tool execution shall not write project source, browser storage, or
 HARNESS directly. **Save map** remains the only explicit HARNESS synchronization
 step.
 
+Restoring that draft shall reconcile its proposal and edit overlay onto the
+freshly extracted graph. A stored draft must not replace the current extraction
+wholesale or hide code nodes added since the last browser save.
+
 ### MCP-007 - Tool safety metadata and Codex policy
 
 Graph and project inspection tools shall be advertised as read-only. Proposal
@@ -127,6 +131,7 @@ Completion requires:
 | MCP-A08 | Use Explore after enabling MCP | Explore still creates and answers its REST session normally. |
 | MCP-A09 | Inspect an MCP proposal in Explorer and graph views | The `NEW` node is visible and navigable under existing proposal rules. |
 | MCP-A10 | Stop Graph Lab and call a tool | MCP returns an actionable connection error and does not use stale data. |
+| MCP-A11 | Reload an older browser draft after the extracted graph gains nodes | Draft proposals remain, newly extracted nodes appear, and MCP proposals can target those current nodes. |
 
 ## Delivery sequence
 

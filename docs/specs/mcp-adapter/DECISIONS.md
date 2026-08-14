@@ -106,3 +106,19 @@ that the browser has already accepted and lets graph queries see proposals made
 through the same MCP process. The history is not a persistent design authority:
 it is cleared on project change or process stop, while the browser draft remains
 the persisted review state.
+
+## MCP-D011 - Reconcile stored design state over fresh extraction
+
+Status: Accepted
+Date: 2026-08-14
+
+The rendered MCP check exposed that `restoreDesign` replaced the fresh extracted
+graph with the complete graph snapshot stored by an older browser draft. MCP
+correctly proposed against the current server graph, but the browser rejected
+the action because its valid parent was absent from that stale snapshot.
+
+Restoration now starts from the fresh extraction, reapplies stored edits and
+removals to matching evidence, then adds valid proposed nodes and relationships.
+Current source locations remain authoritative. This preserves the local draft
+without hiding newly extracted code and avoids discarding user proposals merely
+to accept an MCP action.

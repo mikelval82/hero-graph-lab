@@ -304,6 +304,8 @@ class LabServerTest(TestCase):
                 self.assertIn("function rebuildGraphIndexes", app_script)
                 self.assertIn("function applyAgentGraphProposals", app_script)
                 self.assertIn("replayed", app_script[app_script.index("function applyAgentGraphProposals"):app_script.index("globalThis.applyAgentGraphProposals")])
+                self.assertIn("function reconcileStoredDesign", app_script)
+                self.assertIn("return reconcileStoredDesign(baseGraph, stored.graph)", app_script)
                 self.assertIn('designProvenance: "AGENT"', app_script)
                 self.assertIn("state.childrenByParent.get(scopeId)", app_script)
                 self.assertIn("function structureGraph", app_script)
