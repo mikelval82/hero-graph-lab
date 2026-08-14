@@ -12,6 +12,8 @@ const exploreState = {
   agentMode: "read",
 };
 
+let mcpProposalPollPending = false;
+
 document.body.dataset.chatMode = "explore";
 const BrowserSpeechRecognition = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
 const voiceRecognition = BrowserSpeechRecognition ? new BrowserSpeechRecognition() : null;
@@ -49,6 +51,41 @@ async function exploreRequest(path, options = {}) {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error || `Explore request failed (${response.status})`);
   return payload;
+}
+
+async function pollMcpProposals() {
+  if (mcpProposalPollPending || !state.graph || typeof globalThis.applyAgentGraphProposals !== "function") return;
+  mcpProposalPollPending = true;
+  try {
+    const response = await fetch("/api/mcp/proposals", { headers: { Accept: "application/json" } });
+    if (!response.ok) throw new Error(`MCP proposal inbox failed (${response.status})`);
+    const inbox = await response.json();
+    const revisions = [];
+    const totals = { nodes: 0, relations: 0, replayed: 0 };
+    for (const item of inbox.items || []) {
+      const result = globalThis.applyAgentGraphProposals([item.action]);
+      if (result.rejected) continue;
+      revisions.push(item.revision);
+      totals.nodes += result.nodes;
+      totals.relations += result.relations;
+      totals.replayed += result.replayed || 0;
+    }
+    if (!revisions.length) return;
+    const acknowledged = await fetch("/api/mcp/proposals/ack", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ revisions }),
+    });
+    if (!acknowledged.ok) throw new Error(`MCP proposal acknowledgement failed (${acknowledged.status})`);
+    const added = totals.nodes + totals.relations;
+    if (added) {
+      document.querySelector("#chat-status").textContent = `${totals.nodes} node and ${totals.relations} relationship proposal${added === 1 ? "" : "s"} received from Codex MCP and added to the local draft.`;
+    }
+  } catch (error) {
+    console.warn("Graph Lab MCP proposal polling failed", error);
+  } finally {
+    mcpProposalPollPending = false;
+  }
 }
 
 function updateExploreBusyState() {
@@ -319,5 +356,7 @@ document.querySelector("#chat-form").addEventListener("submit", async (event) =>
 });
 addEventListener("graph-selection-changed", updateExploreContext);
 addEventListener("graph-experiment-ready", updateExploreContext);
+addEventListener("graph-experiment-ready", pollMcpProposals);
 
 startExploreSession();
+setInterval(pollMcpProposals, 1000);

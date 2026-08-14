@@ -1223,19 +1223,28 @@ function revealAgentProposal(nodeId) {
 }
 
 function applyAgentGraphProposals(actions) {
-  if (!state.graph || !Array.isArray(actions) || !actions.length) return { nodes: 0, relations: 0, rejected: 0 };
+  if (!state.graph || !Array.isArray(actions) || !actions.length) return { nodes: 0, relations: 0, replayed: 0, rejected: 0 };
   if (state.graphProjection) globalThis.HeroDiagrams?.restoreProjection();
   const previousSelection = state.selected;
   const allowedNodeKinds = new Set(["package", "module", "class", "function", "method"]);
   const allowedRelationKinds = new Set(["calls", "uses", "depends_on", "publishes", "contains", "custom"]);
   let nodes = 0;
   let relations = 0;
+  let replayed = 0;
   let rejected = 0;
   let lastNodeId = null;
 
   actions.filter((action) => action?.op === "add_node").forEach((action) => {
     const parent = action.parent_id || null;
-    if (!action.node_id || !action.label?.trim() || !allowedNodeKinds.has(action.kind) || state.graph.nodes.some((node) => node.id === action.node_id) || (parent && !graphNode(parent))) {
+    const existing = action.node_id && state.graph.nodes.find((node) => node.id === action.node_id);
+    if (existing) {
+      if (existing.status === "proposed" && existing.label === action.label?.trim() && existing.kind === action.kind && (existing.parent || null) === parent) {
+        lastNodeId = action.node_id;
+        replayed += 1;
+      } else rejected += 1;
+      return;
+    }
+    if (!action.node_id || !action.label?.trim() || !allowedNodeKinds.has(action.kind) || (parent && !graphNode(parent))) {
       rejected += 1;
       return;
     }
@@ -1261,7 +1270,13 @@ function applyAgentGraphProposals(actions) {
   });
 
   actions.filter((action) => action?.op === "add_relation").forEach((action) => {
-    if (!action.relation_id || !allowedRelationKinds.has(action.kind) || action.source_id === action.target_id || !graphNode(action.source_id) || !graphNode(action.target_id) || state.graph.edges.some((edge) => edge.id === action.relation_id)) {
+    const existing = action.relation_id && state.graph.edges.find((edge) => edge.id === action.relation_id);
+    if (existing) {
+      if (existing.status === "proposed" && existing.source === action.source_id && existing.target === action.target_id && existing.kind === action.kind) replayed += 1;
+      else rejected += 1;
+      return;
+    }
+    if (!action.relation_id || !allowedRelationKinds.has(action.kind) || action.source_id === action.target_id || !graphNode(action.source_id) || !graphNode(action.target_id)) {
       rejected += 1;
       return;
     }
@@ -1295,7 +1310,7 @@ function applyAgentGraphProposals(actions) {
     dispatchEvent(new CustomEvent("graph-selection-changed"));
     if (state.selected === lastNodeId) focusRenderedGraphNode(lastNodeId);
   }
-  return { nodes, relations, rejected };
+  return { nodes, relations, replayed, rejected };
 }
 
 globalThis.applyAgentGraphProposals = applyAgentGraphProposals;
