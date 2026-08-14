@@ -157,6 +157,7 @@ class LabServerTest(TestCase):
                 self.assertIn("dompurify@3.2.6", index)
                 self.assertIn('src="/mission.js"', index)
                 self.assertIn('src="/flow-navigation.js"', index)
+                self.assertIn('src="/panel-layout.js"', index)
                 self.assertIn('src="/explore.js"', index)
                 self.assertIn('src="/rich-render.js"', index)
                 self.assertIn('src="/diagrams.js"', index)
@@ -164,6 +165,8 @@ class LabServerTest(TestCase):
                 self.assertIn('src="/commands.js"', index)
                 self.assertLess(index.index('src="/rich-render.js"'), index.index('src="/mission.js"'))
                 self.assertLess(index.index('src="/flow-navigation.js"'), index.index('src="/app.js"'))
+                self.assertLess(index.index('src="/graph-render.js"'), index.index('src="/panel-layout.js"'))
+                self.assertLess(index.index('src="/panel-layout.js"'), index.index('src="/explore.js"'))
                 self.assertLess(index.index('src="/explore.js"'), index.index('src="/diagrams.js"'))
                 self.assertLess(index.index('src="/diagrams.js"'), index.index('src="/graph-projection.js"'))
                 self.assertLess(index.index('src="/graph-projection.js"'), index.index('src="/commands.js"'))
@@ -184,6 +187,8 @@ class LabServerTest(TestCase):
                     app_script = response.read().decode("utf-8")
                 with urlopen(f"{base_url}/flow-navigation.js") as response:
                     flow_navigation_script = response.read().decode("utf-8")
+                with urlopen(f"{base_url}/panel-layout.js") as response:
+                    panel_layout_script = response.read().decode("utf-8")
                 with urlopen(f"{base_url}/rich-render.js") as response:
                     rich_render_script = response.read().decode("utf-8")
                 with urlopen(f"{base_url}/commands.js") as response:
@@ -307,10 +312,11 @@ class LabServerTest(TestCase):
                 self.assertIn("function toggleGraphLayoutLock", app_script)
                 self.assertIn("if (state.layoutLocked && state.layoutSnapshot) return state.layoutSnapshot.graph", app_script)
                 self.assertIn("function updateCodeSearch", app_script)
-                self.assertIn("function initializePanelTypography", app_script)
-                self.assertIn("hero-graph-lab-typography-v1", app_script)
+                self.assertIn("function initializeTypography", panel_layout_script)
+                self.assertIn("hero-graph-lab-typography-v1", panel_layout_script)
                 self.assertIn('addEventListener("mission-document-opened"', app_script)
-                self.assertIn('new Set(panelLayout.collapsed)', app_script)
+                self.assertIn("function normalizeLayout", panel_layout_script)
+                self.assertIn('HeroPanelLayout.expand("inspector")', explore_script)
                 self.assertIn("state.treeExpanded = new Set(state.graph.root ? [state.graph.root] : []);", app_script)
                 self.assertIn("function selectionDimmingActive", graph_script)
                 self.assertIn('!state.graphProjection && state.view !== "structure"', graph_script)

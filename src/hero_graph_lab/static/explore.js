@@ -224,9 +224,7 @@ async function startExploreSession() {
 
 function openExploreChat() {
   if (document.body.classList.contains("inspector-collapsed")) {
-    panelLayout.collapsed = panelLayout.collapsed.filter((panel) => panel !== "inspector");
-    applyPanelLayout();
-    savePanelLayout();
+    globalThis.HeroPanelLayout.expand("inspector");
   }
   activateInspectorTab("chat");
   setChatMode("explore");

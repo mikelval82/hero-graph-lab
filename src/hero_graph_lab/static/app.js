@@ -1,7 +1,5 @@
 const SVG_NS = "http://www.w3.org/2000/svg";
 const DESIGN_STORAGE_KEY = "hero-graph-lab-design-v1";
-const LAYOUT_STORAGE_KEY = "hero-graph-lab-layout-v1";
-const TYPOGRAPHY_STORAGE_KEY = "hero-graph-lab-typography-v1";
 const flowNavigation = globalThis.HeroFlowNavigation;
 const state = {
   graph: null,
@@ -43,20 +41,9 @@ const edgeLabelLayer = document.querySelector("#edge-labels");
 const nodeLayer = document.querySelector("#nodes");
 const connectionPreview = document.querySelector("#connection-preview");
 const graphViewport = document.querySelector("#graph-viewport");
-const appLayout = document.querySelector("#app-layout");
-const workspace = document.querySelector("#workspace");
-const panelLayout = { explorerWidth: null, graphRatio: 50, inspectorWidth: null, collapsed: [] };
-const panelTypographyDefaults = { explorer: 14, graph: 14, code: 14, inspector: 14 };
-const panelTypographyLimits = {
-  explorer: [11, 22],
-  graph: [10, 22],
-  code: [11, 24],
-  inspector: [11, 24],
-};
 const GRAPH_MIN_ZOOM = .1;
 const GRAPH_MAX_ZOOM = 2.5;
 const GRAPH_FIT_PADDING = 24;
-const panelTypography = { ...panelTypographyDefaults };
 
 function clamp(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value));
@@ -128,211 +115,6 @@ function stopGraphPan(event) {
   state.graphPan = null;
   graphViewport.classList.remove("panning");
   if (graphViewport.hasPointerCapture(event.pointerId)) graphViewport.releasePointerCapture(event.pointerId);
-}
-
-function inspectorVisible() {
-  return getComputedStyle(document.querySelector("#inspector")).display !== "none";
-}
-
-function explorerMaximum() {
-  const inspectorSpace = inspectorVisible() ? (panelLayout.inspectorWidth || document.querySelector("#inspector").getBoundingClientRect().width) + 6 : 0;
-  return Math.max(180, Math.min(480, appLayout.clientWidth - inspectorSpace - 672));
-}
-
-function inspectorMaximum() {
-  const explorerSpace = document.querySelector("#project-panel").getBoundingClientRect().width;
-  const proportionalMaximum = appLayout.clientWidth * .65;
-  return Math.max(190, Math.min(proportionalMaximum, appLayout.clientWidth - explorerSpace - 486));
-}
-
-function applyPanelLayout() {
-  const collapsed = new Set(panelLayout.collapsed);
-  document.body.classList.toggle("explorer-collapsed", collapsed.has("explorer"));
-  document.body.classList.toggle("code-collapsed", collapsed.has("code"));
-  document.body.classList.toggle("inspector-collapsed", collapsed.has("inspector"));
-  document.querySelectorAll("[data-collapse-panel]").forEach((button) => {
-    const panel = button.dataset.collapsePanel;
-    const isCollapsed = collapsed.has(panel);
-    button.setAttribute("aria-expanded", String(!isCollapsed));
-    button.setAttribute("aria-label", `${isCollapsed ? "Expand" : "Collapse"} ${panel === "code" ? "Code" : panel === "inspector" ? "Inspector" : "Explorer"}`);
-    button.title = button.getAttribute("aria-label");
-    button.querySelector("span").textContent = isCollapsed ? (panel === "explorer" ? ">" : "<") : (panel === "explorer" ? "<" : ">");
-  });
-  if (panelLayout.explorerWidth !== null) {
-    const explorerWidth = clamp(panelLayout.explorerWidth, 180, explorerMaximum());
-    appLayout.style.setProperty("--explorer-width", `${explorerWidth}px`);
-  }
-  if (panelLayout.inspectorWidth !== null && inspectorVisible()) {
-    const inspectorWidth = clamp(panelLayout.inspectorWidth, 190, inspectorMaximum());
-    appLayout.style.setProperty("--inspector-width", `${inspectorWidth}px`);
-  }
-  const graphRatio = clamp(panelLayout.graphRatio, 30, 70);
-  workspace.style.setProperty("--graph-width", `${graphRatio}%`);
-  const explorerSplitter = document.querySelector("#explorer-splitter");
-  explorerSplitter.setAttribute("aria-valuemax", Math.round(explorerMaximum()));
-  explorerSplitter.setAttribute("aria-valuenow", Math.round(document.querySelector("#project-panel").getBoundingClientRect().width));
-  const graphWidth = document.querySelector("#graph-panel").getBoundingClientRect().width;
-  const codeWidth = document.querySelector("#code-panel").getBoundingClientRect().width;
-  document.querySelector("#workspace-splitter").setAttribute("aria-valuenow", Math.round(graphWidth / (graphWidth + codeWidth) * 100));
-  if (inspectorVisible()) {
-    const inspectorSplitter = document.querySelector("#inspector-splitter");
-    inspectorSplitter.setAttribute("aria-valuemax", Math.round(inspectorMaximum()));
-    inspectorSplitter.setAttribute("aria-valuenow", Math.round(document.querySelector("#inspector").getBoundingClientRect().width));
-  }
-}
-
-function savePanelLayout() {
-  localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(panelLayout));
-}
-
-function applyPanelTypography() {
-  const selectors = {
-    explorer: "#project-panel",
-    graph: "#graph-panel",
-    code: "#code-panel",
-    inspector: "#inspector",
-  };
-  Object.entries(selectors).forEach(([panel, selector]) => {
-    const [minimum, maximum] = panelTypographyLimits[panel];
-    const size = clamp(Number(panelTypography[panel]), minimum, maximum);
-    panelTypography[panel] = size;
-    document.querySelector(selector).style.setProperty("--panel-font-size", `${size}px`);
-    const controls = document.querySelector(`[data-font-panel="${panel}"]`);
-    controls.querySelector("[data-font-value]").textContent = size;
-    controls.querySelector('[data-font-change="-1"]').disabled = size <= minimum;
-    controls.querySelector('[data-font-change="1"]').disabled = size >= maximum;
-  });
-}
-
-function savePanelTypography() {
-  localStorage.setItem(TYPOGRAPHY_STORAGE_KEY, JSON.stringify(panelTypography));
-}
-
-function initializePanelTypography() {
-  try {
-    const stored = JSON.parse(localStorage.getItem(TYPOGRAPHY_STORAGE_KEY));
-    if (stored && typeof stored === "object") {
-      Object.keys(panelTypography).forEach((panel) => {
-        if (Number.isFinite(stored[panel])) panelTypography[panel] = stored[panel];
-      });
-    }
-  } catch (error) {
-    localStorage.removeItem(TYPOGRAPHY_STORAGE_KEY);
-  }
-  applyPanelTypography();
-  document.querySelectorAll("[data-font-panel]").forEach((controls) => {
-    controls.addEventListener("click", (event) => {
-      const button = event.target.closest("button");
-      if (!button) return;
-      const panel = controls.dataset.fontPanel;
-      if (button.hasAttribute("data-font-reset")) {
-        panelTypography[panel] = panelTypographyDefaults[panel];
-      } else if (button.dataset.fontChange) {
-        panelTypography[panel] += Number(button.dataset.fontChange);
-      }
-      applyPanelTypography();
-      savePanelTypography();
-      if (panel === "graph" && state.graph) {
-        releaseGraphLayout();
-        invalidateLayout();
-        render();
-      }
-    });
-  });
-}
-
-function restorePanelLayout() {
-  try {
-    const stored = JSON.parse(localStorage.getItem(LAYOUT_STORAGE_KEY));
-    if (stored && typeof stored === "object") {
-      if (Number.isFinite(stored.explorerWidth)) panelLayout.explorerWidth = stored.explorerWidth;
-      if (Number.isFinite(stored.graphRatio)) panelLayout.graphRatio = stored.graphRatio;
-      if (Number.isFinite(stored.inspectorWidth)) panelLayout.inspectorWidth = stored.inspectorWidth;
-      if (Array.isArray(stored.collapsed)) panelLayout.collapsed = stored.collapsed.filter((panel) => ["explorer", "code", "inspector"].includes(panel));
-    }
-  } catch (error) {
-    localStorage.removeItem(LAYOUT_STORAGE_KEY);
-  }
-  applyPanelLayout();
-}
-
-function resizePanel(kind, clientX) {
-  if (kind === "explorer") {
-    panelLayout.explorerWidth = clamp(clientX - appLayout.getBoundingClientRect().left, 180, explorerMaximum());
-  } else if (kind === "inspector") {
-    panelLayout.inspectorWidth = clamp(appLayout.getBoundingClientRect().right - clientX, 190, inspectorMaximum());
-  } else {
-    const bounds = workspace.getBoundingClientRect();
-    const availableWidth = bounds.width - 6;
-    const graphWidth = clamp(clientX - bounds.left, 360, availableWidth - 300);
-    panelLayout.graphRatio = graphWidth / availableWidth * 100;
-  }
-  applyPanelLayout();
-}
-
-function setupPanelSplitter(splitterId, kind) {
-  const splitter = document.querySelector(splitterId);
-  let pointerId = null;
-  splitter.addEventListener("pointerdown", (event) => {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    pointerId = event.pointerId;
-    splitter.setPointerCapture(pointerId);
-    splitter.classList.add("dragging");
-    document.body.classList.add("resizing-panels");
-  });
-  splitter.addEventListener("pointermove", (event) => {
-    if (event.pointerId === pointerId) resizePanel(kind, event.clientX);
-  });
-  const stop = (event) => {
-    if (event.pointerId !== pointerId) return;
-    pointerId = null;
-    splitter.classList.remove("dragging");
-    document.body.classList.remove("resizing-panels");
-    savePanelLayout();
-  };
-  splitter.addEventListener("pointerup", stop);
-  splitter.addEventListener("pointercancel", stop);
-  splitter.addEventListener("dblclick", () => {
-    if (kind === "explorer") panelLayout.explorerWidth = 280;
-    else if (kind === "inspector") panelLayout.inspectorWidth = 260;
-    else panelLayout.graphRatio = 50;
-    applyPanelLayout();
-    savePanelLayout();
-  });
-  splitter.addEventListener("keydown", (event) => {
-    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-    event.preventDefault();
-    const bounds = splitter.getBoundingClientRect();
-    let clientX = bounds.left + bounds.width / 2;
-    if (event.key === "ArrowLeft") clientX -= 16;
-    if (event.key === "ArrowRight") clientX += 16;
-    if (event.key === "Home") clientX = kind === "inspector" ? appLayout.getBoundingClientRect().right - 190 : kind === "explorer" ? appLayout.getBoundingClientRect().left + 180 : workspace.getBoundingClientRect().left + 360;
-    if (event.key === "End") clientX = kind === "inspector" ? appLayout.getBoundingClientRect().right - inspectorMaximum() : kind === "explorer" ? appLayout.getBoundingClientRect().left + explorerMaximum() : workspace.getBoundingClientRect().right - 306;
-    resizePanel(kind, clientX);
-    savePanelLayout();
-  });
-}
-
-function initializePanelResizing() {
-  restorePanelLayout();
-  setupPanelSplitter("#explorer-splitter", "explorer");
-  setupPanelSplitter("#workspace-splitter", "workspace");
-  setupPanelSplitter("#inspector-splitter", "inspector");
-  document.querySelectorAll("[data-collapse-panel]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const collapsed = new Set(panelLayout.collapsed);
-      if (collapsed.has(button.dataset.collapsePanel)) collapsed.delete(button.dataset.collapsePanel);
-      else collapsed.add(button.dataset.collapsePanel);
-      panelLayout.collapsed = [...collapsed];
-      applyPanelLayout();
-      savePanelLayout();
-      requestAnimationFrame(() => {
-        updateGraphViewport();
-        render();
-      });
-    });
-  });
 }
 
 function graphNode(nodeId) {
@@ -1356,11 +1138,6 @@ graphViewport.addEventListener("pointercancel", stopGraphPan);
 document.querySelector("#zoom-out").addEventListener("click", () => setGraphZoom(state.graphZoom - .1));
 document.querySelector("#zoom-in").addEventListener("click", () => setGraphZoom(state.graphZoom + .1));
 document.querySelector("#zoom-fit").addEventListener("click", fitGraphToView);
-addEventListener("resize", () => requestAnimationFrame(() => {
-  applyPanelLayout();
-  updateGraphViewport();
-  render();
-}));
 document.querySelector("#scope-up").addEventListener("click", navigateGraphBack);
 document.querySelector("#collapse-tree").addEventListener("click", () => {
   state.treeExpanded = new Set([state.graph.root]);
@@ -1844,6 +1621,4 @@ document.querySelector("#feedback-form").addEventListener("submit", async (event
     event.target.reset(); document.querySelector("#friction-value").textContent = "3"; status.textContent = ""; dialog.close();
   } catch (error) { status.textContent = error.message || "Could not save the finding."; }
 });
-initializePanelResizing();
-initializePanelTypography();
 loadExperiment();
