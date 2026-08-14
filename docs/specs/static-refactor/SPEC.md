@@ -1,6 +1,6 @@
 # Static JavaScript refactor specification
 
-Status: In progress  
+Status: Implementation complete; rendered-UI validation pending
 Baseline: `4bcaacc`  
 Scope: `src/hero_graph_lab/static`
 
@@ -121,3 +121,7 @@ Every implementation milestone shall pass:
 5. Run integrated validation and close the traceability matrix.
 
 Structural extraction and behavior corrections must be separate commits whenever practical.
+
+## Completion boundary
+
+The structural implementation is complete when SFR-001, SFR-004, and SFR-005 have committed module boundaries and their automated checks pass. SFR-001 through SFR-007 remain only partially verified until UI-001 through UI-007 are exercised in a rendered browser. An HTTP 200 response, source inspection, and unit tests do not satisfy that visual gate.

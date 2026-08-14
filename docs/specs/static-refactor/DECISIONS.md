@@ -4,7 +4,7 @@ This log is append-only for the duration of the refactor. Superseded decisions r
 
 ## D-001 — Checkpoint the pre-SDD working tree
 
-Status: Accepted  
+Status: Accepted
 Date: 2026-08-14  
 Commit: `4bcaacc`
 
@@ -12,7 +12,7 @@ The refactor began from a coherent but uncommitted working tree containing the c
 
 ## D-002 — Preserve the no-build browser runtime
 
-Status: Accepted  
+Status: Accepted
 Date: 2026-08-14
 
 New reusable JavaScript boundaries will use the established dual browser/Node pattern: expose a small frozen API through `globalThis` and conditionally through `module.exports`. This avoids a repository-wide module migration and permits `node:test` coverage without adding a build system.
@@ -51,3 +51,17 @@ Status: Accepted
 Date: 2026-08-14
 
 The design synchronization mapper is a plausible pure boundary, but no current UI regression requires moving it. It will be extracted only after the higher-value projection and `app.js` work is complete and the SFR-008 gate is evaluated.
+
+## D-008 — Defer the `mission.js` extraction after reevaluation
+
+Status: Accepted
+Date: 2026-08-14
+
+After completing the projection, panel, and graph-view boundaries, `mission.js` remains 994 physical lines and contains a separable design synchronization mapper. However, the completed work introduced no new coupling to that mapper, all automated tests pass, and none of the motivating UI regressions originates there. Extracting it now would add another runtime boundary without evidence of immediate benefit. SFR-008 is therefore `Deferred`, not silently abandoned. Reconsider it when synchronization behavior changes, a mapper defect appears, or direct unit coverage becomes necessary for new design operations.
+
+## D-009 — Leave rendered acceptance unverified when no browser is available
+
+Status: Accepted
+Date: 2026-08-14
+
+The local server returned HTTP 200, but the configured browser-control runtime reported no available browser instances. UI-001 through UI-007 must remain pending. Automated state tests and server source assertions are recorded as useful evidence but are not promoted to rendered acceptance.
