@@ -83,3 +83,26 @@ Writing Codex configuration does not alter the tool inventory of an already
 running session. Repository validation will use an MCP protocol client. Codex
 availability will be reported only after the extension has restarted and the
 new server is actually listed or callable.
+
+## MCP-D009 - Acknowledge accepted revisions explicitly
+
+Status: Accepted; supersedes the acknowledgement detail in MCP-D006
+Date: 2026-08-14
+
+A batch can contain actions whose UI acceptance differs after a project or
+browser-state transition. The browser therefore applies each delivered action
+idempotently and acknowledges the explicit set of accepted revisions, rather
+than advancing one highest-revision cursor. The stable action identity still
+makes an interrupted replay safe.
+
+## MCP-D010 - Retain bounded MCP action history in process memory
+
+Status: Accepted; clarifies MCP-D005
+Date: 2026-08-14
+
+Acknowledgement removes an action from the delivery inbox but not from the
+bounded in-memory MCP history. This lets a later MCP relation reference a node
+that the browser has already accepted and lets graph queries see proposals made
+through the same MCP process. The history is not a persistent design authority:
+it is cleared on project change or process stop, while the browser draft remains
+the persisted review state.

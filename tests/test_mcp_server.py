@@ -32,7 +32,8 @@ class McpServerTest(TestCase):
             thread.start()
             try:
                 base_url = f"http://127.0.0.1:{graph_server.server_port}"
-                result = asyncio.run(self._exercise_protocol(base_url))
+                parent = next(node for node in state.graph()["nodes"] if node["kind"] == "module")
+                result = asyncio.run(self._exercise_protocol(base_url, parent["id"]))
             finally:
                 graph_server.shutdown()
                 graph_server.server_close()
@@ -42,9 +43,11 @@ class McpServerTest(TestCase):
         self.assertIn("GraphSearch", result["tool_names"])
         self.assertIn("OrderService", result["content"])
         self.assertFalse(result["is_error"])
+        self.assertEqual(result["proposal_op"], "add_node")
+        self.assertEqual(state.graph_tools.pending_proposals()["items"][0]["action"]["label"], "McpProtocolProbe")
 
     @staticmethod
-    async def _exercise_protocol(base_url: str) -> dict[str, object]:
+    async def _exercise_protocol(base_url: str, parent_id: str) -> dict[str, object]:
         parameters = StdioServerParameters(
             command=sys.executable,
             args=["-m", "hero_graph_lab.mcp_server", "--url", base_url],
@@ -55,6 +58,10 @@ class McpServerTest(TestCase):
                 initialized = await session.initialize()
                 listed = await session.list_tools()
                 called = await session.call_tool("GraphSearch", {"query": "OrderService"})
+                proposed = await session.call_tool(
+                    "ProposeNode",
+                    {"label": "McpProtocolProbe", "kind": "class", "parent_id": parent_id},
+                )
                 return {
                     "server_name": initialized.serverInfo.name,
                     "tool_names": {tool.name for tool in listed.tools},
@@ -62,6 +69,7 @@ class McpServerTest(TestCase):
                         item.text for item in called.content if item.type == "text"
                     ),
                     "is_error": bool(called.isError),
+                    "proposal_op": proposed.structuredContent["actions"][0]["op"],
                 }
 
     def test_stdio_tool_error_is_actionable_when_graph_lab_is_down(self) -> None:

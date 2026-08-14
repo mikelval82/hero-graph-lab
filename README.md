@@ -79,6 +79,41 @@ method, and relationship proposals. Accepted actions are saved automatically in
 the browser-local design draft and never edit project source files. **Save map**
 is the separate explicit step that synchronizes the draft to HARNESS.
 
+## Codex MCP tools
+
+Graph Lab can expose the same source, graph-query, and proposal registry as an
+MCP STDIO server for local Codex clients. The browser Explore chat remains on
+its existing REST session API; both adapters execute the same tool handlers.
+
+Install the optional SDK dependency:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[mcp]"
+```
+
+Start the Graph Lab web server first. The MCP bridge deliberately delegates to
+the loopback server so its tools always use the project currently selected in
+the UI:
+
+```powershell
+codex mcp add hero_graph_lab -- `
+  C:\path\to\hero-graph-lab\.venv\Scripts\python.exe `
+  -m hero_graph_lab.mcp_server `
+  --url http://127.0.0.1:8765
+codex mcp list
+```
+
+Restart the Codex IDE extension after adding the server. Inspection tools are
+marked read-only; `ProposeNode` and `ProposeRelation` are marked as writes. MCP
+proposals enter an in-memory delivery inbox and the open browser applies them
+to the existing local design draft. They remain `NEW` reviewable elements and
+still require **Save map** for HARNESS synchronization.
+
+The bridge accepts loopback HTTP URLs only. If Graph Lab is stopped, tool calls
+fail explicitly instead of extracting a different or stale project. Pending
+delivery state is intentionally ephemeral and is cleared when the server stops
+or the selected project changes.
+
 ## Graph commands
 
 Graph actions are registered once and invoked by toolbar buttons, keyboard
@@ -205,3 +240,7 @@ Relationship color represents design status independently from relationship type
 ```powershell
 .\.venv\Scripts\python.exe -m pytest
 ```
+
+The MCP protocol smoke in `tests/test_mcp_server.py` starts the STDIO process,
+performs initialization, lists tools, and invokes a live graph query through a
+temporary loopback Graph Lab server.
