@@ -328,6 +328,7 @@
       updateGraphCount();
       updateTools();
       render();
+      focusRenderedGraphNode();
       requestAnimationFrame(() => {
         applyGraphScale();
         graphViewport.scrollTo({ left: previous.scrollLeft, top: previous.scrollTop });
@@ -354,6 +355,7 @@
       updateGraphCount();
       updateTools();
       render();
+      focusRenderedGraphNode();
       requestAnimationFrame(() => {
         applyGraphScale();
         graphViewport.scrollTo({ left: previous.scrollLeft, top: previous.scrollTop });

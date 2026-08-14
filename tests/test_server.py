@@ -243,6 +243,11 @@ class LabServerTest(TestCase):
                 self.assertIn('g: "selection.project"', commands_script)
                 self.assertIn("function focusRenderedGraphNode", app_script)
                 self.assertIn("focusRenderedGraphNode(completedDrag.nodeId)", app_script)
+                self.assertIn('focusReturnView: "flow"', app_script)
+                self.assertIn("const selectedAtEntry = state.selected;", app_script)
+                self.assertIn('if (view === "focus" && savedView?.selected !== selectedAtEntry)', app_script)
+                self.assertIn('setGraphView(state.focusReturnView || "flow")', app_script)
+                self.assertIn('const resetFromFocus = state.view === "focus";', app_script)
                 self.assertIn('commandId === "node.toggle-expansion"', commands_script)
                 self.assertIn("focusRenderedGraphNode()", commands_script)
                 self.assertIn('id: "relation.add"', commands_script)
@@ -271,6 +276,10 @@ class LabServerTest(TestCase):
                 self.assertIn("function expandProjection", projection_script)
                 self.assertIn("function backProjection", projection_script)
                 self.assertIn("function restoreProjection", projection_script)
+                restore_projection_script = projection_script[projection_script.index("function restoreProjection"):projection_script.index("function backProjection")]
+                back_projection_script = projection_script[projection_script.index("function backProjection"):projection_script.index("function projectSelection")]
+                self.assertIn("focusRenderedGraphNode()", restore_projection_script)
+                self.assertIn("focusRenderedGraphNode()", back_projection_script)
                 self.assertIn("function mergeGraphs", projection_script)
                 self.assertIn("G, E, or double-click", projection_script)
                 self.assertNotIn("function activateProjection", diagrams_script)

@@ -33,6 +33,7 @@ const state = {
   layoutSnapshot: null,
   currentLayout: null,
   viewStates: { structure: null, flow: null, focus: null },
+  focusReturnView: "flow",
   nodeById: new Map(),
   childrenByParent: new Map(),
 };
@@ -540,13 +541,20 @@ function setSelection(nodeId) {
   updateGraphCount();
   updateTools();
   syncTreeSelection();
-  if (state.view === "focus" && !state.graphProjection) render();
-  else updateGraphSelectionStyles();
+  if (state.view === "focus" && !state.graphProjection) {
+    render();
+    focusRenderedGraphNode(nodeId);
+  } else updateGraphSelectionStyles();
   dispatchEvent(new CustomEvent("graph-selection-changed"));
 }
 
 function clearSelection() {
   if (!state.selected && !state.selectedRelation) return;
+  if (state.view === "focus" && !state.graphProjection) {
+    setGraphView(state.focusReturnView || "flow");
+    focusRenderedGraphNode();
+    return;
+  }
   state.selected = null;
   state.selectedRelation = null;
   state.flowEntryCandidate = null;
@@ -576,15 +584,24 @@ function setGraphView(view) {
     clearCallTrace();
     render();
   }
+  const sourceView = state.view;
+  const selectedAtEntry = state.selected;
   captureGraphViewState();
   releaseGraphLayout();
+  if (view === "focus") state.focusReturnView = sourceView;
   state.view = view;
   state.selectedRelation = null;
-  const savedView = state.viewStates[view];
+  let savedView = state.viewStates[view];
+  if (view === "focus" && savedView?.selected !== selectedAtEntry) {
+    state.viewStates.focus = null;
+    savedView = null;
+  }
   if (savedView) {
     state.selected = savedView.selected;
     state.selectedRelation = savedView.selectedRelation;
     state.graphZoom = savedView.zoom;
+  } else if (view === "focus") {
+    state.selected = selectedAtEntry;
   }
   document.querySelectorAll("[data-graph-view]").forEach((button) => {
     button.setAttribute("aria-pressed", String(button.dataset.graphView === view));
@@ -768,6 +785,7 @@ function hideSelectedNode() {
 }
 
 function resetGraphView() {
+  const resetFromFocus = state.view === "focus";
   clearCallTrace();
   state.inlineExpanded.clear();
   state.flowJourney = [];
@@ -776,6 +794,14 @@ function resetGraphView() {
   invalidateLayout();
   state.selected = null;
   state.selectedRelation = null;
+  if (resetFromFocus) {
+    state.view = "flow";
+    state.focusReturnView = "flow";
+    document.querySelectorAll("[data-graph-view]").forEach((button) => {
+      button.setAttribute("aria-pressed", String(button.dataset.graphView === "flow"));
+    });
+    document.querySelector("#graph-view-label").textContent = "Flow Graph";
+  }
   saveDesign();
   syncTreeSelection();
   updateTools();
@@ -934,6 +960,7 @@ async function loadExperiment({ restoreLocalDesign = true } = {}) {
     state.flowJourney = [];
     state.flowEntryCandidate = null;
     state.viewStates = { structure: null, flow: null, focus: null };
+    state.focusReturnView = "flow";
     state.currentLayout = null;
     normalizeGraph(extractedGraph);
     state.baseGraph = structuredClone(extractedGraph);
