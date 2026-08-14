@@ -110,3 +110,12 @@ Date: 2026-08-14
 Post-D-013 validation showed the same DOM replacement before the first keyboard command: double-click expands the selected node, replaces its SVG element, and leaves focus on `BODY`. An immediate `E` is therefore ignored unless the user clicks the node again.
 
 The small focus helper will live with the graph coordinator in `app.js` and be reused by `commands.js`. Double-click and successful `E` transitions restore the selected rendered node; the general renderer and unrelated commands remain unchanged.
+
+## D-015 — Separate the Focus anchor from saved visual state
+
+Status: Accepted
+Date: 2026-08-14
+
+Rendered testing on the 223-node `hero-graph-lab` graph showed one shared Focus-state defect across view switching, `F`, `Esc`, Reset, and projection Back: `viewStates` stores both visual state and selection, while a Focus render replaces the selected SVG element. Re-entering Focus therefore restored an obsolete anchor, and subsequent keyboard commands could be rejected after focus fell to `BODY`.
+
+Focus will remain inside the existing `app.js` coordinator. The current source-view selection is authoritative when entering Focus; a saved Focus layout is reusable only for the same anchor. A small `focusReturnView` value records whether Flow or Hierarchy should be restored when Focus is cleared. Targeted Focus and projection transitions will reuse `focusRenderedGraphNode`; no new state module or general render hook is justified.

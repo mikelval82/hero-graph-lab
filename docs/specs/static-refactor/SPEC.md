@@ -122,6 +122,16 @@ Project changes shall not depend on a native window created by the Python server
 - If a HARNESS worker is active, the existing confirmation and stop behavior remains in force.
 - On success the graph reloads without restoring design state from the previous project; on failure the dialog remains open and displays the server error.
 
+### SFR-012 — Focus anchor and keyboard continuity
+
+Focus is a temporary contextual view anchored to the current selection, not an independently restorable semantic selection:
+
+- Entering Focus from Flow or Hierarchy uses the node selected in the source view. A saved Focus layout may be reused only when it belongs to that same anchor.
+- Selecting another visible node in Focus immediately rebuilds the direct call neighborhood around that node and restores keyboard focus to its newly rendered SVG element.
+- Focus shall not remain active without an anchor. Clearing the selection with `Esc` or a canvas click returns to the view from which Focus was entered; **Reset view** returns to a clean Flow root.
+- **Expand**, **Collapse**, and `E` remain unavailable in normal Focus. Double-clicking a Focus node does not mutate Flow journey or expansion state.
+- A rendered `G` Back or Restore transition restores keyboard focus to its selected node, or to the graph viewport when no node is selected, so consecutive `Esc` transitions remain available.
+
 ## Rendered-UI acceptance checks
 
 | ID | Scenario | Expected result |
@@ -142,6 +152,12 @@ Project changes shall not depend on a native window created by the Python server
 | UI-014 | Submit a valid absolute project path | The dialog closes and the graph/source panels reload for the selected project. |
 | UI-015 | Submit an empty, relative, or missing path | The dialog remains open, shows an actionable error, and leaves the current project unchanged. |
 | UI-016 | Double-click an expandable node, then press `E` without another pointer action | The expanded node retains focus and collapses without adding a journey step. |
+| UI-017 | Select a different node in Flow and enter Focus repeatedly | Each Focus graph is anchored to the current Flow selection, never to a prior Focus selection. |
+| UI-018 | Select a visible neighbor in Focus, then immediately press a graph shortcut | Focus is restored to the rendered node and the shortcut is handled without another pointer action. |
+| UI-019 | Press `Esc` in normal Focus | The view used to enter Focus is restored; an anchorless graph labelled Focus is never shown. |
+| UI-020 | Use **Reset view** in Focus | The application returns to a clean, unselected Flow root. |
+| UI-021 | Expand a `G` projection, then press `Esc` twice | The first press restores the preceding projection step and retains graph focus; the second restores the pre-projection view. |
+| UI-022 | Double-click a node or press `E` in normal Focus | The Focus neighborhood, Flow journey, and expansion state do not change. |
 
 ## Delivery sequence
 
