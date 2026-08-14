@@ -119,3 +119,21 @@ Date: 2026-08-14
 Rendered testing on the 223-node `hero-graph-lab` graph showed one shared Focus-state defect across view switching, `F`, `Esc`, Reset, and projection Back: `viewStates` stores both visual state and selection, while a Focus render replaces the selected SVG element. Re-entering Focus therefore restored an obsolete anchor, and subsequent keyboard commands could be rejected after focus fell to `BODY`.
 
 Focus will remain inside the existing `app.js` coordinator. The current source-view selection is authoritative when entering Focus; a saved Focus layout is reusable only for the same anchor. A small `focusReturnView` value records whether Flow or Hierarchy should be restored when Focus is cleared. Targeted Focus and projection transitions will reuse `focusRenderedGraphNode`; no new state module or general render hook is justified.
+
+## D-016 — Treat accepted agent actions as a browser-local draft
+
+Status: Accepted
+Date: 2026-08-14
+
+The proposal tools themselves only emit validated actions, but `applyAgentGraphProposals` immediately incorporates accepted actions into the graph and `saveDesign` stores that graph in browser storage. The prior model prompt's statement that proposals are not persisted until **Save map** conflicts with this runtime behavior.
+
+The contract will name both boundaries: automatic browser-local draft persistence after acceptance, and explicit HARNESS synchronization through **Save map**. Source files remain unchanged at both stages. This corrects the description without redesigning the existing persistence model.
+
+## D-017 — Repair proposal integrity in the existing coordinator
+
+Status: Accepted
+Date: 2026-08-14
+
+Rendered testing exposed two coupled coordinator defects: accepted proposals changed state without a graph render, and deleting a proposed parent removed only that parent while retaining its proposed descendants as orphans. A nested proposal could also become the selected node while remaining outside the rendered navigation graph.
+
+The correction will reuse `expandTreePath`, `inlineExpanded`, `navigationGraph`, `descendantIds`, and the existing render/persistence path in `app.js`. Proposed-subtree deletion will be atomic and will refuse a mixed-status subtree. A new module is not justified because the work coordinates existing application state and has no independent reusable domain boundary.

@@ -1,6 +1,6 @@
 # Static JavaScript refactor specification
 
-Status: Structural implementation complete; Flow interaction correction verified
+Status: Structural implementation complete; agent proposal integrity correction specified
 Baseline: `4bcaacc`  
 Scope: `src/hero_graph_lab/static`
 
@@ -132,6 +132,18 @@ Focus is a temporary contextual view anchored to the current selection, not an i
 - **Expand**, **Collapse**, and `E` remain unavailable in normal Focus. Double-clicking a Focus node does not mutate Flow journey or expansion state.
 - A rendered `G` Back or Restore transition restores keyboard focus to its selected node, or to the graph viewport when no node is selected, so consecutive `Esc` transitions remain available.
 
+### SFR-013 — Reviewable agent proposal drafts
+
+Agent proposals shall remain bounded graph-design actions with an explicit persistence boundary:
+
+- `ProposeNode` and `ProposeRelation` emit validated actions only. They do not edit source files or write browser/HARNESS state themselves.
+- Once the browser accepts those actions, it persists them automatically in the existing browser-local design draft. **Save map** remains the separate explicit synchronization step to HARNESS.
+- Applying a valid batch rebuilds and renders the graph immediately. For a proposed node inside the current scope, its Explorer ancestry is opened; its graph ancestry is expanded when the current view permits it.
+- Selection shall not point to a proposal absent from the rendered graph. If an active Flow journey excludes the proposal, the journey is preserved and the previous rendered selection remains active; the proposal remains discoverable in Explorer.
+- Removing a proposed parent removes its entire all-proposed descendant subtree, every incident relationship, and associated navigation/layout state in one operation.
+- If a proposed subtree contains any non-proposed descendant, removal is refused rather than deleting extracted/modified evidence or leaving an orphan.
+- These corrections remain in the existing `app.js` coordination boundary; no new module is introduced without evidence of reusable proposal-domain logic.
+
 ## Rendered-UI acceptance checks
 
 | ID | Scenario | Expected result |
@@ -158,6 +170,11 @@ Focus is a temporary contextual view anchored to the current selection, not an i
 | UI-020 | Use **Reset view** in Focus | The application returns to a clean, unselected Flow root. |
 | UI-021 | Expand a `G` projection, then press `Esc` twice | The first press restores the preceding projection step and retains graph focus; the second restores the pre-projection view. |
 | UI-022 | Double-click a node or press `E` in normal Focus | The Focus neighborhood, Flow journey, and expansion state do not change. |
+| UI-023 | Apply nested module, class, and function proposals plus a relationship in a non-journey graph view | The accepted proposal batch renders immediately with `NEW` provenance, opens its Explorer ancestry, and selects the final rendered proposal. |
+| UI-024 | Apply a proposal while an active Flow journey excludes it | The journey and its rendered selection remain intact; no invisible proposal becomes the active graph selection, and the proposal is available in Explorer. |
+| UI-025 | Reload after accepting agent proposals | The same proposals return from the browser-local draft without any source-file change; **Save map** is still required for HARNESS synchronization. |
+| UI-026 | Delete a proposed parent with only proposed descendants | The whole proposed subtree and every incident relationship disappear from state, storage, Explorer, and the rendered graph with no orphan nodes. |
+| UI-027 | Try to delete a proposed parent containing a non-proposed descendant | Removal is refused with an actionable status and the graph remains unchanged. |
 
 ## Delivery sequence
 
