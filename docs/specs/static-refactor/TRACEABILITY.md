@@ -14,7 +14,7 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | SFR-008 | D-007, D-008 | `mission.js` reviewed and intentionally unchanged | Post-refactor coupling and test review | Not applicable | Deferred |
 | SFR-009 | D-004, D-006, D-009 | All implementation milestones | 22 Node tests, 23 Python tests, `git diff --check`, HTTP 200 | UI-001 through UI-007 remain pending; Flow checks UI-008 through UI-012 passed | In progress |
 | SFR-010 | D-004, D-006, D-010, D-011 | `flow-navigation.js`, `app.js`, `commands.js` click, toggle, collapse, and candidate-reset transitions | 6 focused Flow tests; 22 Node tests; 23 Python tests | UI-008 through UI-012 passed in Playwright; zero console warnings/errors | Verified |
-| SFR-011 | D-012 | Planned shared project-path dialog and JSON selection endpoint | Server and static-contract tests pending | UI-013 through UI-015 pending | Planned |
+| SFR-011 | D-012 | Shared `project-dialog` in `index.html`; `mission.js` entry points; JSON path validation in `server.py` | Static contract plus empty/relative/missing/valid server-path tests; 22 Node and 23 Python tests | UI-013 through UI-015 pending: no browser instance available | In progress |
 
 ## Evidence log
 
@@ -34,6 +34,10 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | 2026-08-14 | `6c5d62c` | Playwright UI-008 through UI-011 | Directed double-clicks preserved; `E` toggled without extra steps; Collapse pruned hidden descendant context |
 | 2026-08-14 | `6c5d62c` | Playwright UI-012 and root restoration | Collapse cleared the pending candidate; double-click re-expanded in place; two Back actions restored 6/24 root view with no selection or dimming; zero console warnings/errors |
 | 2026-08-14 | pre-SFR-011 change | Project-selection diagnosis | Button was wired and server was healthy, but selection depended on a Tkinter window owned by the server process |
+| 2026-08-14 | `8590226` | SFR-011 implementation validation | All static JavaScript syntax valid; 22 Node tests; 23 Python tests; empty, relative, missing, and valid paths covered |
+| 2026-08-14 | `29f88ad` | SFR-011 frontend contract validation | Served markup and `mission.js` assertions cover the shared dialog, `showModal`, and JSON path submission; 23 Python tests passed |
+| 2026-08-14 | `8590226` | Restarted local server contract | One server instance; HTTP 200; dialog markup served; relative path returned 400; absolute fixture path returned 200 and loaded 24 graph nodes |
+| 2026-08-14 | post-`8590226` | UI-013 through UI-015 rendered gate | Pending: in-app browser discovery returned no available browser instance |
 
 ## Post-refactor size evidence
 

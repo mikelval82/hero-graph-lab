@@ -29,9 +29,9 @@ To open a project directly and enable missions:
 ```
 
 `--mission-project` is both the initial graph source and the project bound to
-HARNESS. Without it, Graph Lab opens the fixture and requires **Select folder**
-before a mission can start. Changing projects is only allowed while no worker
-is running.
+HARNESS. Without it, Graph Lab opens the fixture and requires **Open project**
+before a mission can start. Enter the absolute path of a folder on the machine
+running Graph Lab. Changing projects is only allowed while no worker is running.
 
 An empty selected folder is initialized as a Git repository with an initial
 commit. A non-empty folder that is not already a Git repository is rejected so
