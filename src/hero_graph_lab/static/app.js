@@ -1,6 +1,7 @@
 const SVG_NS = "http://www.w3.org/2000/svg";
 const DESIGN_STORAGE_KEY = "hero-graph-lab-design-v1";
 const flowNavigation = globalThis.HeroFlowNavigation;
+const graphViews = globalThis.HeroGraphViews;
 const state = {
   graph: null,
   baseGraph: null,
@@ -274,238 +275,65 @@ function renderFileTree() {
 }
 
 function canEnterScope(nodeId) {
-  return scopeChildren(nodeId).length > 0 && graphNode(nodeId)?.status !== "removed";
+  return graphViews.canEnterScope(graphViewContext(), nodeId);
 }
 
 function isDescendantOf(nodeId, ancestorId) {
-  let current = graphNode(nodeId);
-  while (current?.parent) {
-    if (current.parent === ancestorId) return true;
-    current = graphNode(current.parent);
-  }
-  return false;
+  return graphViews.isDescendant(graphViewContext(), nodeId, ancestorId);
 }
 
 function descendantIds(nodeId) {
-  const descendants = new Set();
-  const pending = [...scopeChildren(nodeId)];
-  while (pending.length) {
-    const node = pending.pop();
-    descendants.add(node.id);
-    pending.push(...scopeChildren(node.id));
-  }
-  return descendants;
+  return graphViews.descendantIds(graphViewContext(), nodeId);
 }
 
 function outgoingCallTrace(rootId, maxDepth = 1) {
-  const nodeDepths = new Map([[rootId, 0]]);
-  const edgeIds = new Set();
-  let frontier = [rootId];
-  for (let depth = 1; depth <= maxDepth && frontier.length; depth += 1) {
-    const next = [];
-    frontier.forEach((sourceId) => {
-      state.graph.edges.forEach((edge) => {
-        if (edge.kind !== "calls" || edge.status === "removed" || edge.source !== sourceId) return;
-        edgeIds.add(edge.id);
-        if (nodeDepths.has(edge.target)) return;
-        nodeDepths.set(edge.target, depth);
-        next.push(edge.target);
-      });
-    });
-    frontier = next;
-  }
-  return { rootId, maxDepth, nodeDepths, edgeIds };
+  return graphViews.outgoingCallTrace(state.graph, rootId, maxDepth);
 }
 
 function callTraceGraph() {
-  const trace = state.callTrace;
-  if (!trace) return { nodes: [], edges: [] };
-  const nodes = [...trace.nodeDepths].map(([nodeId, traceDepth]) => {
-    const node = graphNode(nodeId);
-    return node ? { ...node, context: false, traceDepth } : null;
-  }).filter(Boolean);
-  const nodeIds = new Set(nodes.map((node) => node.id));
-  const edges = state.graph.edges
-    .filter((edge) => trace.edgeIds.has(edge.id) && nodeIds.has(edge.source) && nodeIds.has(edge.target))
-    .map((edge) => ({
-      ...edge,
-      aggregate: false,
-      memberIds: [edge.id],
-      traced: true,
-      traceDepth: trace.nodeDepths.get(edge.target),
-    }));
-  return { nodes, edges };
+  return graphViews.callTraceGraph(graphViewContext());
 }
 
 function visibleHierarchyNodes(scopeId, expandedNodes = state.inlineExpanded) {
-  const nodes = [];
-  const appendChildren = (parentId) => {
-    scopeChildren(parentId).forEach((node) => {
-      if (state.hiddenGraphNodes.has(node.id)) return;
-      nodes.push({ ...node, context: false });
-      if (expandedNodes.has(node.id)) appendChildren(node.id);
-    });
-  };
-  appendChildren(scopeId);
-  return nodes;
-}
-
-function visibleRepresentative(nodeId, visibleIds) {
-  let current = graphNode(nodeId);
-  while (current && current.id !== state.scope) {
-    if (visibleIds.has(current.id)) return current;
-    current = graphNode(current.parent);
-  }
-  return null;
+  return graphViews.visibleHierarchyNodes(graphViewContext({ scope: scopeId }), expandedNodes);
 }
 
 function flowGraph(expandedNodes = state.inlineExpanded) {
-  const scopeId = state.scope || state.graph.root;
-  const nodes = visibleHierarchyNodes(scopeId, expandedNodes);
-  const nodeIds = new Set(nodes.map((node) => node.id));
-  state.callTrace?.nodeDepths.forEach((depth, nodeId) => {
-    if (nodeIds.has(nodeId)) return;
-    const node = graphNode(nodeId);
-    if (!node) return;
-    nodes.push({ ...node, context: true, traceDepth: depth });
-    nodeIds.add(nodeId);
-  });
-  const groupedEdges = new Map();
-  const directEdges = state.graph.edges
-    .filter((edge) => edge.kind === "contains" && nodeIds.has(edge.source) && nodeIds.has(edge.target))
-    .map((edge) => ({ ...edge, aggregate: false, memberIds: [edge.id] }));
-
-  state.graph.edges.filter((edge) => edge.kind !== "contains").forEach((edge) => {
-    const sourceBranch = visibleRepresentative(edge.source, nodeIds);
-    const targetBranch = visibleRepresentative(edge.target, nodeIds);
-    if (!sourceBranch && !targetBranch) return;
-    const sourceInsideScope = edge.source === scopeId || isDescendantOf(edge.source, scopeId);
-    const targetInsideScope = edge.target === scopeId || isDescendantOf(edge.target, scopeId);
-    const source = sourceBranch || (!sourceInsideScope && !state.hiddenGraphNodes.has(edge.source) ? graphNode(edge.source) : null);
-    const target = targetBranch || (!targetInsideScope && !state.hiddenGraphNodes.has(edge.target) ? graphNode(edge.target) : null);
-    if (!source || !target || source.id === target.id) return;
-    if (!nodeIds.has(source.id)) {
-      nodes.push({ ...source, context: true });
-      nodeIds.add(source.id);
-    }
-    if (!nodeIds.has(target.id)) {
-      nodes.push({ ...target, context: true });
-      nodeIds.add(target.id);
-    }
-    if (source.id === edge.source && target.id === edge.target) {
-      directEdges.push({ ...edge, aggregate: false, memberIds: [edge.id], traced: state.callTrace?.edgeIds.has(edge.id), traceDepth: state.callTrace?.nodeDepths.get(edge.target) });
-      return;
-    }
-    const status = edge.status || "observed";
-    const label = edge.label || "";
-    const properties = edge.properties || {};
-    const propertyKey = JSON.stringify(Object.entries(properties).sort());
-    const key = `${source.id}|${target.id}|${edge.kind}|${status}|${label}|${propertyKey}`;
-    const grouped = groupedEdges.get(key) || { source: source.id, target: target.id, kind: edge.kind, status, label, properties, count: 0, memberIds: [] };
-    grouped.count += 1;
-    grouped.memberIds.push(edge.id);
-    groupedEdges.set(key, grouped);
-  });
-
-  const edges = Array.from(groupedEdges.values()).map((edge) => ({
-    id: `aggregate:${scopeId}:${edge.source}:${edge.kind}:${edge.target}:${edge.status}`,
-    source: edge.source,
-    target: edge.target,
-    kind: edge.kind,
-    status: edge.status,
-    label: edge.label || (edge.count > 1 ? `${edge.count} ${edge.kind}` : edge.kind),
-    properties: edge.properties,
-    memberIds: edge.memberIds,
-    count: edge.count,
-    editLabel: edge.label || edge.kind,
-    aggregate: true,
-  }));
-  return { nodes, edges: [...directEdges, ...edges] };
+  return graphViews.flowGraph(graphViewContext(), expandedNodes);
 }
 
 function structureGraph() {
-  const nodes = visibleHierarchyNodes(state.scope || state.graph.root);
-  const nodeIds = new Set(nodes.map((node) => node.id));
-  const edges = state.graph.edges
-    .filter((edge) => edge.kind === "contains" && nodeIds.has(edge.source) && nodeIds.has(edge.target))
-    .map((edge) => ({ ...edge, aggregate: false, memberIds: [edge.id] }));
-  return { nodes, edges };
+  return graphViews.structureGraph(graphViewContext());
 }
 
 function focusGraph() {
-  const expandedNodes = new Set(state.inlineExpanded);
-  if (state.selected) expandedNodes.delete(state.selected);
-  const graph = flowGraph(expandedNodes);
-  if (!state.selected || !graph.nodes.some((node) => node.id === state.selected)) return graph;
-  const edges = graph.edges.filter((edge) => edge.kind === "calls" && (edge.source === state.selected || edge.target === state.selected));
-  const nodeIds = new Set([state.selected]);
-  edges.forEach((edge) => {
-    nodeIds.add(edge.source);
-    nodeIds.add(edge.target);
-  });
-  return { nodes: graph.nodes.filter((node) => nodeIds.has(node.id)), edges };
+  return graphViews.focusGraph(graphViewContext());
 }
 
 function flowActiveNodeId() {
-  return state.flowJourney.at(-1)?.nodeId || null;
+  return graphViews.flowActiveNodeId(state.flowJourney);
 }
 
 function flowRelationSnapshot(edge) {
-  if (!edge) return null;
-  return {
-    id: edge.id,
-    source: edge.source,
-    target: edge.target,
-    kind: edge.kind,
-    label: edge.label || "",
-    status: edge.status || "observed",
-    memberIds: edge.memberIds || [edge.id],
-  };
+  return graphViews.flowRelationSnapshot(edge);
 }
 
 function flowJourneyGraph() {
-  const graph = flowGraph();
-  if (!state.flowJourney.length || state.callTrace) return graph;
-  const journeyNodeIds = new Set(state.flowJourney.map((step) => step.nodeId));
-  const nodeIds = new Set(journeyNodeIds);
-  const activeNodeId = flowActiveNodeId();
-  if (state.inlineExpanded.has(activeNodeId)) {
-    scopeChildren(activeNodeId).forEach((node) => {
-      if (!state.hiddenGraphNodes.has(node.id)) nodeIds.add(node.id);
-    });
-  }
-  const edgeIds = new Set();
-  graph.edges.forEach((edge) => {
-    const touchesJourney = journeyNodeIds.has(edge.source) || journeyNodeIds.has(edge.target);
-    const connectsRetainedNodes = nodeIds.has(edge.source) && nodeIds.has(edge.target);
-    if (touchesJourney) {
-      nodeIds.add(edge.source);
-      nodeIds.add(edge.target);
-      edgeIds.add(edge.id);
-    } else if (edge.kind === "contains" && connectsRetainedNodes) {
-      edgeIds.add(edge.id);
-    }
-  });
-  const nodes = new Map(graph.nodes.filter((node) => nodeIds.has(node.id)).map((node) => [node.id, node]));
-  journeyNodeIds.forEach((nodeId) => {
-    const node = graphNode(nodeId);
-    if (node && !state.hiddenGraphNodes.has(nodeId)) nodes.set(nodeId, { ...node, context: false, journey: true });
-  });
-  const edges = new Map(graph.edges.filter((edge) => edgeIds.has(edge.id)).map((edge) => [edge.id, edge]));
-  state.flowJourney.forEach((step) => {
-    if (!step.relation || !nodes.has(step.relation.source) || !nodes.has(step.relation.target)) return;
-    const relationId = step.relation.id || `journey:${step.fromNodeId}:${step.nodeId}`;
-    edges.set(relationId, {
-      ...step.relation,
-      id: relationId,
-      aggregate: step.relation.memberIds.length > 1,
-      memberIds: step.relation.memberIds,
-      journey: true,
-    });
-  });
+  return graphViews.flowJourneyGraph(graphViewContext());
+}
+
+function graphViewContext(overrides = {}) {
   return {
-    nodes: [...nodes.values()],
-    edges: [...edges.values()].filter((edge) => nodes.has(edge.source) && nodes.has(edge.target)),
+    graph: state.graph,
+    scope: state.scope || state.graph?.root,
+    selected: state.selected,
+    inlineExpanded: state.inlineExpanded,
+    hiddenGraphNodes: state.hiddenGraphNodes,
+    callTrace: state.callTrace,
+    flowJourney: state.flowJourney,
+    nodeById: state.nodeById,
+    childrenByParent: state.childrenByParent,
+    ...overrides,
   };
 }
 

@@ -157,6 +157,7 @@ class LabServerTest(TestCase):
                 self.assertIn("dompurify@3.2.6", index)
                 self.assertIn('src="/mission.js"', index)
                 self.assertIn('src="/flow-navigation.js"', index)
+                self.assertIn('src="/graph-views.js"', index)
                 self.assertIn('src="/panel-layout.js"', index)
                 self.assertIn('src="/explore.js"', index)
                 self.assertIn('src="/rich-render.js"', index)
@@ -164,7 +165,8 @@ class LabServerTest(TestCase):
                 self.assertIn('src="/graph-projection.js"', index)
                 self.assertIn('src="/commands.js"', index)
                 self.assertLess(index.index('src="/rich-render.js"'), index.index('src="/mission.js"'))
-                self.assertLess(index.index('src="/flow-navigation.js"'), index.index('src="/app.js"'))
+                self.assertLess(index.index('src="/flow-navigation.js"'), index.index('src="/graph-views.js"'))
+                self.assertLess(index.index('src="/graph-views.js"'), index.index('src="/app.js"'))
                 self.assertLess(index.index('src="/graph-render.js"'), index.index('src="/panel-layout.js"'))
                 self.assertLess(index.index('src="/panel-layout.js"'), index.index('src="/explore.js"'))
                 self.assertLess(index.index('src="/explore.js"'), index.index('src="/diagrams.js"'))
@@ -187,6 +189,8 @@ class LabServerTest(TestCase):
                     app_script = response.read().decode("utf-8")
                 with urlopen(f"{base_url}/flow-navigation.js") as response:
                     flow_navigation_script = response.read().decode("utf-8")
+                with urlopen(f"{base_url}/graph-views.js") as response:
+                    graph_views_script = response.read().decode("utf-8")
                 with urlopen(f"{base_url}/panel-layout.js") as response:
                     panel_layout_script = response.read().decode("utf-8")
                 with urlopen(f"{base_url}/rich-render.js") as response:
@@ -281,9 +285,9 @@ class LabServerTest(TestCase):
                 self.assertIn("clearCallTrace({ restoreViewport: true })", app_script)
                 self.assertIn("Previous view restored", app_script)
                 self.assertIn('state.callTrace ? "Restore view" : "Trace calls"', app_script)
-                self.assertIn("flowGraph(expandedNodes)", app_script)
+                self.assertIn("graphViews.flowGraph(graphViewContext(), expandedNodes)", app_script)
                 self.assertIn("function flowJourneyGraph", app_script)
-                self.assertIn("state.flowJourney.map((step) => step.nodeId)", app_script)
+                self.assertIn("context.flowJourney.map((step) => step.nodeId)", graph_views_script)
                 self.assertIn("flowJourney: state.flowJourney", app_script)
                 self.assertIn("state.flowEntryCandidate", app_script)
                 self.assertIn("flowNavigation.appendStep", app_script)
@@ -293,6 +297,8 @@ class LabServerTest(TestCase):
                 self.assertNotIn("state.flowTrail", app_script)
                 self.assertIn("function appendStep", flow_navigation_script)
                 self.assertIn("function pruneJourney", flow_navigation_script)
+                self.assertIn("function focusGraph", graph_views_script)
+                self.assertIn("function outgoingCallTrace", graph_views_script)
                 self.assertIn("return flowJourneyGraph()", app_script)
                 self.assertIn("updateGraphSelectionStyles", graph_script)
                 self.assertIn("state.graphProjection?.savedLayout", graph_script)
