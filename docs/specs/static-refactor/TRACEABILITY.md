@@ -14,6 +14,7 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | SFR-008 | D-007, D-008 | `mission.js` reviewed and intentionally unchanged | Post-refactor coupling and test review | Not applicable | Deferred |
 | SFR-009 | D-004, D-006, D-009 | All implementation milestones | 22 Node tests, 23 Python tests, `git diff --check`, HTTP 200 | UI-001 through UI-007 remain pending; Flow checks UI-008 through UI-012 passed | In progress |
 | SFR-010 | D-004, D-006, D-010, D-011 | `flow-navigation.js`, `app.js`, `commands.js` click, toggle, collapse, and candidate-reset transitions | 6 focused Flow tests; 22 Node tests; 23 Python tests | UI-008 through UI-012 passed in Playwright; zero console warnings/errors | Verified |
+| SFR-011 | D-012 | Planned shared project-path dialog and JSON selection endpoint | Server and static-contract tests pending | UI-013 through UI-015 pending | Planned |
 
 ## Evidence log
 
@@ -32,6 +33,7 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | 2026-08-14 | `6c5d62c` | SFR-010 automated validation | 6 focused Flow tests; 22 Node tests; 23 Python tests; all static JavaScript syntax valid |
 | 2026-08-14 | `6c5d62c` | Playwright UI-008 through UI-011 | Directed double-clicks preserved; `E` toggled without extra steps; Collapse pruned hidden descendant context |
 | 2026-08-14 | `6c5d62c` | Playwright UI-012 and root restoration | Collapse cleared the pending candidate; double-click re-expanded in place; two Back actions restored 6/24 root view with no selection or dimming; zero console warnings/errors |
+| 2026-08-14 | pre-SFR-011 change | Project-selection diagnosis | Button was wired and server was healthy, but selection depended on a Tkinter window owned by the server process |
 
 ## Post-refactor size evidence
 

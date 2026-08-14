@@ -111,6 +111,16 @@ Flow navigation shall apply the same state invariants across pointer and keyboar
 - Collapse clears any pending Follow candidate; a subsequent double-click re-expands the container without appending or reversing a journey step.
 - The explicit **Follow/Expand** and **Collapse** buttons retain their distinct actions.
 
+### SFR-011 — Web-based project selection
+
+Project changes shall not depend on a native window created by the Python server process:
+
+- **Open project** and the mission form's **Browse** action open the same HTML dialog.
+- The dialog accepts an absolute path on the machine running Graph Lab and submits it as JSON to the local server.
+- The server validates that a non-empty absolute directory was provided before changing the active project.
+- If a HARNESS worker is active, the existing confirmation and stop behavior remains in force.
+- On success the graph reloads without restoring design state from the previous project; on failure the dialog remains open and displays the server error.
+
 ## Rendered-UI acceptance checks
 
 | ID | Scenario | Expected result |
@@ -127,6 +137,9 @@ Flow navigation shall apply the same state invariants across pointer and keyboar
 | UI-010 | Press `E` on an expanded active node, then press it again | The first press collapses and the second re-expands the same node without adding journey steps. |
 | UI-011 | Select an expanded ancestor while a descendant is active and press `E` or Collapse | The ancestor collapses, descendant journey steps are removed, and hidden descendants do not remain as journey context. |
 | UI-012 | Collapse an ancestor, then double-click that still-selected ancestor | The ancestor re-expands in place; no stale Follow candidate adds or reverses a journey step. |
+| UI-013 | Use **Open project** or mission **Browse** | A web dialog opens without invoking an operating-system folder picker. |
+| UI-014 | Submit a valid absolute project path | The dialog closes and the graph/source panels reload for the selected project. |
+| UI-015 | Submit an empty, relative, or missing path | The dialog remains open, shows an actionable error, and leaves the current project unchanged. |
 
 ## Delivery sequence
 

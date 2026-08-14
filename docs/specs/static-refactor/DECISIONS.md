@@ -83,3 +83,12 @@ Date: 2026-08-14
 Post-fix rendered validation exposed a narrower sequence: after collapsing a selected ancestor, double-clicking it could reuse the relationship captured while selecting it from a descendant. That stale candidate appended a reverse visit instead of re-expanding the existing journey step.
 
 Collapse is therefore a navigation boundary that clears `flowEntryCandidate`. The correction is a single coordinator-state reset in `app.js`; no new abstraction is justified. UI-012 records the rendered regression check.
+
+## D-012 — Replace the server-side folder picker with a path dialog
+
+Status: Accepted
+Date: 2026-08-14
+
+The existing button delegates folder selection to Tkinter inside the Python server. That native window can be hidden behind VS Code or unavailable when the server has no interactive desktop, while the browser provides no visible progress near the button.
+
+Both project entry points will use one HTML dialog and send an absolute server-local path to `/api/project/select`. A browser directory upload control is not suitable because it does not expose a reliable absolute server path and would upload file contents instead of selecting an existing checkout. The server remains authoritative for path and project validation.
