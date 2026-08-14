@@ -92,3 +92,12 @@ Date: 2026-08-14
 The existing button delegates folder selection to Tkinter inside the Python server. That native window can be hidden behind VS Code or unavailable when the server has no interactive desktop, while the browser provides no visible progress near the button.
 
 Both project entry points will use one HTML dialog and send an absolute server-local path to `/api/project/select`. A browser directory upload control is not suitable because it does not expose a reliable absolute server path and would upload file contents instead of selecting an existing checkout. The server remains authoritative for path and project validation.
+
+## D-013 — Restore graph focus after the `E` command
+
+Status: Accepted
+Date: 2026-08-14
+
+Rendered navigation on the 223-node `hero-graph-lab` graph showed that the first `E` correctly collapses an expanded node, but the synchronous render replaces the focused SVG element. Focus falls back to `BODY`, so the command registry rejects the immediately following `E` because the graph no longer has focus.
+
+Focus restoration belongs to the keyboard-command boundary, not the general renderer: after a successful `node.toggle-expansion`, `commands.js` will focus the newly rendered node matching `state.selected`, with the graph viewport as a fallback. Pointer-triggered Collapse and other renders keep their existing focus behavior.

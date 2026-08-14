@@ -107,6 +107,7 @@ Flow navigation shall apply the same state invariants across pointer and keyboar
 - Repeated single-click selection is idempotent. The first click of a double-click sequence must not clear the selected node or its pending relationship.
 - Double-clicking a previously selected related node must retain the relationship and direction used to append the next journey step.
 - `E` toggles the selected node's expansion state. If the selected node is already expanded, collapse takes precedence over following a relationship.
+- A render caused by `E` must restore graph focus to the selected node so a second consecutive `E` performs the inverse transition.
 - Collapsing a container removes its expanded descendants and truncates journey steps that point into those hidden descendants, while keeping the collapsed container selected.
 - Collapse clears any pending Follow candidate; a subsequent double-click re-expands the container without appending or reversing a journey step.
 - The explicit **Follow/Expand** and **Collapse** buttons retain their distinct actions.

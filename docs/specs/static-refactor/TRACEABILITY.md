@@ -13,7 +13,7 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | SFR-007 | D-003 | `diagrams.js`, `rich-render.js` contract preserved | Existing server assertions and Python suite | UI-007 pending | In progress |
 | SFR-008 | D-007, D-008 | `mission.js` reviewed and intentionally unchanged | Post-refactor coupling and test review | Not applicable | Deferred |
 | SFR-009 | D-004, D-006, D-009 | All implementation milestones | 22 Node tests, 23 Python tests, `git diff --check`, HTTP 200 | UI-001 through UI-007 remain pending; Flow checks UI-008 through UI-012 passed | In progress |
-| SFR-010 | D-004, D-006, D-010, D-011 | `flow-navigation.js`, `app.js`, `commands.js` click, toggle, collapse, and candidate-reset transitions | 6 focused Flow tests; 22 Node tests; 23 Python tests | UI-008 through UI-012 passed in Playwright; zero console warnings/errors | Verified |
+| SFR-010 | D-004, D-006, D-010, D-011, D-013 | `flow-navigation.js`, `app.js`, `commands.js` click, toggle, collapse, candidate-reset, and keyboard-focus transitions | 6 focused Flow tests; 22 Node tests; 23 Python tests | UI-008, UI-009, UI-011, and UI-012 passed; UI-010 focus regression reproduced on 223-node graph | In progress |
 | SFR-011 | D-012 | Shared `project-dialog` in `index.html`; `mission.js` entry points; JSON path validation in `server.py` | Static contract plus empty/relative/missing/valid server-path tests; 22 Node and 23 Python tests | UI-013 through UI-015 pending: no browser instance available | In progress |
 
 ## Evidence log
@@ -38,6 +38,7 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | 2026-08-14 | `29f88ad` | SFR-011 frontend contract validation | Served markup and `mission.js` assertions cover the shared dialog, `showModal`, and JSON path submission; 23 Python tests passed |
 | 2026-08-14 | `8590226` | Restarted local server contract | One server instance; HTTP 200; dialog markup served; relative path returned 400; absolute fixture path returned 200 and loaded 24 graph nodes |
 | 2026-08-14 | post-`8590226` | UI-013 through UI-015 rendered gate | Pending: in-app browser discovery returned no available browser instance |
+| 2026-08-14 | pre-D-013 fix | Playwright UI-010 on `hero-graph-lab` | First `E` collapsed `LabState`; render moved focus to `BODY`; second `E` was ignored while journey state remained correct |
 
 ## Post-refactor size evidence
 
