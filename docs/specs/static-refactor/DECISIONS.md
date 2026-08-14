@@ -65,3 +65,12 @@ Status: Accepted
 Date: 2026-08-14
 
 The local server returned HTTP 200, but the configured browser-control runtime reported no available browser instances. UI-001 through UI-007 must remain pending. Automated state tests and server source assertions are recorded as useful evidence but are not promoted to rendered acceptance.
+
+## D-010 — Repair Flow interactions at the existing navigation boundary
+
+Status: Accepted
+Date: 2026-08-14
+
+Rendered testing exposed one shared interaction defect rather than three independent features: a repeated click can clear `flowEntryCandidate`, `E` can follow instead of collapsing an already expanded node, and Collapse can retain descendants through the journey graph.
+
+The correction will extend the existing `flow-navigation.js` transition boundary instead of introducing another module. `app.js` remains responsible for pointer coordination, while `flow-navigation.js` owns the small deterministic click and collapse transitions. `commands.js` will make the documented toggle precedence explicit. This is the smallest boundary that permits unit coverage without adding a browser framework or build dependency.

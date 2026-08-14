@@ -13,6 +13,7 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | SFR-007 | D-003 | `diagrams.js`, `rich-render.js` contract preserved | Existing server assertions and Python suite | UI-007 pending | In progress |
 | SFR-008 | D-007, D-008 | `mission.js` reviewed and intentionally unchanged | Post-refactor coupling and test review | Not applicable | Deferred |
 | SFR-009 | D-004, D-006, D-009 | All implementation milestones | 20 Node tests, 23 Python tests, `git diff --check`, HTTP 200 | UI-001 through UI-007 pending: no browser instance available | In progress |
+| SFR-010 | D-004, D-006, D-010 | Flow click, toggle, and collapse transitions | Regression tests pending | UI-008 through UI-011 reproduced pre-fix | In progress |
 
 ## Evidence log
 
@@ -27,6 +28,7 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | 2026-08-14 | `46475fd` | SFR-005 pure graph views and integrated automated QA | 20 Node passed; 23 Python passed; all JS syntax valid |
 | 2026-08-14 | post-`46475fd` | Local application health check | HTTP 200 at `127.0.0.1:8765` |
 | 2026-08-14 | post-`46475fd` | Rendered UI gate | Pending: browser runtime reported zero available instances |
+| 2026-08-14 | pre-SFR-010 fix | Playwright Flow interaction matrix | Selected-leaf double-click lost navigation; selected reverse relation lost direction; `E` followed an expanded ancestor; Collapse retained descendant journey context |
 
 ## Post-refactor size evidence
 

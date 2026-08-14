@@ -1,6 +1,6 @@
 # Static JavaScript refactor specification
 
-Status: Implementation complete; rendered-UI validation pending
+Status: Structural implementation complete; Flow interaction correction in progress
 Baseline: `4bcaacc`  
 Scope: `src/hero_graph_lab/static`
 
@@ -100,6 +100,16 @@ Every implementation milestone shall pass:
 - `git diff --check`;
 - the applicable manual rendered-UI acceptance checks.
 
+### SFR-010 — Consistent Flow interaction policy
+
+Flow navigation shall apply the same state invariants across pointer and keyboard entry points:
+
+- Repeated single-click selection is idempotent. The first click of a double-click sequence must not clear the selected node or its pending relationship.
+- Double-clicking a previously selected related node must retain the relationship and direction used to append the next journey step.
+- `E` toggles the selected node's expansion state. If the selected node is already expanded, collapse takes precedence over following a relationship.
+- Collapsing a container removes its expanded descendants and truncates journey steps that point into those hidden descendants, while keeping the collapsed container selected.
+- The explicit **Follow/Expand** and **Collapse** buttons retain their distinct actions.
+
 ## Rendered-UI acceptance checks
 
 | ID | Scenario | Expected result |
@@ -111,6 +121,10 @@ Every implementation milestone shall pass:
 | UI-005 | Restore view | The pre-projection view, selection, layout, zoom, and scroll return. |
 | UI-006 | Inspect Explorer during the sequence | If Explorer was open, it remains visible; if intentionally collapsed, that state is preserved. |
 | UI-007 | Use `M` | Diagram Studio renders without changing the interactive graph. |
+| UI-008 | Select a related leaf, then double-click it | Flow advances once and retains the relationship and direction. |
+| UI-009 | Select a reverse-related container, then double-click it | The journey records the reverse relationship and renders a `<-` breadcrumb. |
+| UI-010 | Press `E` on an expanded active node, then press it again | The first press collapses and the second re-expands the same node without adding journey steps. |
+| UI-011 | Select an expanded ancestor while a descendant is active and press `E` or Collapse | The ancestor collapses, descendant journey steps are removed, and hidden descendants do not remain as journey context. |
 
 ## Delivery sequence
 
