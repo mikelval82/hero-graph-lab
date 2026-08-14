@@ -15,7 +15,7 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | SFR-009 | D-004, D-006, D-009 | All implementation milestones | 22 Node tests, 23 Python tests, `git diff --check`, HTTP 200 | UI-001 through UI-007 remain pending; Flow checks UI-008 through UI-012 passed | In progress |
 | SFR-010 | D-004, D-006, D-010, D-011, D-013, D-014 | `flow-navigation.js`, `app.js`, `commands.js` click, toggle, collapse, candidate-reset, and focus transitions | 6 focused Flow tests; 22 Node tests; 23 Python tests | UI-008 through UI-012 and UI-016 passed on 223-node graph; zero current console warnings/errors | Verified |
 | SFR-011 | D-012 | Shared `project-dialog` in `index.html`; `mission.js` entry points; JSON path validation in `server.py` | Static contract plus empty/relative/missing/valid server-path tests; 22 Node and 23 Python tests | UI-013 through UI-015 pending: no browser instance available | In progress |
-| SFR-012 | D-015 | Planned targeted changes in `app.js` and `graph-projection.js` | Focus transition contract pending; existing 22 Node and 23 Python tests pass | Pre-fix UI-017 through UI-021 expose stale anchors, anchorless Focus, and lost keyboard focus; UI-022 baseline passes | In progress |
+| SFR-012 | D-015 | `app.js` anchor/return transitions; `graph-projection.js` Back/Restore focus restoration | Served Focus contracts; 22 Node tests; 23 Python tests; all static JavaScript syntax valid | UI-017 through UI-022 passed on the 223-node graph; Flow and Hierarchy return paths passed; zero current console warnings/errors | Verified |
 
 ## Evidence log
 
@@ -47,6 +47,9 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | 2026-08-14 | `643daf8` | Playwright UI-016 on `hero-graph-lab` | Double-click kept focus on `LabServerTest`; two immediate `E` presses collapsed and re-expanded it, journey stayed at three steps, method visibility changed 6/0/6, and the current console had zero warnings/errors |
 | 2026-08-14 | pre-SFR-012 fix | Playwright Focus interaction matrix on `hero-graph-lab` | Re-entering Focus and `F` restored stale or null anchors; node selection, `Esc`, Reset, and projection Back lost keyboard continuity; `Esc` and Reset left an anchorless graph labelled Focus |
 | 2026-08-14 | pre-SFR-012 fix | Playwright Focus stable interactions | Focus re-anchored correctly when a visible neighbor was clicked; normal `E` and double-click did not mutate journey/expansion; `G` and `M` restored graph state; zero current console warnings/errors |
+| 2026-08-14 | `6b6bec3` | SFR-012 automated validation | Focus transition source contracts passed; all static JavaScript syntax valid; 22 Node tests; 23 Python tests; `git diff --check` clean |
+| 2026-08-14 | `6b6bec3` | Playwright UI-017 through UI-020 on `hero-graph-lab` | Repeated Focus entries used the current Flow anchor; `F` preserved selection; neighbor selection retained keyboard focus; `Esc` restored Flow; Reset produced a clean 3/223 Flow root |
+| 2026-08-14 | `6b6bec3` | Playwright UI-021 and UI-022 plus Hierarchy return | Consecutive `Esc` restored the prior `G` step and then exact Focus; normal Focus double-click/`E` were state-stable; `Esc` also restored Hierarchy; zero current console warnings/errors |
 
 ## Post-refactor size evidence
 
