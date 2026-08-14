@@ -364,6 +364,24 @@
       <button class="submit-button" type="submit">Save finding</button>
     </form>
   </dialog>
+  <dialog id="project-dialog" class="command-dialog" aria-labelledby="project-dialog-title">
+    <form id="project-form" class="command-dialog-content">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">Local workspace</p><h2 id="project-dialog-title">Open project</h2></div>
+        <button type="button" id="project-close" class="icon-button" aria-label="Close">x</button>
+      </div>
+      <p>Enter the absolute folder path on the machine running Graph Lab.</p>
+      <label for="project-path">Project folder
+        <input id="project-path" type="text" required autocomplete="off" spellcheck="false" placeholder="C:\path\to\project">
+      </label>
+      <p id="project-form-status" role="status"></p>
+      <div class="dialog-actions">
+        <button id="project-cancel" type="button">Cancel</button>
+        <button id="project-submit" class="submit-button" type="submit">Open project</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="mission-dialog" class="mission-dialog">
     <form id="mission-form">
       <div class="dialog-heading">

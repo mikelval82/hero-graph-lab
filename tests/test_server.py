@@ -100,6 +100,9 @@ class LabServerTest(TestCase):
                     index = response.read().decode("utf-8")
                 self.assertIn("Graph Lab", index)
                 self.assertIn('id="file-tree"', index)
+                self.assertIn('id="project-dialog"', index)
+                self.assertIn('id="project-form"', index)
+                self.assertIn('id="project-path"', index)
                 self.assertIn('id="trace-calls"', index)
                 self.assertIn('id="graph-viewport"', index)
                 self.assertIn('id="zoom-in"', index)
@@ -469,10 +472,28 @@ class LabServerTest(TestCase):
                     status = json.load(response)
                 selected_project = Path(directory) / "selected"
                 selected_project.mkdir()
-                state.directory_selector = lambda initial: selected_project
+                invalid_paths = (
+                    ("", "must not be empty"),
+                    ("relative-project", "must be absolute"),
+                    (str(Path(directory) / "missing"), "folder not found"),
+                )
+                for invalid_path, detail in invalid_paths:
+                    invalid_request = Request(
+                        f"{base_url}/api/project/select",
+                        data=json.dumps({"path": invalid_path}).encode(),
+                        headers={"Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    with self.assertRaises(HTTPError) as raised:
+                        urlopen(invalid_request)
+                    self.assertEqual(raised.exception.code, 400)
+                    self.assertIn(detail, json.load(raised.exception)["detail"])
+                    self.assertFalse(state.project_selected)
+                    self.assertTrue(state.fixture.samefile(FIXTURE))
                 select_request = Request(
                     f"{base_url}/api/project/select",
-                    data=b"",
+                    data=json.dumps({"path": str(selected_project)}).encode(),
+                    headers={"Content-Type": "application/json"},
                     method="POST",
                 )
                 with urlopen(select_request) as response:

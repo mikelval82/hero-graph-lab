@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -33,14 +33,12 @@ class LabState:
         fixture: Path,
         observations_path: Path,
         harness_host: HarnessWorkerHost | None = None,
-        directory_selector: Callable[[Path], Path | None] | None = None,
         project_selected: bool = False,
         explore_client: ModelClient | None = None,
     ) -> None:
         self.fixture = fixture
         self.observations_path = observations_path
         self.harness_host = harness_host
-        self.directory_selector = directory_selector or select_directory
         self.project_selected = project_selected
         self._lock = threading.RLock()
         self._graph_cache: dict[str, Any] | None = None
@@ -115,14 +113,14 @@ class LabState:
             temporary.replace(self.observations_path)
         return observation
 
-    def select_project(self) -> dict[str, object]:
+    def select_project(self, project_path: Path) -> dict[str, object]:
         if self.harness_host is None:
             raise HarnessHostError("harness is not configured")
-        initial = self.fixture if self.fixture.is_dir() else self.fixture.parent
-        selected = self.directory_selector(initial)
-        if selected is None:
-            return self.harness_status() | {"cancelled": True}
-        project = selected.resolve()
+        if not project_path.is_absolute():
+            raise ValueError("project path must be absolute")
+        project = project_path.resolve()
+        if not project.is_dir():
+            raise ValueError(f"project folder not found: {project}")
         self.harness_host.configure_project(project)
         with self._lock:
             self.fixture = project
@@ -146,26 +144,6 @@ class LabState:
         if not isinstance(payload, dict) or not isinstance(payload.get("observations"), list):
             raise ValueError("observation state is malformed")
         return payload
-
-
-def select_directory(initial: Path) -> Path | None:
-    import tkinter as tk
-    from tkinter import filedialog
-
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)
-    try:
-        selected = filedialog.askdirectory(
-            parent=root,
-            initialdir=str(initial),
-            mustexist=True,
-            title="Select mission project",
-        )
-    finally:
-        root.destroy()
-    return Path(selected) if selected else None
-
 
 def initial_project(fixture: Path, mission_project: Path | None) -> Path:
     return (mission_project or fixture).resolve()
@@ -313,8 +291,12 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
 
         def _select_project(self) -> None:
             try:
-                status = state.select_project()
-            except (HarnessHostError, OSError, RuntimeError) as error:
+                payload = self._read_json(max_bytes=16_000)
+                raw_path = payload.get("path")
+                if not isinstance(raw_path, str) or not raw_path.strip():
+                    raise ValueError("project path must not be empty")
+                status = state.select_project(Path(raw_path.strip()))
+            except (HarnessHostError, OSError, RuntimeError, ValueError, json.JSONDecodeError) as error:
                 self._send_json(
                     {"error": "project_selection_failed", "detail": str(error)},
                     HTTPStatus.BAD_REQUEST,

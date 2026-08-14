@@ -19,6 +19,8 @@ const missionState = {
 
 const missionDialog = document.querySelector("#mission-dialog");
 const missionForm = document.querySelector("#mission-form");
+const projectDialog = document.querySelector("#project-dialog");
+const projectForm = document.querySelector("#project-form");
 const documentEditor = document.querySelector("#document-editor");
 const codeContent = document.querySelector("#code-content");
 const codeEmpty = document.querySelector("#code-empty");
@@ -856,7 +858,18 @@ function showMissionError(error) {
   document.querySelector("#mission-summary").textContent = error.message || "Mission request failed";
 }
 
-async function selectLocalProject() {
+async function openProjectDialog() {
+  missionState.host = await jsonRequest("/api/harness/status");
+  renderHostStatus();
+  const input = document.querySelector("#project-path");
+  input.value = missionState.host.project_selected ? missionState.host.project_dir || "" : "";
+  document.querySelector("#project-form-status").textContent = "";
+  projectDialog.showModal();
+  input.focus();
+  input.select();
+}
+
+async function selectLocalProject(projectPath) {
   const currentHost = await jsonRequest("/api/harness/status");
   missionState.host = currentHost;
   if (currentHost.running) {
@@ -867,11 +880,7 @@ async function selectLocalProject() {
     missionState.operation = null;
     missionState.activity = [];
   }
-  missionState.host = await jsonRequest("/api/project/select", { method: "POST" });
-  if (missionState.host.cancelled) {
-    renderHostStatus();
-    return false;
-  }
+  missionState.host = await jsonRequest("/api/project/select", jsonOptions("POST", { path: projectPath }));
   await loadExperiment({ restoreLocalDesign: false });
   renderHostStatus();
   activateInspectorTab("chat");
@@ -884,9 +893,32 @@ document.querySelectorAll("[data-inspector-tab]").forEach((button) => {
 
 document.querySelector("#project-open").addEventListener("click", async () => {
   try {
-    await selectLocalProject();
+    await openProjectDialog();
   } catch (error) {
     showMissionError(error);
+  }
+});
+document.querySelector("#project-close").addEventListener("click", () => projectDialog.close());
+document.querySelector("#project-cancel").addEventListener("click", () => projectDialog.close());
+projectForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const status = document.querySelector("#project-form-status");
+  const submit = document.querySelector("#project-submit");
+  const projectPath = document.querySelector("#project-path").value.trim();
+  status.textContent = "Opening project";
+  submit.disabled = true;
+  try {
+    const selected = await selectLocalProject(projectPath);
+    if (!selected) {
+      status.textContent = "Project change cancelled";
+      return;
+    }
+    document.querySelector("#mission-form-status").textContent = "";
+    projectDialog.close();
+  } catch (error) {
+    status.textContent = error.message || "Could not open project";
+  } finally {
+    submit.disabled = false;
   }
 });
 document.querySelector("#mission-launch").addEventListener("click", () => {
@@ -900,10 +932,9 @@ document.querySelector("#mission-file").addEventListener("change", async (event)
 });
 document.querySelector("#select-project").addEventListener("click", async () => {
   const formStatus = document.querySelector("#mission-form-status");
-  formStatus.textContent = "Waiting for folder selection";
+  formStatus.textContent = "";
   try {
-    const selected = await selectLocalProject();
-    formStatus.textContent = selected ? "" : "Folder selection cancelled";
+    await openProjectDialog();
   } catch (error) {
     formStatus.textContent = error.message || "Could not select project";
   }
