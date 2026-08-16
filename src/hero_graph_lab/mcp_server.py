@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 from importlib.metadata import version
 from typing import Any
 
@@ -36,8 +37,11 @@ def create_mcp_server(client: GraphLabClient) -> Server:
     @server.call_tool()
     async def call_tool(name: str, arguments: dict[str, Any]) -> types.CallToolResult:
         payload = await asyncio.to_thread(client.call_tool, name, arguments)
+        content = payload.get("content")
+        if not isinstance(content, str):
+            content = json.dumps(payload, ensure_ascii=False, sort_keys=True)
         return types.CallToolResult(
-            content=[types.TextContent(type="text", text=str(payload.get("content", "")))],
+            content=[types.TextContent(type="text", text=content)],
             structuredContent=payload,
             isError=False,
         )

@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 from hero_graph_lab.extractor import extract_python_graph, python_source_files
+from hero_graph_lab.contract_gateway import HarnessContractGateway
 from hero_graph_lab.explore import ExploreAssistantService, create_model_client
 from hero_graph_lab.explore.gateway import MCP_INSTRUCTIONS, GraphToolGateway
 from hero_graph_lab.explore.models import ModelClient
@@ -45,6 +46,7 @@ class LabState:
         self._graph_cache: dict[str, Any] | None = None
         self._graph_fixture: Path | None = None
         self.graph_tools = GraphToolGateway(lambda: self.fixture, self.graph)
+        self.contract_tools = HarnessContractGateway(harness_host)
         self.explore = ExploreAssistantService(
             explore_client or create_model_client("fake"),
             lambda: self.fixture,
@@ -174,7 +176,15 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
                 self._send_json(state.explore.status())
                 return
             if path == "/api/mcp/tools":
-                self._send_json({"instructions": MCP_INSTRUCTIONS, "tools": state.graph_tools.tool_specs()})
+                self._send_json(
+                    {
+                        "instructions": MCP_INSTRUCTIONS,
+                        "tools": [
+                            *state.graph_tools.tool_specs(),
+                            *state.contract_tools.tool_specs(),
+                        ],
+                    }
+                )
                 return
             if path == "/api/mcp/proposals":
                 self._send_json(state.graph_tools.pending_proposals())
@@ -279,7 +289,8 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
                 arguments = payload.get("arguments", {})
                 if not isinstance(arguments, dict):
                     raise ValueError("arguments must be a JSON object")
-                result = state.graph_tools.execute(tool_name, arguments)
+                gateway = state.contract_tools if tool_name.startswith("Contract") else state.graph_tools
+                result = gateway.execute(tool_name, arguments)
             except (OSError, ValueError, json.JSONDecodeError) as error:
                 self._send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
                 return
