@@ -213,8 +213,14 @@ function renderExploreChat() {
   document.querySelector("#chat-phase").textContent = exploreState.provider
     ? `${exploreState.provider} / ${exploreState.model}`
     : "Unavailable";
-  document.querySelector("#chat-input-label").textContent = exploreState.agentMode === "propose" ? "Ask or propose graph changes" : "Ask about this code";
-  document.querySelector("#chat-input").placeholder = exploreState.agentMode === "propose" ? "Describe nodes or relationships to propose" : "Ask about the selected code or graph";
+  const labels = {
+    read: ["Ask about this code", "Ask about the selected code or graph"],
+    propose: ["Ask or propose graph changes", "Describe nodes or relationships to propose"],
+    implement: ["Implement an approved task contract", "Describe the approved task to implement"],
+  };
+  const [inputLabel, placeholder] = labels[exploreState.agentMode] || labels.read;
+  document.querySelector("#chat-input-label").textContent = inputLabel;
+  document.querySelector("#chat-input").placeholder = placeholder;
   document.querySelector("#chat-input").disabled = !exploreState.sessionId || exploreState.pending;
   document.querySelector("#chat-form button[type='submit']").disabled = !exploreState.sessionId || exploreState.pending;
   document.querySelector("#chat-done").hidden = true;
@@ -275,7 +281,9 @@ async function submitExplorePrompt(text, context = currentExploreContext()) {
   if (!exploreState.sessionId) return;
   exploreState.pending = true;
   updateExploreBusyState();
-  document.querySelector("#chat-status").textContent = "Exploring";
+  document.querySelector("#chat-status").textContent = exploreState.agentMode === "implement"
+    ? "Implementing approved contract"
+    : "Exploring";
   renderExploreChat();
   dispatchEvent(new CustomEvent("explore-state-changed"));
   let answer = null;
@@ -310,12 +318,34 @@ document.querySelectorAll("[data-chat-mode]").forEach((button) => {
     if (button.dataset.chatMode === "explore" && !exploreState.sessionId) startExploreSession();
   });
 });
-document.querySelectorAll("[data-explore-agent-mode]").forEach((button) => {
-  button.addEventListener("click", () => {
-    exploreState.agentMode = button.dataset.exploreAgentMode;
-    document.querySelectorAll("[data-explore-agent-mode]").forEach((candidate) => candidate.setAttribute("aria-pressed", String(candidate === button)));
-    renderExploreChat();
+async function selectExploreAgentMode(button) {
+  const requested = button.dataset.exploreAgentMode;
+  if (requested === "implement") {
+    try {
+      const response = await fetch("/api/harness/v1/contracts/tasks", { headers: { Accept: "application/json" } });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.message || payload.detail || "HARNESS is not ready");
+      const pending = (payload.tasks || []).filter((task) => task.status === "pending");
+      if (!pending.length) throw new Error("Implement requires an approved pending task contract");
+      const competing = pending.find((task) => task.execution?.status === "active" && task.execution.actor !== "chat");
+      if (competing) throw new Error(`Execution is owned by ${competing.execution.actor}`);
+    } catch (error) {
+      document.querySelector("#chat-status").textContent = error.message;
+      return;
+    }
+  }
+  exploreState.agentMode = requested;
+  document.querySelectorAll("[data-explore-agent-mode]").forEach((candidate) => {
+    candidate.setAttribute("aria-pressed", String(candidate === button));
   });
+  document.querySelector("#chat-status").textContent = requested === "implement"
+    ? "Implement mode ready: HARNESS will enforce the approved contract"
+    : "";
+  renderExploreChat();
+}
+
+document.querySelectorAll("[data-explore-agent-mode]").forEach((button) => {
+  button.addEventListener("click", () => selectExploreAgentMode(button));
 });
 addEventListener("explore-chat-required", () => setChatMode("explore"));
 document.querySelector("#explore-clear-pins").addEventListener("click", () => {

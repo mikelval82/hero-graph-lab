@@ -47,11 +47,17 @@ class LabState:
         self._graph_fixture: Path | None = None
         self.graph_tools = GraphToolGateway(lambda: self.fixture, self.graph)
         self.contract_tools = HarnessContractGateway(harness_host)
+        self.chat_contract_tools = HarnessContractGateway(
+            harness_host,
+            actor="chat",
+            include_chat_tools=True,
+        )
         self.explore = ExploreAssistantService(
             explore_client or create_model_client("fake"),
             lambda: self.fixture,
             self.graph,
             tools=self.graph_tools.registry,
+            contract_tools=self.chat_contract_tools,
         )
 
     def graph(self) -> dict[str, Any]:

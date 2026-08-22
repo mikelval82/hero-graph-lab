@@ -9,6 +9,7 @@ from typing import Any, Callable
 from uuid import uuid4
 
 from hero_graph_lab.explore.models import ModelClient, ModelMessage, ModelRequest, ModelUsage
+from hero_graph_lab.explore.models import ToolSpec
 from hero_graph_lab.explore.tools import (
     PROPOSAL_NODE_KINDS,
     PROPOSAL_RELATION_KINDS,
@@ -42,6 +43,22 @@ Your final answer must summarize the graph proposals actually staged and clearly
 If the user only asks for explanation or analysis, do not create proposals.
 """
 
+IMPLEMENT_MODE_PROMPT = """
+IMPLEMENT MODE IS ACTIVE. Source changes are allowed only through the bounded HARNESS contract tools.
+The approved task contract is authoritative. First read the task contract, then acquire or continue its Chat execution lease.
+Read and modify only contract-owned paths. Before every patch, use ContractReadFile and pass its exact SHA-256 to ContractApplyPatch.
+Do not use the general Read tool as evidence for a write hash. Do not invent paths, broaden scope, or alter the contract.
+After editing, run ContractRunChecks and ContractValidate. End every implementation turn with exactly one successful terminal action: ContractComplete, ContractReportBlocker, or ContractProposeAmendment.
+If the requested work conflicts with the contract, propose an amendment instead of silently changing the design.
+Never claim completion unless ContractComplete succeeded. Graph proposal tools are unavailable in this mode.
+"""
+
+TERMINAL_CONTRACT_TOOLS = {
+    "ContractComplete",
+    "ContractReportBlocker",
+    "ContractProposeAmendment",
+}
+
 DESIGN_CHANGE_PATTERN = re.compile(
     r"\b(mejor(?:a|ar|arias|arías)|añad(?:e|ir)|agreg(?:a|ar)|integr(?:a|ar)|"
     r"cre(?:a|ar)|cambi(?:a|ar)|conect(?:a|ar)|notifi(?:ca|car|que)|"
@@ -69,12 +86,14 @@ class ExploreAssistantService:
         *,
         max_turns: int = 8,
         tools: ExploreToolRegistry | None = None,
+        contract_tools: Any | None = None,
     ) -> None:
         self.client = client
         self.project_provider = project_provider
         self.graph_provider = graph_provider
         self.max_turns = max_turns
         self.tools = tools or ExploreToolRegistry()
+        self.contract_tools = contract_tools
         self._sessions: dict[str, ExploreSession] = {}
         self._lock = threading.RLock()
 
@@ -107,18 +126,25 @@ class ExploreAssistantService:
         with session.lock:
             request_context = context or {}
             allow_proposals = request_context.get("assistantMode") == "propose"
+            implement_mode = request_context.get("assistantMode") == "implement"
+            if implement_mode:
+                self._ensure_implementation_available()
             graph = GraphIndex(self._graph_with_proposals(self.graph_provider(), request_context))
             environment = ToolEnvironment(self.project_provider().resolve(), graph, allow_proposals)
             context_text = self._context_text(request_context, environment)
             session.messages.append(ModelMessage("user", f"{context_text}\n\nQuestion:\n{question}"))
             session.public_messages.append({"role": "user", "content": question})
             expects_proposals = allow_proposals and bool(DESIGN_CHANGE_PATTERN.search(question))
+            terminal_action = False
             for _ in range(self.max_turns):
+                contract_specs = self._contract_specs() if implement_mode else ()
                 response = self.client.complete(
                     ModelRequest(
-                        SYSTEM_PROMPT + (PROPOSE_MODE_PROMPT if allow_proposals else ""),
+                        SYSTEM_PROMPT
+                        + (PROPOSE_MODE_PROMPT if allow_proposals else "")
+                        + (IMPLEMENT_MODE_PROMPT if implement_mode else ""),
                         tuple(session.messages),
-                        self.tools.specs(allow_proposals),
+                        self.tools.specs(allow_proposals) + contract_specs,
                     )
                 )
                 self._add_usage(session, response.usage)
@@ -130,11 +156,25 @@ class ExploreAssistantService:
                             "Your response staged no graph changes. Propose mode requires you to inspect the graph and call ProposeNode and/or ProposeRelation now. Do not return implementation advice without tool calls.",
                         ))
                         continue
+                    if implement_mode and not terminal_action:
+                        session.messages.append(ModelMessage(
+                            "user",
+                            "Implementation mode requires a successful terminal contract action now: complete, report a blocker, or propose an amendment.",
+                        ))
+                        continue
                     session.public_messages.append({"role": "assistant", "content": response.text})
                     return self._serialize(session, environment.actions)
                 for call in response.tool_calls:
                     try:
-                        result = self.tools.execute(call.name, call.arguments, environment)
+                        if call.name.startswith("Contract"):
+                            if not implement_mode or self.contract_tools is None:
+                                raise ValueError("contract tools are unavailable outside Implement mode")
+                            payload = self.contract_tools.execute(call.name, call.arguments)
+                            result = json.dumps(payload, ensure_ascii=False)
+                            if call.name in TERMINAL_CONTRACT_TOOLS:
+                                terminal_action = True
+                        else:
+                            result = self.tools.execute(call.name, call.arguments, environment)
                         tool_message = ModelMessage("tool", result, tool_call_id=call.id, tool_name=call.name)
                     except Exception as error:
                         tool_message = ModelMessage(
@@ -146,6 +186,41 @@ class ExploreAssistantService:
                         )
                     session.messages.append(tool_message)
             raise RuntimeError("Explore Assistant exceeded its tool turn limit")
+
+    def _ensure_implementation_available(self) -> None:
+        if self.contract_tools is None:
+            raise ValueError("Chat Implement is unavailable because HARNESS is not connected")
+        snapshot = self.contract_tools.execute("ContractListTasks", {})
+        tasks = snapshot.get("tasks", [])
+        if not isinstance(tasks, list):
+            raise ValueError("HARNESS returned a malformed contract task list")
+        pending = [task for task in tasks if isinstance(task, dict) and task.get("status") == "pending"]
+        if not pending:
+            raise ValueError("Chat Implement requires an approved pending task contract")
+        competing = next(
+            (
+                task.get("execution")
+                for task in pending
+                if isinstance(task.get("execution"), dict)
+                and task["execution"].get("status") == "active"
+                and task["execution"].get("actor") != "chat"
+            ),
+            None,
+        )
+        if competing is not None:
+            raise ValueError(
+                f"task execution lease is owned by {competing.get('actor', 'another actor')}"
+            )
+
+    def _contract_specs(self) -> tuple[ToolSpec, ...]:
+        return tuple(
+            ToolSpec(
+                str(spec["name"]),
+                str(spec["description"]),
+                dict(spec["inputSchema"]),
+            )
+            for spec in self.contract_tools.tool_specs()
+        )
 
     def _context_text(self, context: dict[str, Any], environment: ToolEnvironment) -> str:
         payload: dict[str, Any] = {

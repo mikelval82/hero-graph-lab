@@ -33,6 +33,36 @@ class FakeGeminiPart:
         return SimpleNamespace(function_response=SimpleNamespace(name=name, response=response))
 
 
+class FakeContractTools:
+    def __init__(self, *, owner: str | None = None) -> None:
+        self.calls: list[tuple[str, dict]] = []
+        self.owner = owner
+
+    def tool_specs(self) -> list[dict]:
+        from hero_graph_lab.contract_gateway import HarnessContractGateway
+
+        return HarnessContractGateway(
+            SimpleNamespace(),
+            actor="chat",
+            include_chat_tools=True,
+        ).tool_specs()
+
+    def execute(self, name: str, arguments: dict) -> dict:
+        self.calls.append((name, arguments))
+        if name == "ContractListTasks":
+            execution = (
+                {"status": "active", "actor": self.owner}
+                if self.owner is not None
+                else None
+            )
+            return {"tasks": [{"id": "T-1", "status": "pending", "execution": execution}]}
+        if name == "ContractReadFile":
+            return {"path": "src/notifier.py", "sha256": "hash-1", "content": "old"}
+        if name == "ContractBeginExecution":
+            return {"execution_id": "lease-1", "status": "active"}
+        return {"status": "ok", "passed": True}
+
+
 class ExploreAssistantTest(TestCase):
     def test_when_gemini_request_fails_expect_runtime_error(self) -> None:
         def generate_content(**kwargs):  # noqa: ANN003, ANN202
@@ -271,6 +301,87 @@ class ExploreAssistantTest(TestCase):
         self.assertNotIn("ProposeNode", {tool.name for tool in client.requests[0].tools})
         self.assertNotIn("PROPOSE MODE IS ACTIVE", client.requests[0].system_prompt)
         self.assertIn(draft_id, client.requests[0].messages[0].content)
+
+    def test_implement_mode_refuses_unavailable_or_competing_harness_before_model(self) -> None:
+        graph = extract_python_graph(FIXTURE)
+        unavailable_client = FakeModelClient([ModelResponse("should not run")])
+        unavailable = ExploreAssistantService(
+            unavailable_client,
+            lambda: FIXTURE,
+            lambda: graph,
+        )
+
+        with self.assertRaisesRegex(ValueError, "HARNESS is not connected"):
+            unavailable.send_message(
+                unavailable.create_session()["id"],
+                "Implementa el contrato",
+                {"assistantMode": "implement"},
+            )
+        self.assertEqual(unavailable_client.requests, [])
+
+        competing_client = FakeModelClient([ModelResponse("should not run")])
+        competing = ExploreAssistantService(
+            competing_client,
+            lambda: FIXTURE,
+            lambda: graph,
+            contract_tools=FakeContractTools(owner="mcp"),
+        )
+        with self.assertRaisesRegex(ValueError, "owned by mcp"):
+            competing.send_message(
+                competing.create_session()["id"],
+                "Implementa el contrato",
+                {"assistantMode": "implement"},
+            )
+        self.assertEqual(competing_client.requests, [])
+
+    def test_implement_mode_uses_contract_toolchain_and_terminal_action(self) -> None:
+        graph = extract_python_graph(FIXTURE)
+        calls = (
+            ToolCall("c1", "ContractGetTask", {"task_id": "T-1"}),
+            ToolCall("c2", "ContractBeginExecution", {"task_id": "T-1"}),
+            ToolCall("c3", "ContractReadFile", {"execution_id": "lease-1", "path": "src/notifier.py"}),
+            ToolCall(
+                "c4",
+                "ContractApplyPatch",
+                {
+                    "execution_id": "lease-1",
+                    "path": "src/notifier.py",
+                    "expected_sha256": "hash-1",
+                    "old_text": "old",
+                    "new_text": "new",
+                },
+            ),
+            ToolCall("c5", "ContractRunChecks", {"execution_id": "lease-1"}),
+            ToolCall("c6", "ContractValidate", {"execution_id": "lease-1"}),
+            ToolCall("c7", "ContractComplete", {"execution_id": "lease-1"}),
+        )
+        client = FakeModelClient(
+            [ModelResponse(tool_calls=calls), ModelResponse("Contrato implementado y validado.")]
+        )
+        contract_tools = FakeContractTools()
+        service = ExploreAssistantService(
+            client,
+            lambda: FIXTURE,
+            lambda: graph,
+            contract_tools=contract_tools,
+        )
+
+        result = service.send_message(
+            service.create_session()["id"],
+            "Implementa la tarea aprobada",
+            {"assistantMode": "implement"},
+        )
+
+        self.assertEqual(result["messages"][-1]["content"], "Contrato implementado y validado.")
+        self.assertEqual(contract_tools.calls[0], ("ContractListTasks", {}))
+        self.assertEqual(
+            [name for name, _ in contract_tools.calls[1:]],
+            [call.name for call in calls],
+        )
+        exposed = {tool.name for tool in client.requests[0].tools}
+        self.assertIn("ContractApplyPatch", exposed)
+        self.assertNotIn("ProposeNode", exposed)
+        self.assertIn("IMPLEMENT MODE IS ACTIVE", client.requests[0].system_prompt)
 
     def test_rejects_unknown_sessions_empty_messages_and_excessive_tool_turns(self) -> None:
         graph = extract_python_graph(FIXTURE)

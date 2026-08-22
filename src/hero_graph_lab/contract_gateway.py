@@ -86,12 +86,70 @@ CONTRACT_TOOL_SPECS = (
     },
 )
 
+CHAT_CONTRACT_TOOL_SPECS = (
+    {
+        "name": "ContractReadFile",
+        "description": "Read one UTF-8 file explicitly owned by the active approved task contract.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "execution_id": {"type": "string", "minLength": 1},
+                "path": {"type": "string", "minLength": 1},
+            },
+            "required": ["execution_id", "path"],
+            "additionalProperties": False,
+        },
+        "readOnly": True,
+    },
+    {
+        "name": "ContractApplyPatch",
+        "description": "Apply one unique search/replace in a contract-owned file using its prior SHA-256 hash.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "execution_id": {"type": "string", "minLength": 1},
+                "path": {"type": "string", "minLength": 1},
+                "expected_sha256": {"type": "string", "minLength": 1},
+                "old_text": {"type": "string"},
+                "new_text": {"type": "string"},
+            },
+            "required": ["execution_id", "path", "expected_sha256", "old_text", "new_text"],
+            "additionalProperties": False,
+        },
+        "readOnly": False,
+    },
+    {
+        "name": "ContractRunChecks",
+        "description": "Run the repository validation command configured and selected by HARNESS.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"execution_id": {"type": "string", "minLength": 1}},
+            "required": ["execution_id"],
+            "additionalProperties": False,
+        },
+        "readOnly": False,
+    },
+)
+
 
 class HarnessContractGateway:
     """Thin MCP-facing adapter over the active HARNESS worker authority."""
 
-    def __init__(self, harness_host) -> None:  # noqa: ANN001
+    def __init__(
+        self,
+        harness_host,  # noqa: ANN001
+        *,
+        actor: str = "mcp",
+        include_chat_tools: bool = False,
+    ) -> None:
+        if actor not in {"mcp", "chat"}:
+            raise ValueError(f"unsupported contract actor: {actor}")
         self.harness_host = harness_host
+        self.actor = actor
+        self.include_chat_tools = include_chat_tools
+
+    def _specs(self) -> tuple[dict[str, Any], ...]:
+        return CONTRACT_TOOL_SPECS + (CHAT_CONTRACT_TOOL_SPECS if self.include_chat_tools else ())
 
     def tool_specs(self) -> list[dict[str, Any]]:
         return [
@@ -105,13 +163,13 @@ class HarnessContractGateway:
                     "openWorldHint": False,
                 },
             }
-            for spec in CONTRACT_TOOL_SPECS
+            for spec in self._specs()
         ]
 
     def execute(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(arguments, dict):
             raise ValueError("arguments must be a JSON object")
-        spec = next((item for item in CONTRACT_TOOL_SPECS if item["name"] == name), None)
+        spec = next((item for item in self._specs() if item["name"] == name), None)
         if spec is None:
             raise ValueError(f"unknown contract tool: {name}")
         self._validate(arguments, spec["inputSchema"])
@@ -127,16 +185,23 @@ class HarnessContractGateway:
             return self._request(
                 "POST",
                 "/api/v1/contracts/executions",
-                {"task_id": arguments["task_id"], "actor": "mcp"},
+                {"task_id": arguments["task_id"], "actor": self.actor},
             )
         execution_id = quote(str(arguments["execution_id"]), safe="")
         actions = {
+            "ContractReadFile": "read-file",
+            "ContractApplyPatch": "apply-patch",
+            "ContractRunChecks": "checks",
             "ContractValidate": "validate",
             "ContractComplete": "complete",
             "ContractReportBlocker": "blocker",
             "ContractProposeAmendment": "amendment",
         }
-        body = {"detail": arguments["detail"]} if "detail" in arguments else {}
+        body = {
+            key: value
+            for key, value in arguments.items()
+            if key != "execution_id"
+        }
         return self._request(
             "POST",
             f"/api/v1/contracts/executions/{execution_id}/{actions[name]}",

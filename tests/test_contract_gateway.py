@@ -50,6 +50,33 @@ class HarnessContractGatewayTest(TestCase):
         self.assertEqual((method, path), ("POST", "/api/v1/contracts/executions"))
         self.assertEqual(json.loads(body), {"task_id": "T-1", "actor": "mcp"})
 
+    def test_chat_gateway_adds_bounded_file_tools_and_pins_chat_actor(self) -> None:
+        host = FakeHarnessHost()
+        gateway = HarnessContractGateway(host, actor="chat", include_chat_tools=True)
+        names = {item["name"] for item in gateway.tool_specs()}
+
+        gateway.execute("ContractBeginExecution", {"task_id": "T-1"})
+        gateway.execute(
+            "ContractApplyPatch",
+            {
+                "execution_id": "lease-1",
+                "path": "src/notifier.py",
+                "expected_sha256": "abc",
+                "old_text": "old",
+                "new_text": "new",
+            },
+        )
+
+        self.assertIn("ContractReadFile", names)
+        self.assertIn("ContractApplyPatch", names)
+        self.assertIn("ContractRunChecks", names)
+        self.assertEqual(json.loads(host.calls[0][2]), {"task_id": "T-1", "actor": "chat"})
+        self.assertEqual(
+            host.calls[1][1],
+            "/api/v1/contracts/executions/lease-1/apply-patch",
+        )
+        self.assertNotIn("execution_id", json.loads(host.calls[1][2]))
+
     def test_rejects_unknown_arguments_and_unavailable_worker(self) -> None:
         gateway = HarnessContractGateway(None)
         with self.assertRaisesRegex(ValueError, "unavailable"):
