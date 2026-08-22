@@ -45,6 +45,7 @@ class LabState:
         self._lock = threading.RLock()
         self._graph_cache: dict[str, Any] | None = None
         self._graph_fixture: Path | None = None
+        self._graph_fingerprint: tuple[tuple[str, int, int], ...] | None = None
         self.graph_tools = GraphToolGateway(lambda: self.fixture, self.graph)
         self.contract_tools = HarnessContractGateway(harness_host)
         self.chat_contract_tools = HarnessContractGateway(
@@ -63,10 +64,31 @@ class LabState:
     def graph(self) -> dict[str, Any]:
         with self._lock:
             fixture = self.fixture.resolve()
-            if self._graph_cache is None or self._graph_fixture != fixture:
+            fingerprint = self._source_fingerprint(fixture)
+            if (
+                self._graph_cache is None
+                or self._graph_fixture != fixture
+                or self._graph_fingerprint != fingerprint
+            ):
                 self._graph_cache = extract_python_graph(fixture)
                 self._graph_fixture = fixture
+                self._graph_fingerprint = fingerprint
             return self._graph_cache
+
+    @staticmethod
+    def _source_fingerprint(fixture: Path) -> tuple[tuple[str, int, int], ...]:
+        root = fixture.parent if fixture.is_file() else fixture
+        fingerprint = []
+        for file in python_source_files(fixture):
+            metadata = file.stat()
+            fingerprint.append(
+                (
+                    file.relative_to(root).as_posix(),
+                    metadata.st_mtime_ns,
+                    metadata.st_size,
+                )
+            )
+        return tuple(fingerprint)
 
     def source(self) -> dict[str, Any]:
         if self.fixture.is_file():
@@ -138,6 +160,7 @@ class LabState:
             self.project_selected = True
             self._graph_cache = None
             self._graph_fixture = None
+            self._graph_fingerprint = None
             self.graph_tools.reset()
         return self.harness_status()
 

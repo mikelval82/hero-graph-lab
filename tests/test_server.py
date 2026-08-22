@@ -71,6 +71,31 @@ class LabServerTest(TestCase):
 
             self.assertTrue(project.samefile(selected))
 
+    def test_graph_cache_refreshes_when_project_sources_change(self) -> None:
+        with TemporaryDirectory() as directory:
+            project = Path(directory)
+            existing = project / "existing.py"
+            existing.write_text("VALUE = 1\n", encoding="utf-8")
+            state = LabState(project, project / "observations.json")
+
+            initial = state.graph()
+            created = project / "notification_gateway.py"
+            created.write_text(
+                "class NotificationGateway:\n"
+                "    def send_notification(self, chat_id: str, text: str) -> bool:\n"
+                "        return True\n",
+                encoding="utf-8",
+            )
+            refreshed = state.graph()
+
+            self.assertEqual(len(initial["nodes"]), 2)
+            self.assertTrue(
+                any(node["label"] == "NotificationGateway" for node in refreshed["nodes"])
+            )
+            self.assertTrue(
+                any(node["label"] == "send_notification" for node in refreshed["nodes"])
+            )
+
     def test_serves_graph_and_persists_feedback(self) -> None:
         with TemporaryDirectory() as directory:
             state_path = Path(directory) / "observations.json"
