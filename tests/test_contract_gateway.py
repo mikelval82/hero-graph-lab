@@ -77,6 +77,23 @@ class HarnessContractGatewayTest(TestCase):
         )
         self.assertNotIn("execution_id", json.loads(host.calls[1][2]))
 
+    def test_chat_gateway_allows_empty_old_text_for_contract_file_creation(self) -> None:
+        host = FakeHarnessHost()
+        gateway = HarnessContractGateway(host, actor="chat", include_chat_tools=True)
+
+        gateway.execute(
+            "ContractApplyPatch",
+            {
+                "execution_id": "lease-1",
+                "path": "src/notifier.py",
+                "expected_sha256": "abc",
+                "old_text": "",
+                "new_text": "class Notifier:\n    pass\n",
+            },
+        )
+
+        self.assertEqual(json.loads(host.calls[0][2])["old_text"], "")
+
     def test_rejects_unknown_arguments_and_unavailable_worker(self) -> None:
         gateway = HarnessContractGateway(None)
         with self.assertRaisesRegex(ValueError, "unavailable"):

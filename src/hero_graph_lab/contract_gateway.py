@@ -235,7 +235,10 @@ class HarnessContractGateway:
             raise ValueError(f"unknown argument: {unknown[0]}")
         for key in schema.get("required", []):
             value = arguments.get(key)
-            if not isinstance(value, str) or not value.strip():
+            if not isinstance(value, str):
+                raise ValueError(f"required string argument missing: {key}")
+            minimum = properties[key].get("minLength", 0)
+            if len(value) < minimum:
                 raise ValueError(f"required string argument missing: {key}")
             maximum = properties[key].get("maxLength")
             if maximum is not None and len(value) > maximum:
