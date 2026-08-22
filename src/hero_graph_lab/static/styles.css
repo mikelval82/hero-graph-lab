@@ -359,6 +359,18 @@ dt { color: var(--muted); font: 9px var(--mono); text-transform: uppercase; } dd
 .task-row i { grid-column: 2; grid-row: 1; color: var(--muted); font: normal 7px var(--mono); }
 .task-row.completed { border-color: var(--relation-proposed); }
 .task-row.failed, .task-row.blocked { border-color: var(--relation-removed); }
+.contract-list { display: grid; gap: 8px; }
+.contract-card { overflow: hidden; border-left: 3px solid #e8c35f; background: #f1f3ee; }
+.contract-card.materialized { border-color: #64b895; }
+.contract-card.divergent { border-color: #ef8267; }
+.contract-card > header { display: flex; justify-content: space-between; gap: 8px; padding: 8px 9px 3px; }
+.contract-card > header strong { overflow-wrap: anywhere; font-size: 9px; }
+.contract-card p { margin: 0; padding: 0 9px 7px; color: var(--muted); font: 7px/1.5 var(--mono); }
+.contract-state, .contract-advisory { padding: 2px 4px; color: #3f3520; background: #f0d98d; font: 700 7px var(--mono); text-transform: uppercase; }
+.contract-card.materialized .contract-state { color: #123126; background: #8ed0b8; }
+.contract-card.divergent .contract-state { color: #3a1711; background: #ef9b87; }
+.contract-advisory { color: #4b3d17; background: #ead584; }
+.contract-preview { max-height: 180px; overflow: auto; margin: 0; padding: 9px; color: #cbd6d1; background: #111a17; border: 0; white-space: pre-wrap; font: 8px/1.55 var(--mono); }
 
 .chat-panel { display: grid; grid-template-rows: auto auto minmax(160px, 1fr) auto; gap: 10px; overflow: hidden; }
 .chat-panel[hidden] { display: none; }

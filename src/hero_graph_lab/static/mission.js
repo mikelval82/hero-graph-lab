@@ -6,6 +6,7 @@ const missionState = {
   messages: [],
   operation: null,
   activity: [],
+  contracts: [],
   selectedDocument: null,
   documentRevision: 0,
   documentMode: "preview",
@@ -37,9 +38,11 @@ const documentLabels = {
   status: "Implementation status",
   audit: "Review",
   reconciliation: "Reconciliation",
+  contract: "Task contract",
+  verification: "Contract verification",
 };
 const processDocumentOrder = ["mission/idea", "mission/brainstorm", "mission/brief", "mission/tasks", "mission/report"];
-const taskDocumentOrder = ["spec", "plan", "decisions", "status", "audit", "reconciliation"];
+const taskDocumentOrder = ["contract", "spec", "plan", "decisions", "status", "audit", "verification", "reconciliation"];
 
 const actionDefinitions = {
   run_research: { endpoint: "research", label: "Run research" },
@@ -133,6 +136,8 @@ function renderHostStatus() {
     document.querySelector("#mission-actions").replaceChildren();
     document.querySelector("#mission-documents").replaceChildren();
     document.querySelector("#mission-tasks").replaceChildren();
+    document.querySelector("#mission-contracts").replaceChildren();
+    document.querySelector("#mission-contract-section").hidden = true;
     missionState.activity = [];
     renderActivity();
   }
@@ -152,6 +157,7 @@ function renderMission() {
   renderActions();
   renderDocuments();
   renderTasks();
+  renderContracts();
   renderChat();
 }
 
@@ -360,6 +366,68 @@ function renderTasks() {
   }
 }
 
+function contractPreview(contract) {
+  const lines = [];
+  (contract.nodes || []).forEach((node) => {
+    const name = String(node.qualified_name || node.label || node.id || "unnamed").split(".").at(-1);
+    const path = node.target_path || "no target path";
+    lines.push(`# ${node.kind || "unknown"} · ${path}`);
+    if (node.kind === "class") lines.push(`class ${name}:`);
+    else if (["function", "method"].includes(node.kind)) {
+      const signature = String(node.signature || "(...)");
+      lines.push(`def ${name}${signature.startsWith("(") ? signature : `(${signature})`}:`);
+    } else if (node.kind === "module" || node.kind === "package") {
+      lines.push(`# ${name}`);
+    }
+    if (node.docstring) lines.push(`    """${node.docstring}"""`);
+    (node.acceptance || []).forEach((item) => lines.push(`    # acceptance: ${item}`));
+    lines.push("");
+  });
+  return lines.join("\n").trim() || "No structural declarations in this task contract.";
+}
+
+function renderContracts() {
+  const section = document.querySelector("#mission-contract-section");
+  const container = document.querySelector("#mission-contracts");
+  container.replaceChildren();
+  const contracts = missionState.contracts || [];
+  section.hidden = !contracts.length;
+  contracts.forEach((item) => {
+    const contract = item.contract || {};
+    const execution = item.execution;
+    const verifier = execution?.verifier;
+    const stateName = verifier?.passed
+      ? "materialized"
+      : verifier && verifier.passed === false
+        ? "divergent"
+        : "proposed";
+    const card = document.createElement("article");
+    card.className = `contract-card ${stateName}`;
+    const heading = document.createElement("header");
+    const title = document.createElement("strong");
+    title.textContent = `${contract.task?.id || "Task"} / ${contract.task?.title || "Approved slice"}`;
+    const stateBadge = document.createElement("span");
+    stateBadge.className = "contract-state";
+    stateBadge.textContent = stateName;
+    heading.append(title, stateBadge);
+    const metadata = document.createElement("p");
+    const owner = execution?.status === "active" ? execution.actor : "unowned";
+    metadata.textContent = `snapshot ${contract.snapshot_id || "?"} · design r${contract.design_revision ?? "?"} · owner ${owner} · verifier ${verifier ? (verifier.passed ? "passed" : `${verifier.failed_checks || 0} failed`) : "not run"}`;
+    const advisory = (contract.relationships || []).filter((edge) => edge.verification_level === "advisory").length;
+    if (advisory) {
+      const advisoryBadge = document.createElement("span");
+      advisoryBadge.className = "contract-advisory";
+      advisoryBadge.textContent = `${advisory} advisory relationship${advisory === 1 ? "" : "s"}`;
+      metadata.append(" ", advisoryBadge);
+    }
+    const preview = document.createElement("pre");
+    preview.className = "contract-preview";
+    preview.textContent = contractPreview(contract);
+    card.append(heading, metadata, preview);
+    container.append(card);
+  });
+}
+
 function renderChat() {
   if (document.body.dataset.chatMode !== "mission") return;
   const messages = document.querySelector("#chat-messages");
@@ -398,23 +466,30 @@ async function refreshMission({ mergeGraph = true } = {}) {
   if (!missionState.host.running) {
     missionState.snapshot = null;
     missionState.design = null;
+    missionState.contracts = [];
     missionState.operation = null;
     missionState.observedRevision = null;
     renderHostStatus();
     return;
   }
-  const [capabilities, snapshot, design, transcript, operation] = await Promise.all([
+  const [capabilities, snapshot, design, transcript, operation, contractIndex] = await Promise.all([
     harnessRequest("/v1/capabilities"),
     harnessRequest("/v1/snapshot"),
     harnessRequest("/v1/design"),
     harnessRequest("/v1/messages"),
     harnessRequest("/v1/operation"),
+    harnessRequest("/v1/contracts/tasks").catch(() => ({ tasks: [] })),
   ]);
   missionState.capabilities = capabilities;
   missionState.snapshot = snapshot;
   missionState.design = design;
   missionState.messages = transcript.messages || [];
   missionState.operation = operation.operation;
+  missionState.contracts = await Promise.all(
+    (contractIndex.tasks || []).map((task) =>
+      harnessRequest(`/v1/contracts/tasks/${encodeURIComponent(task.id)}`).catch(() => null)
+    )
+  ).then((items) => items.filter(Boolean));
   renderMission();
   const observedRevision = Number(snapshot.design?.observed_revision || 0);
   if (missionState.observedRevision === null) {
