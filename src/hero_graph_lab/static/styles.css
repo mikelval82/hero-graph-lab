@@ -420,8 +420,9 @@ dt { color: var(--muted); font: 9px var(--mono); text-transform: uppercase; } dd
 .chat-message.agent { align-self: flex-start; background: #edf0e8; border-color: #bdc9b9; border-left: 4px solid var(--package); }
 .chat-message.agent span { color: #3d6253; }
 .chat-message.tool { align-self: flex-start; background: #eeeaf2; border-color: #c8bfd1; border-left: 4px solid var(--graph-accent); }
-.chat-form { display: grid; gap: 5px; padding-top: 2px; }
-.chat-form textarea { height: 62px; min-height: 62px; max-height: 110px; }
+.chat-form { display: grid; gap: 5px; padding: 8px; background: #eef0f1; border: 1px solid var(--button-border); }
+.chat-form:focus-within { border-color: var(--inspector-accent); outline: 2px solid var(--inspector-accent); outline-offset: -2px; }
+.chat-form textarea { box-sizing: border-box; width: 100%; height: 62px; min-height: 62px; max-height: 110px; background: white; border: 1px solid #9da8ad; }
 .chat-form > .chat-actions { display: flex; gap: 6px; }
 .chat-form button { min-height: 30px; margin: 0; padding: 5px 9px; border: 1px solid var(--ink); background: transparent; font-size: 9px; }
 .chat-form .submit-button { min-width: 68px; margin-left: auto; color: white; background: var(--ink); }

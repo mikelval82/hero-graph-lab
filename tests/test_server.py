@@ -406,6 +406,7 @@ class LabServerTest(TestCase):
                 self.assertIn("grid-template-columns: repeat(3, minmax(0, 1fr))", styles)
                 self.assertIn(".chat-form > .chat-actions { display: flex", styles)
                 self.assertIn(".chat-form .submit-button { min-width: 68px; margin-left: auto", styles)
+                self.assertIn(".chat-form:focus-within { border-color: var(--inspector-accent)", styles)
                 self.assertIn("body.model-pending, body.model-pending * { cursor: progress !important; }", styles)
                 self.assertIn(".scope-crumb.trail-crumb", styles)
                 self.assertIn(".workplan-list", styles)
