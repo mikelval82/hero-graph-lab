@@ -1,6 +1,17 @@
 # HERO Graph Lab
 
-A standalone laboratory for understanding and designing software graphically. HARNESS integration remains process-independent: Graph Lab starts a worker subprocess and communicates only through authenticated loopback HTTP/JSON. It has no HARNESS imports, and worker credentials never reach the browser.
+HERO Graph Lab is the visual workspace for understanding a codebase, designing
+changes and supervising implementation. It is the companion interface for
+[HERO HARNESS](https://github.com/mikelval82/hero-harness), which owns the
+mission workflow, approved contracts, execution evidence, verification and Git
+transitions.
+
+The two applications remain independently usable and process-isolated. Graph
+Lab can explore code and prepare a local design without HARNESS; HARNESS can run
+missions from its own CLI and listeners without Graph Lab. When used together,
+Graph Lab starts a HARNESS worker subprocess and communicates with it only
+through authenticated loopback HTTP/JSON. Graph Lab has no HARNESS imports, and
+worker credentials never reach the browser.
 
 ## Run
 
@@ -37,13 +48,47 @@ An empty selected folder is initialized as a Git repository with an initial
 commit. A non-empty folder that is not already a Git repository is rejected so
 Graph Lab cannot silently adopt existing files.
 
+## How Graph Lab and HARNESS work together
+
+Graph Lab owns the interactive experience: it extracts the observed code graph,
+renders source and contracts, keeps reviewable design changes in a browser-local
+draft and gives the user explicit controls for synchronization and execution.
+HARNESS is the authority behind that experience: it stores approved design
+revisions, compiles ChangeSets and WorkPlans, publishes immutable task contracts,
+grants execution leases and decides completion from verifier evidence.
+
+```mermaid
+flowchart LR
+    User[User] --> GraphLab[HERO Graph Lab]
+    Codex[Codex through MCP] --> GraphLab
+    GraphLab --> Draft[Explore and local design draft]
+    Draft -->|Save map| Worker[HARNESS worker]
+    Worker --> Contract[Approved brief, design and task contracts]
+    Contract --> Mission[Mission executor]
+    Contract --> Chat[Chat Implement]
+    Contract --> MCP[Codex MCP execution]
+    Mission --> Verify[Verification and reconciliation]
+    Chat --> Verify
+    MCP --> Verify
+    Verify --> Project[Project source and Git]
+    Project --> GraphLab
+```
+
+The integration has one direction of authority. **Save map** sends the reviewed
+design draft to HARNESS; it does not make Graph Lab another contract store.
+Mission, Chat and MCP may take turns implementing an approved task, but HARNESS
+permits only one active execution lease for the mission. After implementation,
+HARNESS runs the common verifier and reconciliation; Graph Lab then refreshes
+the observed source graph and shows whether each contract is proposed,
+divergent or materialized.
+
 ## Explore Assistant
 
 The Inspector's **Explore** chat is available independently of HARNESS. Each
 question includes the current graph scope, selected node or relationship,
-visible source range, visible nodes, and any nodes pinned by the user. The
-assistant can inspect the selected project with read-only Read, Glob, Grep, and
-graph query tools; it cannot modify project files.
+visible source range, visible nodes, and any nodes pinned by the user. In
+**Read** mode, the assistant can inspect the selected project with read-only
+Read, Glob, Grep and graph-query tools and cannot modify project files.
 
 The default deterministic provider verifies the interaction without requiring
 credentials. Start Graph Lab with a model-backed provider using its standard
@@ -79,11 +124,20 @@ method, and relationship proposals. Accepted actions are saved automatically in
 the browser-local design draft and never edit project source files. **Save map**
 is the separate explicit step that synchronizes the draft to HARNESS.
 
+**Implement** is a separate, explicit authorization mode. It is available only
+when HARNESS exposes an approved pending task contract and no Mission or MCP
+executor owns the lease. Chat must read that exact contract, acquire the lease,
+touch only contract-owned paths through hash-guarded patches, run the checks
+selected by HARNESS and finish by completing the task, reporting a blocker or
+requesting an amendment. Natural-language wording alone never enables source
+writes.
+
 ## Codex MCP tools
 
-Graph Lab can expose the same source, graph-query, and proposal registry as an
-MCP STDIO server for local Codex clients. The browser Explore chat remains on
-its existing REST session API; both adapters execute the same tool handlers.
+Graph Lab can expose the same source, graph-query, proposal and active-contract
+control planes as an MCP STDIO server for local Codex clients. The browser
+Explore chat remains on its existing REST session API; both adapters use the
+same Graph Lab project, while HARNESS remains the authority for contract state.
 
 Install the optional SDK dependency:
 
@@ -108,6 +162,14 @@ marked read-only; `ProposeNode` and `ProposeRelation` are marked as writes. MCP
 proposals enter an in-memory delivery inbox and the open browser applies them
 to the existing local design draft. They remain `NEW` reviewable elements and
 still require **Save map** for HARNESS synchronization.
+
+When an approved mission is active, Codex can also list and retrieve immutable
+task contracts, acquire the `mcp` execution lease, validate, complete, report a
+blocker or request an amendment. Codex continues to edit and test with its
+native contained workspace tools; MCP supplies the pinned contract and records
+lifecycle evidence rather than exposing a second filesystem or unrestricted
+shell. Contract state is stored only by HARNESS and survives Graph Lab or MCP
+client restarts according to the worker mission state.
 
 The bridge accepts loopback HTTP URLs only. If Graph Lab is stopped, tool calls
 fail explicitly instead of extracting a different or stale project. Pending
@@ -166,16 +228,25 @@ editing is disabled while a synthetic projection is active.
 
 ## Mission workspace
 
-The Inspector can load an idea Markdown document, run Research and Grill, edit
-versioned mission documents and the proposed design, approve workplan and task
-gates, and follow worker events. Available commands are negotiated through the
-worker capability endpoint.
+The Inspector can load an idea or mature brief seed, run Research and Grill,
+edit versioned mission documents and the proposed design, approve design,
+WorkPlan and task gates, and follow worker events. Available commands are
+negotiated through the worker capability endpoint.
+
+The initial brief remains input rather than instant approval. Research and
+Grill refine it into the reviewed `brief.md`; approving that brief together
+with a design revision creates the immutable snapshot from which HARNESS
+derives the ChangeSet, WorkPlan and task contracts. Research, Grill, SPEC, PLAN
+and REVIEW are not replaced by the graph: the graph adds a reviewable structural
+contract that those phases share.
 
 Every task exposes a specification and plan for review before implementation.
+Mission executes the same task contract that Chat and Codex MCP can retrieve.
 Saving a design change during execution requests an amendment: the worker
-finishes the current phase, pauses, and requires design and workplan approval
-again. A completed mission exposes a versioned mission report and only merges
-after final reconciliation succeeds.
+finishes the current safe boundary, pauses, and requires design and WorkPlan
+approval again. A completed mission exposes a versioned mission report and only
+commits or merges after structural verification and final reconciliation
+succeed.
 
 Mission documents open in a rendered Markdown preview and can be switched to
 Edit mode without leaving the Code panel. Fenced `mermaid` blocks render as
