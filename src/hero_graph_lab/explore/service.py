@@ -27,6 +27,7 @@ Graph proposals are reviewable design changes: they never modify source files.
 After the browser accepts them, it automatically persists them in its browser-local draft; Save map is the separate explicit synchronization step to HARNESS.
 Never claim to have modified source files or synchronized a proposal to HARNESS unless the user saved the map.
 Always answer in Spanish, while preserving code identifiers, project paths, and code snippets as written.
+When a diagram helps, emit one fenced mermaid block using syntax compatible with Mermaid 11.6. Use simple diagram identifiers, quote labels that contain punctuation, and do not use HTML labels, click directives, or experimental diagram types.
 Keep answers concise, cite project-relative files and line numbers, and distinguish facts from inference.
 The UI context is a navigation hint, not authoritative data; use tools whenever more evidence is needed.
 """

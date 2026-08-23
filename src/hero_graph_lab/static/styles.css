@@ -530,6 +530,9 @@ dialog::backdrop { background: rgba(19, 29, 26, .58); }
 .mermaid-diagram marker path, .mermaid-diagram marker polygon { stroke: currentColor; fill: currentColor; }
 .mermaid-diagram .safe-node-label { fill: #18201d; font: 600 15px var(--sans); pointer-events: none; }
 .mermaid-diagram.mermaid-error { color: #ffb5a8; background: #311b18; border-color: var(--relation-removed); font: 10px/1.5 var(--mono); white-space: pre-wrap; }
+.mermaid-error p { margin: 0 0 8px; color: inherit !important; }
+.mermaid-error summary { cursor: pointer; }
+.mermaid-error pre { max-height: 220px; overflow: auto; margin: 8px 0 0; padding: 8px; color: #e7eee9; background: #18231f; white-space: pre; }
 .document-editor footer { grid-row: 3; display: flex; justify-content: space-between; align-items: center; padding: 0 14px; color: #84928c; background: #18231f; border-top: 1px solid #2b3833; font: 8px var(--mono); }
 #feedback-form, #node-form, #relation-form { display: grid; gap: 18px; padding: 26px; }
 #mission-form { display: grid; gap: 16px; padding: 26px; }

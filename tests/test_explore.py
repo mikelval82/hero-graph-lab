@@ -16,6 +16,7 @@ from hero_graph_lab.explore.models import (
     ToolSpec,
 )
 from hero_graph_lab.explore.service import ExploreAssistantService
+from hero_graph_lab.explore.service import SYSTEM_PROMPT
 from hero_graph_lab.explore.tools import ExploreToolRegistry, GraphIndex, ToolEnvironment
 from hero_graph_lab.extractor import extract_python_graph
 
@@ -64,6 +65,10 @@ class FakeContractTools:
 
 
 class ExploreAssistantTest(TestCase):
+    def test_system_prompt_bounds_mermaid_to_supported_safe_syntax(self) -> None:
+        self.assertIn("syntax compatible with Mermaid 11.6", SYSTEM_PROMPT)
+        self.assertIn("do not use HTML labels, click directives, or experimental diagram types", SYSTEM_PROMPT)
+
     def test_when_gemini_request_fails_expect_runtime_error(self) -> None:
         def generate_content(**kwargs):  # noqa: ANN003, ANN202
             del kwargs

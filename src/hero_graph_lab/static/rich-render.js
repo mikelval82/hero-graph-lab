@@ -58,10 +58,11 @@
       svg.style.width = `${Math.min(viewBox.width, 1600)}px`;
       svg.style.height = "auto";
     }
+    const nodes = [...(svg?.querySelectorAll(".node") || [])];
     labels.forEach((lines, nodeId) => {
-      const node = svg?.querySelector(`[id="${CSS.escape(nodeId)}"]`);
+      const node = nodes.find((candidate) => candidate.id === nodeId);
       if (!node || !lines.length) return;
-      const nodeIndex = [...svg.querySelectorAll(".node")].indexOf(node);
+      const nodeIndex = nodes.indexOf(node);
       const palette = nodePalette[nodeIndex % nodePalette.length];
       const shape = node.querySelector(".label-container, rect, polygon, path");
       const explicitStyle = shape?.getAttribute("style") || "";
@@ -96,6 +97,27 @@
     });
   }
 
+  function tryMermaidEnhancement(name, enhance) {
+    try {
+      enhance();
+    } catch (error) {
+      console.warn(`Mermaid ${name} enhancement failed`, error);
+    }
+  }
+
+  function showMermaidError(diagram, error, definition) {
+    diagram.classList.add("mermaid-error");
+    const message = document.createElement("p");
+    message.textContent = `Diagram could not be rendered: ${error.message || "invalid Mermaid syntax"}`;
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = "Show Mermaid source";
+    const source = document.createElement("pre");
+    source.textContent = definition;
+    details.append(summary, source);
+    diagram.replaceChildren(message, details);
+  }
+
   async function render(container, source, { prefix = "rich-mermaid" } = {}) {
     const sequence = (renderSequences.get(container) || 0) + 1;
     renderSequences.set(container, sequence);
@@ -117,20 +139,22 @@
         diagram.textContent = "Mermaid preview is unavailable.";
         continue;
       }
+      let result;
       try {
-        const result = await globalThis.mermaid.render(`${prefix}-${++diagramSequence}`, definition);
-        if (renderSequences.get(container) !== sequence) return;
-        const labels = safeNodeLabels(result.svg);
-        diagram.innerHTML = globalThis.DOMPurify.sanitize(result.svg, {
-          USE_PROFILES: { svg: true, svgFilters: true },
-        });
-        applySafeNodeLabels(diagram, labels);
-        emphasizeDirectionMarkers(diagram);
-        result.bindFunctions?.(diagram);
+        result = await globalThis.mermaid.render(`${prefix}-${++diagramSequence}`, definition);
       } catch (error) {
-        diagram.classList.add("mermaid-error");
-        diagram.textContent = `Diagram could not be rendered: ${error.message || "invalid Mermaid syntax"}`;
+        showMermaidError(diagram, error, definition);
+        continue;
       }
+      if (renderSequences.get(container) !== sequence) return;
+      let labels = new Map();
+      tryMermaidEnhancement("label extraction", () => { labels = safeNodeLabels(result.svg); });
+      diagram.innerHTML = globalThis.DOMPurify.sanitize(result.svg, {
+        USE_PROFILES: { svg: true, svgFilters: true },
+      });
+      tryMermaidEnhancement("label", () => applySafeNodeLabels(diagram, labels));
+      tryMermaidEnhancement("direction marker", () => emphasizeDirectionMarkers(diagram));
+      tryMermaidEnhancement("interaction", () => result.bindFunctions?.(diagram));
     }
   }
 
