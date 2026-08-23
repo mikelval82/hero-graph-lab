@@ -154,13 +154,17 @@ function updateExploreContext() {
 function appendExploreMessage(container, message) {
   const article = document.createElement("article");
   article.className = `chat-message ${message.role === "user" ? "human" : "agent"}`;
+  const heading = document.createElement("div");
+  heading.className = "chat-message-heading";
   const header = document.createElement("span");
   header.textContent = message.role === "user" ? "YOU / EXPLORE" : `${exploreState.provider.toUpperCase()} / ${exploreState.model}`;
+  heading.append(header);
+  if (message.role !== "user") heading.append(globalThis.createChatCopyButton(message.content));
   const body = document.createElement(message.role === "user" ? "p" : "div");
   body.className = message.role === "user" ? "" : "chat-message-body rich-content";
   if (message.role === "user") body.textContent = message.content;
   else globalThis.RichContentRenderer.render(body, message.content, { prefix: "explore-mermaid" });
-  article.append(header, body);
+  article.append(heading, body);
   container.append(article);
 }
 

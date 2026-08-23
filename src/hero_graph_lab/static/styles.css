@@ -402,7 +402,11 @@ dt { color: var(--muted); font: 9px var(--mono); text-transform: uppercase; } dd
 .explore-agent-mode button[aria-pressed="true"] { color: white; background: var(--inspector-accent); border-color: var(--inspector-accent); }
 .chat-messages { min-height: 0; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; padding: 8px 2px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .chat-message { box-sizing: border-box; width: min(94%, 720px); padding: 9px 10px; border: 1px solid; border-radius: 4px; }
+.chat-message-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .chat-message span { color: var(--muted); font: 700 7px var(--mono); letter-spacing: 0; }
+.chat-copy-button { min-height: 24px; flex: 0 0 auto; padding: 3px 7px; color: var(--muted); background: transparent; border: 1px solid var(--button-border); font: 700 8px var(--mono); }
+.chat-copy-button:hover, .chat-copy-button:focus-visible { color: var(--ink); background: white; border-color: var(--muted); }
+.chat-copy-button.copied { color: white; background: var(--accent); border-color: var(--accent-strong); }
 .chat-message p { overflow-wrap: anywhere; margin: 5px 0 0; color: var(--ink) !important; font-size: 10px !important; line-height: 1.55 !important; white-space: pre-wrap; }
 .chat-message-body { margin-top: 7px; color: var(--ink); overflow-wrap: anywhere; }
 .chat-message-body > :first-child { margin-top: 0; }

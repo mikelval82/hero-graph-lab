@@ -47,6 +47,51 @@ const GRAPH_MIN_ZOOM = .1;
 const GRAPH_MAX_ZOOM = 2.5;
 const GRAPH_FIT_PADDING = 24;
 
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.append(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  if (!copied) throw new Error("Clipboard access is unavailable");
+}
+
+function createChatCopyButton(content) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "chat-copy-button";
+  button.textContent = "Copy";
+  button.title = "Copy agent response";
+  button.setAttribute("aria-label", "Copy agent response");
+  button.addEventListener("click", async () => {
+    try {
+      await copyTextToClipboard(content);
+      button.textContent = "Copied";
+      button.classList.add("copied");
+      button.setAttribute("aria-label", "Agent response copied");
+      setTimeout(() => {
+        if (!button.isConnected) return;
+        button.textContent = "Copy";
+        button.classList.remove("copied");
+        button.setAttribute("aria-label", "Copy agent response");
+      }, 1600);
+    } catch (error) {
+      document.querySelector("#chat-status").textContent = error.message || "Could not copy the response";
+    }
+  });
+  return button;
+}
+
+globalThis.createChatCopyButton = createChatCopyButton;
+
 function clamp(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value));
 }

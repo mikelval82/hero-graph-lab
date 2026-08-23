@@ -437,11 +437,15 @@ function renderChat() {
     const role = message.role.toLowerCase();
     const visualRole = role === "human" || role === "user" ? "human" : role === "tool" ? "tool" : "agent";
     article.className = `chat-message ${visualRole}`;
+    const heading = document.createElement("div");
+    heading.className = "chat-message-heading";
     const header = document.createElement("span");
     header.textContent = `${message.role} / ${message.phase}`;
+    heading.append(header);
+    if (visualRole === "agent") heading.append(globalThis.createChatCopyButton(message.content));
     const body = document.createElement("p");
     body.textContent = message.content;
-    article.append(header, body);
+    article.append(heading, body);
     messages.append(article);
   });
   messages.scrollTop = messages.scrollHeight;
