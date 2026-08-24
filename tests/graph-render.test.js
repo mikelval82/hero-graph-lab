@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-const { focusColumnPositions, focusLayoutStrategy, graphMinimumSize } = require("../src/hero_graph_lab/static/graph-render.js");
+const { focusColumnPositions, focusLayoutStrategy, graphMinimumSize, projectionColumnSpan } = require("../src/hero_graph_lab/static/graph-render.js");
 
 test("normal graph layouts preserve their existing minimum dimensions", () => {
   assert.deepEqual(graphMinimumSize({ viewportWidth: 1800, viewportHeight: 900 }), { width: 1000, height: 680 });
@@ -36,19 +36,29 @@ test("normal Focus retains its compact fixed-gap columns", () => {
 test("projected Focus distributes two-sided collaborators across the canvas", () => {
   assert.deepEqual(
     focusColumnPositions({ width: 1600, columnGap: 220, maxWidth: 180, projectionActive: true, incomingCount: 2, outgoingCount: 3 }),
-    { selected: 800, incoming: 138, outgoing: 1462 },
+    { selected: 800, incoming: 320, outgoing: 1280 },
   );
 });
 
 test("projected Focus uses opposite columns for one-sided collaborators", () => {
   assert.deepEqual(
     focusColumnPositions({ width: 1600, columnGap: 220, maxWidth: 180, projectionActive: true, outgoingCount: 3 }),
-    { selected: 138, incoming: 138, outgoing: 1462 },
+    { selected: 320, incoming: 320, outgoing: 1280 },
   );
   assert.deepEqual(
     focusColumnPositions({ width: 1600, columnGap: 220, maxWidth: 180, projectionActive: true, incomingCount: 2 }),
-    { selected: 1462, incoming: 138, outgoing: 1462 },
+    { selected: 1280, incoming: 320, outgoing: 1280 },
   );
+});
+
+test("sparse projections use a centered comfortable span", () => {
+  assert.equal(projectionColumnSpan({ width: 1888, availableSpan: 1688, structuralSpan: 210 }), 960);
+  assert.equal(projectionColumnSpan({ width: 1000, availableSpan: 800, structuralSpan: 210 }), 620);
+});
+
+test("dense projections grow beyond the comfortable span when structure requires it", () => {
+  assert.equal(projectionColumnSpan({ width: 1888, availableSpan: 1688, structuralSpan: 1260 }), 1260);
+  assert.equal(projectionColumnSpan({ width: 1000, availableSpan: 800, structuralSpan: 1050 }), 800);
 });
 
 test("projected Focus keeps direct neighborhoods in the wide Focus layout", () => {

@@ -26,7 +26,7 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | SFR-020 | D-026, D-028 | Projected direct-neighborhood Focus columns in `graph-render.js` | 3 directed-column tests; 30 Node tests | Multi-hop UI-041 path passed through Flow fallback; direct one- and two-sided rendered checks remain pending | In progress |
 | SFR-021 | D-027 | Shared grid cell for `.graph-viewport` and `.graph-projection-bar` in `styles.css` | Served CSS contract; 41 Python tests | UI-042 passed twice: workspace and viewport both started at x=0 and measured 1536 pixels wide | Verified |
 | SFR-022 | D-028 | Total projected Focus strategy in `graph-render.js` | 2 direct-versus-multi-hop strategy tests; 30 Node tests | UI-043 passed: all 12 generated class nodes were positioned and rendered with no status or console error | Verified |
-| SFR-023 | D-029 | Centered content-aware projected column span in `graph-render.js` | Span policy tests pending | UI-044 failed before fix: the corrected full-width viewport placed two nodes at x=33 and x=1734 | Planned |
+| SFR-023 | D-029 | Centered content-aware projected column span in `graph-render.js` | 2 span-policy tests; 10 focused renderer tests; 32 Node tests; 41 Python tests | UI-044 passed at 1920×900; dense class projection regression also passed | Verified |
 
 ## Evidence log
 
@@ -79,6 +79,9 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | 2026-08-24 | pre-SFR-021/SFR-022 fix | Playwright `G` class projection at 1536 pixels | The 501-pixel projection bar occupied grid column 1 and auto-placed the 1015-pixel graph viewport at x=521. The 12-node projection had only 4 positions and stopped with `Cannot read properties of undefined (reading 'x')`. |
 | 2026-08-24 | post-SFR-021/SFR-022 fix | Playwright UI-040, UI-042, and UI-043 on class Focus | Workspace and viewport both measured x=0 / width=1536; the bar overlaid at x=378 / width=780; all 12 nodes were positioned and rendered across x=145 through x=1385; focus stayed on the selected class; zero console errors or warnings. |
 | 2026-08-24 | post-SFR-021/SFR-022 fix | Playwright package Flow regression | Workspace and viewport again measured x=0 / width=1536; all 10 generated nodes were positioned and rendered; projection navigation status remained healthy. Final suites: 30 Node and 41 Python tests passed. |
+| 2026-08-24 | pre-SFR-023 fix | User screenshot plus exact Playwright Call graph at 1920×900 | The screenshot still showed the pre-SFR-021 viewport shifted to x≈630. After loading the current CSS, the full viewport was correct but the two nodes stretched from x=33 to x=1872, confirming a separate sparse-composition defect. |
+| 2026-08-24 | post-SFR-023 fix | Playwright UI-044 exact `_index_package_symbols` Call graph | Workspace and viewport measured x=0 / width=1920, projection bar x=570 / width=780, nodes rendered between x=396 and x=1509, and the visible relationship reduced to 804 pixels. |
+| 2026-08-24 | post-SFR-023 fix | Playwright dense class regression and final suites | All 12 generated class nodes were positioned and rendered between x=397 and x=1515 with zero console errors or warnings. Final suites: 32 Node and 41 Python tests passed. |
 
 ## Post-refactor size evidence
 

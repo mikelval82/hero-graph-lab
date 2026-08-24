@@ -15,14 +15,26 @@ function graphMinimumSize({ projectionActive = false, compact = false, viewportW
   };
 }
 
+function projectionColumnSpan({ width, availableSpan, structuralSpan, scale = 1 }) {
+  const comfortableSpan = Math.min(960 * scale, width * .62);
+  return Math.min(availableSpan, Math.max(structuralSpan, comfortableSpan));
+}
+
 function focusColumnPositions({ width, columnGap, maxWidth, scale = 1, projectionActive = false, incomingCount = 0, outgoingCount = 0 }) {
   const center = width / 2;
   if (!projectionActive) {
     return { selected: center, incoming: center - columnGap, outgoing: center + columnGap };
   }
   const inset = Math.max(100 * scale, maxWidth / 2 + 48 * scale);
-  const left = Math.min(center, inset);
-  const right = Math.max(center, width - inset);
+  const sideCount = Number(Boolean(incomingCount)) + Number(Boolean(outgoingCount));
+  const span = projectionColumnSpan({
+    width,
+    availableSpan: Math.max(0, width - inset * 2),
+    structuralSpan: sideCount * columnGap,
+    scale,
+  });
+  const left = center - span / 2;
+  const right = center + span / 2;
   if (incomingCount && outgoingCount) return { selected: center, incoming: left, outgoing: right };
   if (incomingCount) return { selected: right, incoming: left, outgoing: right };
   if (outgoingCount) return { selected: left, incoming: left, outgoing: right };
@@ -231,9 +243,14 @@ function flowLayout(nodes, edges) {
   const verticalMargin = 125 * scale;
   const width = Math.max(minimumSize.width, horizontalMargin * 2 + maxLevel * columnGap);
   const height = Math.max(minimumSize.height, verticalMargin * 2 + (maxColumnLength - 1) * rowGap);
+  const availableColumnSpan = Math.max(0, width - horizontalMargin * 2);
+  const columnSpan = state.graphProjection && maxLevel > 0
+    ? projectionColumnSpan({ width, availableSpan: availableColumnSpan, structuralSpan: maxLevel * columnGap, scale })
+    : availableColumnSpan;
+  const firstColumnX = (width - columnSpan) / 2;
   const positions = {};
   columns.forEach((column, level) => column.forEach((node, index) => {
-    const x = maxLevel === 0 ? width / 2 : horizontalMargin + level * ((width - horizontalMargin * 2) / maxLevel);
+    const x = maxLevel === 0 ? width / 2 : firstColumnX + level * (columnSpan / maxLevel);
     const y = column.length === 1 ? height / 2 : verticalMargin + index * ((height - verticalMargin * 2) / (column.length - 1));
     positions[node.id] = { x, y };
   }));
@@ -532,4 +549,4 @@ function render() {
   });
 }
 
-if (typeof module !== "undefined" && module.exports) module.exports = { focusColumnPositions, focusLayoutStrategy, graphMinimumSize };
+if (typeof module !== "undefined" && module.exports) module.exports = { focusColumnPositions, focusLayoutStrategy, graphMinimumSize, projectionColumnSpan };
