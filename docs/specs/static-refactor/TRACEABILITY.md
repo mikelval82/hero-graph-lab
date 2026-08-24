@@ -27,7 +27,7 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | SFR-021 | D-027 | Shared grid cell for `.graph-viewport` and `.graph-projection-bar` in `styles.css` | Served CSS contract; 41 Python tests | UI-042 passed twice: workspace and viewport both started at x=0 and measured 1536 pixels wide | Verified |
 | SFR-022 | D-028 | Total projected Focus strategy in `graph-render.js` | 2 direct-versus-multi-hop strategy tests; 30 Node tests | UI-043 passed: all 12 generated class nodes were positioned and rendered with no status or console error | Verified |
 | SFR-023 | D-029 | Centered content-aware projected column span in `graph-render.js` | 2 span-policy tests; 10 focused renderer tests; 32 Node tests; 41 Python tests | UI-044 passed at 1920×900; dense class projection regression also passed | Verified |
-| SFR-024 | D-030 | Final focus-mode grid precedence in `styles.css` | Served CSS precedence contract pending | UI-045 failed before fix: all-collapsed state produced a 38-pixel workspace and 55-pixel viewport | Planned |
+| SFR-024 | D-030 | Final focus-mode grid precedence in `styles.css` | Served `!important` precedence contract; 32 Node tests; 41 Python tests | UI-045 passed at 1920 pixels and panel collapse state restored after closing `G` | Verified |
 
 ## Evidence log
 
@@ -83,6 +83,8 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | 2026-08-24 | pre-SFR-023 fix | User screenshot plus exact Playwright Call graph at 1920×900 | The screenshot still showed the pre-SFR-021 viewport shifted to x≈630. After loading the current CSS, the full viewport was correct but the two nodes stretched from x=33 to x=1872, confirming a separate sparse-composition defect. |
 | 2026-08-24 | post-SFR-023 fix | Playwright UI-044 exact `_index_package_symbols` Call graph | Workspace and viewport measured x=0 / width=1920, projection bar x=570 / width=780, nodes rendered between x=396 and x=1509, and the visible relationship reduced to 804 pixels. |
 | 2026-08-24 | post-SFR-023 fix | Playwright dense class regression and final suites | All 12 generated class nodes were positioned and rendered between x=397 and x=1515 with zero console errors or warnings. Final suites: 32 Node and 41 Python tests passed. |
+| 2026-08-24 | pre-SFR-024 fix | Playwright focus/collapse matrix at 1920, 1250, 900, and 680 pixels | Every single-panel collapse and manual-focus combination used the full viewport, but Explorer + Code + Inspector collapsed together overrode projection focus at every width: workspace 38 pixels and viewport 55 pixels. |
+| 2026-08-24 | post-SFR-024 fix | Playwright UI-045 exact all-collapsed Call graph at 1920×900 | Main, workspace, graph panel, and viewport each measured x=0 / width=1920; the two nodes rendered between x=396 and x=1509. Restore removed projection focus while preserving all three collapsed classes; zero console errors or warnings. Final suites: 32 Node and 41 Python tests passed. |
 
 ## Post-refactor size evidence
 

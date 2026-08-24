@@ -853,6 +853,6 @@ body.projection-focus-mode .canvas-shell > .panel-heading { min-height: 44px; pa
 
 /* Focus modes win over responsive and persisted panel layouts. */
 body.canvas-focus-mode main,
-body.projection-focus-mode main { display: grid; grid-template-columns: minmax(0, 1fr); }
+body.projection-focus-mode main { display: grid; grid-template-columns: minmax(0, 1fr) !important; }
 body.canvas-focus-mode .workspace,
-body.projection-focus-mode .workspace { height: 100%; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+body.projection-focus-mode .workspace { height: 100%; grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: minmax(0, 1fr) !important; }
