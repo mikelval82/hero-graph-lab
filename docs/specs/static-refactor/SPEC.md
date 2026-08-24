@@ -158,6 +158,38 @@ The Flow Graph header shall organize commands by user intent rather than impleme
 
 The header and graph viewport shall use content-driven layout rather than fixed vertical offsets. Tool groups may wrap as units when the resizable graph panel narrows, but individual commands must remain in their semantic group. Existing element IDs, command bindings, shortcuts, enabled states, and `M`/`G` behavior shall remain unchanged.
 
+### SFR-015 — Canvas-first application shell
+
+The graph shall be the default primary work surface:
+
+- Code starts collapsed for a new layout profile and opens only on demand;
+- Explorer and Inspector remain independently collapsible supporting regions;
+- a visible **Focus canvas** command temporarily hides all supporting regions without overwriting the saved layout;
+- leaving canvas focus restores the exact prior widths, split ratio, and collapsed panels;
+- the graph viewport recalculates and fits after each focus transition.
+
+### SFR-016 — Immersive `G` projection
+
+Opening an interactive `G` projection shall enter temporary canvas focus before fitting the projection. While active:
+
+- Explorer, Code, Inspector, splitters, normal graph modes, scope controls, and the standard tool strip are hidden;
+- a single compact projection bar exposes Back, projection identity, depth, Fit, and Restore;
+- expanding, changing depth, and Back remain inside the focused canvas;
+- Restore, an empty-history Back, or any existing programmatic projection restore exits only projection-owned focus and returns the exact pre-projection application layout;
+- manually activated canvas focus remains active after the projection closes.
+
+### SFR-017 — Contextual tools and coherent visual system
+
+Normal graph controls shall use progressive disclosure:
+
+- navigation and inspection actions remain in one compact contextual strip;
+- graph modes, Design mode, canvas focus, and overflow utilities remain persistent;
+- Add node, Add relation, Edit, Delete, draft status, Save map, and Discard draft appear only while Design mode is active;
+- infrequent view/help actions move to an overflow surface without changing their IDs or behavior;
+- narrow graph widths compact button labels without changing accessible names or keyboard shortcuts.
+
+The application shall use one neutral Graphite surface hierarchy, Emerald as the primary accent, and semantic colors only for observed, proposed, modified, removed, warning, and error states. Interface text shall use the system UI stack; the monospace stack remains for code, identifiers, and shortcut hints.
+
 ## Rendered-UI acceptance checks
 
 | ID | Scenario | Expected result |
@@ -194,6 +226,12 @@ The header and graph viewport shall use content-driven layout rather than fixed 
 | UI-030 | Resize the Flow Graph from a wide split to its minimum supported width | Semantic tool groups wrap without clipping, overlapping the scope bar, or covering the graph viewport. |
 | UI-031 | Select nodes across Flow, Focus, and `G` projection states | Existing command labels and enabled/disabled state transitions remain correct in their new groups. |
 | UI-032 | Create a local proposal draft | Draft status, **Save map**, and **Discard draft** are visible outside **Legend**; **Delete** remains visually distinct from **Hide**. |
+| UI-033 | Load Graph Lab with no saved v2 layout | Graph is the dominant central surface, Code is collapsed, and Explorer/Inspector remain available. |
+| UI-034 | Toggle **Focus canvas** from a custom resized layout | Supporting regions disappear; toggling again restores their exact widths, graph ratio, and collapsed state. |
+| UI-035 | Open `G` from a resized layout | The projection occupies the focused canvas with only its compact projection bar visible. |
+| UI-036 | Expand, change depth, use Back, then Restore in `G` | Projection navigation remains usable and the exact pre-projection application layout returns. |
+| UI-037 | Open and close `G` while manual canvas focus is active | Closing `G` preserves the user's manual canvas-focus state. |
+| UI-038 | Toggle Design mode and resize the graph panel | Design/draft commands appear only in Design mode; normal controls stay compact and accessible at narrow widths. |
 
 ## Delivery sequence
 

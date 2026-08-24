@@ -166,3 +166,24 @@ Date: 2026-08-24
 The current visualization toolbar requires roughly 660 pixels before the separate design controls, while the resizable graph column supports widths down to 250 pixels. Because the header, scope bar, toolbar, projection bar, and viewport use independent fixed offsets, wrapping can overlap or clip controls instead of increasing the header's height.
 
 The graph panel will become a small content-driven CSS grid. Existing buttons will be regrouped in the HTML without changing IDs or JavaScript command ownership. Group-level wrapping is preferred over a new component framework, icon dependency, overflow menu, or JavaScript measurement logic. This resolves the observed information architecture and sizing defect at the existing HTML/CSS boundary.
+
+## D-021 — Make Code opt-in and canvas focus non-persistent
+
+Status: Accepted
+Date: 2026-08-24
+
+The graph cannot be the primary surface while the default workspace permanently assigns half of its center region to Code. A new layout-storage version will default Code to collapsed while preserving Explorer and Inspector. Manual canvas focus is a temporary body state layered over the saved layout; it must not rewrite panel preferences.
+
+## D-022 — Let `G` own a temporary focus layer
+
+Status: Accepted
+Date: 2026-08-24
+
+Projection focus will be represented independently from manual canvas focus. `G` adds and removes only its own focus state, so closing a projection cannot unexpectedly reopen panels hidden by the user. Normal graph chrome is replaced by the projection bar for the duration of `G`, rather than accumulating another toolbar over the canvas.
+
+## D-023 — Use progressive disclosure instead of a permanent tool matrix
+
+Status: Accepted
+Date: 2026-08-24
+
+The semantic groups introduced by D-020 improve comprehension but consume excessive height when all commands remain visible. Normal navigation/inspection stays compact, Design becomes an explicit mode, and infrequent view/help actions move behind a conventional overflow control. A small local icon vocabulary and CSS tokens are preferred over an admin template or UI framework because Graph Lab is a no-build canvas application, not a dashboard.
