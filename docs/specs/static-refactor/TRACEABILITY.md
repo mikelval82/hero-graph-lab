@@ -27,6 +27,7 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | SFR-021 | D-027 | Shared grid cell for `.graph-viewport` and `.graph-projection-bar` in `styles.css` | Served CSS contract; 41 Python tests | UI-042 passed twice: workspace and viewport both started at x=0 and measured 1536 pixels wide | Verified |
 | SFR-022 | D-028 | Total projected Focus strategy in `graph-render.js` | 2 direct-versus-multi-hop strategy tests; 30 Node tests | UI-043 passed: all 12 generated class nodes were positioned and rendered with no status or console error | Verified |
 | SFR-023 | D-029 | Centered content-aware projected column span in `graph-render.js` | 2 span-policy tests; 10 focused renderer tests; 32 Node tests; 41 Python tests | UI-044 passed at 1920×900; dense class projection regression also passed | Verified |
+| SFR-024 | D-030 | Final focus-mode grid precedence in `styles.css` | Served CSS precedence contract pending | UI-045 failed before fix: all-collapsed state produced a 38-pixel workspace and 55-pixel viewport | Planned |
 
 ## Evidence log
 

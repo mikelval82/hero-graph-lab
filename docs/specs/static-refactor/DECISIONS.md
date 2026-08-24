@@ -239,3 +239,12 @@ Date: 2026-08-24
 The exact two-node Call graph from rendered acceptance exposed the opposite failure after the viewport correction: making projected Flow columns span the entire 1920-pixel canvas placed the nodes near the left and right edges and produced an unnecessarily long relationship. A full canvas does not require sparse content to touch both sides.
 
 Projected Flow and direct Focus layouts will use a centered, content-aware horizontal span. The span keeps at least the structural column gap, grows for additional levels, and is capped at the smaller of 960 scaled pixels or 62 percent of the layout width when the graph is sparse. Dense projections may still use the remaining canvas. Normal graph layouts remain unchanged.
+
+## D-030 — Make focus geometry override every persisted collapse combination
+
+Status: Accepted
+Date: 2026-08-24
+
+Rendered acceptance reproduced the 45-pixel graph shown by the user only when Explorer, Code, and Inspector were all collapsed before entering `G`. The combined `body.explorer-collapsed.inspector-collapsed main` selector has greater specificity than `body.projection-focus-mode main`, so its five-column template survives even though the supporting panels are hidden. The workspace remains in the 38-pixel Explorer rail and the graph viewport measures 55 pixels.
+
+Canvas and projection focus are intentional temporary overrides of persisted layout geometry. Their final `main` and `.workspace` grid templates will therefore use `!important`, narrowly scoped to these focus classes, so every stored collapse combination and responsive rule yields to the focused canvas. Panel state itself remains unchanged and returns after focus closes.
