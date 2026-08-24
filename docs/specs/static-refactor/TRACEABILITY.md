@@ -26,6 +26,7 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | SFR-020 | D-026, D-028 | Projected direct-neighborhood Focus columns in `graph-render.js` | 3 directed-column tests; 30 Node tests | Multi-hop UI-041 path passed through Flow fallback; direct one- and two-sided rendered checks remain pending | In progress |
 | SFR-021 | D-027 | Shared grid cell for `.graph-viewport` and `.graph-projection-bar` in `styles.css` | Served CSS contract; 41 Python tests | UI-042 passed twice: workspace and viewport both started at x=0 and measured 1536 pixels wide | Verified |
 | SFR-022 | D-028 | Total projected Focus strategy in `graph-render.js` | 2 direct-versus-multi-hop strategy tests; 30 Node tests | UI-043 passed: all 12 generated class nodes were positioned and rendered with no status or console error | Verified |
+| SFR-023 | D-029 | Centered content-aware projected column span in `graph-render.js` | Span policy tests pending | UI-044 failed before fix: the corrected full-width viewport placed two nodes at x=33 and x=1734 | Planned |
 
 ## Evidence log
 

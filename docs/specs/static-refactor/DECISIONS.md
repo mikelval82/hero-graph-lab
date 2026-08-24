@@ -230,3 +230,12 @@ Date: 2026-08-24
 The same browser run exposed a projection with 12 class nodes but positions for only the selected class and its three direct neighbors. `focusLayout` is a total layout only for a direct neighborhood; the class generator can return additional connected hops, causing rendering to read an undefined position.
 
 Projected Focus retains the wide two- or three-column layout from D-026 when every node is a direct neighbor. If the generated projection contains indirect nodes, it reuses the existing deterministic Flow layout so every node receives a position. Normal Focus remains unchanged.
+
+## D-029 — Bound sparse projection spread without shrinking the canvas
+
+Status: Accepted
+Date: 2026-08-24
+
+The exact two-node Call graph from rendered acceptance exposed the opposite failure after the viewport correction: making projected Flow columns span the entire 1920-pixel canvas placed the nodes near the left and right edges and produced an unnecessarily long relationship. A full canvas does not require sparse content to touch both sides.
+
+Projected Flow and direct Focus layouts will use a centered, content-aware horizontal span. The span keeps at least the structural column gap, grows for additional levels, and is capped at the smaller of 960 scaled pixels or 62 percent of the layout width when the graph is sparse. Dense projections may still use the remaining canvas. Normal graph layouts remain unchanged.

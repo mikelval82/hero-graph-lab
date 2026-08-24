@@ -210,6 +210,10 @@ The compact `G` projection bar and the graph viewport shall occupy the same canv
 
 A projected Focus layout shall assign a position to every visible node. Direct neighborhoods shall use the wide directed columns from SFR-020; projections containing indirect nodes shall use the existing deterministic Flow geometry. Rendering shall never attempt to draw a node or relationship with a missing position.
 
+### SFR-023 — Content-aware span for sparse projections
+
+The `G` viewport shall continue to occupy the full focused workspace, but a sparse projection shall use a centered horizontal span appropriate to its number of levels rather than stretching nodes to opposite screen edges. Additional levels may expand that span when required. Normal non-projected graph geometry shall remain unchanged.
+
 ## Rendered-UI acceptance checks
 
 | ID | Scenario | Expected result |
@@ -257,6 +261,7 @@ A projected Focus layout shall assign a position to every visible node. Direct n
 | UI-041 | Open `G` on a class with one-sided and two-sided collaborators | One-sided projections use two wide columns; two-sided projections use three wide columns; the normal Focus view retains its compact spacing. |
 | UI-042 | Open any `G` projection and inspect the canvas bounds | The graph viewport starts at the left edge of the focused workspace and spans its full width while the compact projection bar overlays it. |
 | UI-043 | Open `G` on a class whose generated collaborators include indirect hops | Every generated node renders, every relationship has positioned endpoints, and no missing-position error appears. |
+| UI-044 | Open the two-node `_index_package_symbols` Call graph at 1920×900 | The full viewport and centered projection bar remain visible; both nodes and their relationship form a readable centered composition instead of touching opposite edges. |
 
 ## Delivery sequence
 
