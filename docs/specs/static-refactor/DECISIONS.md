@@ -194,3 +194,12 @@ Status: Accepted
 Date: 2026-08-24
 
 Rendered acceptance showed that Explorer's typography controls remained in the 38-pixel collapsed rail and pushed its restore button outside the clipped panel. Collapsed Explorer will expose only its panel-restore command. The rule is scoped to the Explorer heading so collapsing Explorer cannot alter action groups in Code or other panels.
+
+## D-025 — Size projected layouts from the focused canvas
+
+Status: Accepted
+Date: 2026-08-24
+
+Rendered acceptance showed that `G` expands the application shell but keeps the graph's normal 1000 by 680 minimum layout. **Fit** is then limited by that old aspect ratio and centers a narrow SVG inside the wide focused canvas, leaving a large unused band below the projection controls.
+
+The renderer will derive only a projected layout's minimum width and height from the live graph viewport. Normal Flow, Focus, and Hierarchy layouts retain their existing dimensions, while content can still grow beyond the viewport when the graph requires it. A CSS offset, stretched SVG, or projection-specific renderer is not justified because the defect is the minimum layout geometry, not the shell or graph semantics.

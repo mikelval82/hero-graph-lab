@@ -190,6 +190,12 @@ Normal graph controls shall use progressive disclosure:
 
 The application shall use one neutral Graphite surface hierarchy, Emerald as the primary accent, and semantic colors only for observed, proposed, modified, removed, warning, and error states. Interface text shall use the system UI stack; the monospace stack remains for code, identifiers, and shortcut hints.
 
+### SFR-019 — Viewport-aware projected graph geometry
+
+While `G` owns projection focus, the active graph layout shall use the focused graph viewport as its minimum width and height. Flow, Focus, and Hierarchy positioning may grow beyond those dimensions when node content requires it, but shall not retain the smaller normal-workspace aspect ratio and center an unnecessarily narrow SVG in the focused canvas.
+
+Outside `G`, the existing normal graph minimum dimensions and layout behavior shall remain unchanged.
+
 ## Rendered-UI acceptance checks
 
 | ID | Scenario | Expected result |
@@ -233,6 +239,7 @@ The application shall use one neutral Graphite surface hierarchy, Emerald as the
 | UI-037 | Open and close `G` while manual canvas focus is active | Closing `G` preserves the user's manual canvas-focus state. |
 | UI-038 | Toggle Design mode and resize the graph panel | Design/draft commands appear only in Design mode; normal controls stay compact and accessible at narrow widths. |
 | UI-039 | Collapse Explorer and then restore it | The collapsed rail keeps its restore button visible and operable; typography and tree controls do not displace it. |
+| UI-040 | Open a sparse `G` projection on a wide viewport and use **Fit** | The projected SVG occupies the focused canvas with only the fit padding; no large unused band remains at the left below the projection controls. |
 
 ## Delivery sequence
 
