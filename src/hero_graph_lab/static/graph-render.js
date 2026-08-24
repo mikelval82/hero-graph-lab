@@ -4,8 +4,29 @@ function svgElement(tag, attributes = {}) {
   return element;
 }
 
+function graphMinimumSize({ projectionActive = false, compact = false, viewportWidth = 0, viewportHeight = 0, fitPadding = 32 } = {}) {
+  const normalWidth = compact ? 600 : 1000;
+  if (!projectionActive) return { width: normalWidth, height: 680 };
+  const availableWidth = viewportWidth > 0 ? viewportWidth - fitPadding : normalWidth;
+  const availableHeight = viewportHeight > 0 ? viewportHeight - fitPadding : 680;
+  return {
+    width: Math.max(normalWidth, availableWidth),
+    height: Math.max(480, availableHeight),
+  };
+}
+
+function graphCanvasMinimumSize() {
+  return graphMinimumSize({
+    projectionActive: Boolean(state.graphProjection),
+    compact: matchMedia("(max-width: 680px)").matches,
+    viewportWidth: graphViewport.clientWidth,
+    viewportHeight: graphViewport.clientHeight,
+    fitPadding: GRAPH_FIT_PADDING,
+  });
+}
+
 function graphWidth() {
-  return matchMedia("(max-width: 680px)").matches ? 600 : 1000;
+  return graphCanvasMinimumSize().width;
 }
 
 function graphTextScale() {
@@ -157,6 +178,7 @@ function orderColumns(columns, edges) {
 function flowLayout(nodes, edges) {
   const scale = graphTextScale();
   const { columnGap, rowGap } = graphLayoutMetrics(nodes);
+  const minimumSize = graphCanvasMinimumSize();
   const graphEdges = edges.filter((edge) => edge.status !== "removed");
   const levels = connectivityLevels(nodes, graphEdges);
   const structuralEdges = graphEdges.filter((edge) => edge.kind === "contains");
@@ -183,8 +205,8 @@ function flowLayout(nodes, edges) {
   const maxColumnLength = Math.max(...[...columns.values()].map((column) => column.length), 1);
   const horizontalMargin = 100 * scale;
   const verticalMargin = 125 * scale;
-  const width = Math.max(graphWidth(), horizontalMargin * 2 + maxLevel * columnGap);
-  const height = Math.max(680, verticalMargin * 2 + (maxColumnLength - 1) * rowGap);
+  const width = Math.max(minimumSize.width, horizontalMargin * 2 + maxLevel * columnGap);
+  const height = Math.max(minimumSize.height, verticalMargin * 2 + (maxColumnLength - 1) * rowGap);
   const positions = {};
   columns.forEach((column, level) => column.forEach((node, index) => {
     const x = maxLevel === 0 ? width / 2 : horizontalMargin + level * ((width - horizontalMargin * 2) / maxLevel);
@@ -197,6 +219,7 @@ function flowLayout(nodes, edges) {
 function structureLayout(nodes, edges) {
   const scale = graphTextScale();
   const { columnGap, rowGap: contentRowGap } = graphLayoutMetrics(nodes);
+  const minimumSize = graphCanvasMinimumSize();
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const children = new Map(nodes.map((node) => [node.id, []]));
   const childIds = new Set();
@@ -242,20 +265,21 @@ function structureLayout(nodes, edges) {
 
   roots.forEach((node) => place(node.id, 0));
   nodes.filter((node) => !visited.has(node.id)).sort((left, right) => left.label.localeCompare(right.label)).forEach((node) => place(node.id, 0));
-  const width = Math.max(graphWidth(), 220 * scale + maxDepth * levelGap);
-  const height = Math.max(680, topMargin * 2 + Math.max(nextRow - 1, 0) * rowGap);
+  const width = Math.max(minimumSize.width, 220 * scale + maxDepth * levelGap);
+  const height = Math.max(minimumSize.height, topMargin * 2 + Math.max(nextRow - 1, 0) * rowGap);
   return { width, height, positions };
 }
 
 function focusLayout(nodes, edges) {
   const scale = graphTextScale();
   const { maxWidth, columnGap, rowGap } = graphLayoutMetrics(nodes);
+  const minimumSize = graphCanvasMinimumSize();
   const selected = nodes.find((node) => node.id === state.selected);
   if (!selected) return flowLayout(nodes, edges);
   const outgoingIds = new Set(edges.filter((edge) => edge.source === selected.id).map((edge) => edge.target));
   const incomingIds = new Set(edges.filter((edge) => edge.target === selected.id && !outgoingIds.has(edge.source)).map((edge) => edge.source));
-  const width = Math.max(graphWidth(), 2 * columnGap + maxWidth);
-  const height = Math.max(680, 180 * scale + Math.max(incomingIds.size, outgoingIds.size, 1) * rowGap);
+  const width = Math.max(minimumSize.width, 2 * columnGap + maxWidth);
+  const height = Math.max(minimumSize.height, 180 * scale + Math.max(incomingIds.size, outgoingIds.size, 1) * rowGap);
   const positions = { [selected.id]: { x: width / 2, y: height / 2 } };
   const placeColumn = (nodeIds, x) => {
     const ids = [...nodeIds];
@@ -471,3 +495,5 @@ function render() {
     nodeLayer.append(group);
   });
 }
+
+if (typeof module !== "undefined" && module.exports) module.exports = { graphMinimumSize };
