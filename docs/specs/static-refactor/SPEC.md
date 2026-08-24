@@ -196,6 +196,12 @@ While `G` owns projection focus, the active graph layout shall use the focused g
 
 Outside `G`, the existing normal graph minimum dimensions and layout behavior shall remain unchanged.
 
+### SFR-020 — Wide directed columns in projected Focus
+
+While `G` renders a Focus projection, incoming nodes, the selected node, and outgoing nodes shall use the available horizontal span rather than remain clustered around the center by the normal fixed column gap. A one-sided projection shall place the selection and its related column on opposite sides; a two-sided projection shall retain the selection in the center.
+
+Normal Focus column placement shall remain unchanged.
+
 ## Rendered-UI acceptance checks
 
 | ID | Scenario | Expected result |
@@ -240,6 +246,7 @@ Outside `G`, the existing normal graph minimum dimensions and layout behavior sh
 | UI-038 | Toggle Design mode and resize the graph panel | Design/draft commands appear only in Design mode; normal controls stay compact and accessible at narrow widths. |
 | UI-039 | Collapse Explorer and then restore it | The collapsed rail keeps its restore button visible and operable; typography and tree controls do not displace it. |
 | UI-040 | Open a sparse `G` projection on a wide viewport and use **Fit** | The projected SVG occupies the focused canvas with only the fit padding; no large unused band remains at the left below the projection controls. |
+| UI-041 | Open `G` on a class with one-sided and two-sided collaborators | One-sided projections use two wide columns; two-sided projections use three wide columns; the normal Focus view retains its compact spacing. |
 
 ## Delivery sequence
 

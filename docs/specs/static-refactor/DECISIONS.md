@@ -203,3 +203,12 @@ Date: 2026-08-24
 Rendered acceptance showed that `G` expands the application shell but keeps the graph's normal 1000 by 680 minimum layout. **Fit** is then limited by that old aspect ratio and centers a narrow SVG inside the wide focused canvas, leaving a large unused band below the projection controls.
 
 The renderer will derive only a projected layout's minimum width and height from the live graph viewport. Normal Flow, Focus, and Hierarchy layouts retain their existing dimensions, while content can still grow beyond the viewport when the graph requires it. A CSS offset, stretched SVG, or projection-specific renderer is not justified because the defect is the minimum layout geometry, not the shell or graph semantics.
+
+## D-026 — Distribute projected Focus columns across the canvas
+
+Status: Accepted
+Date: 2026-08-24
+
+Post-change rendered acceptance showed that the projected SVG now fills the canvas but a class-collaboration projection still leaves most of it empty. The Focus layout always places incoming and outgoing nodes one fixed `columnGap` to either side of the selection; increasing the SVG dimensions therefore increases the unused space instead of the diagram.
+
+Only while `G` is active, Focus will use the available horizontal span as a directed two- or three-column diagram. If relationships exist on one side only, the selection and that side occupy opposite columns; if both exist, the selection remains central. Normal Focus keeps its established compact geometry. A force-directed renderer is not justified for this deterministic placement defect.
