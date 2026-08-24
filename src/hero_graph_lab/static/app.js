@@ -692,6 +692,18 @@ function updateTools() {
   globalThis.HeroCommands?.refresh();
 }
 
+function setGraphDesignMode(active) {
+  document.body.classList.toggle("graph-design-mode", Boolean(active));
+  const button = document.querySelector("#design-mode-toggle");
+  button.setAttribute("aria-pressed", String(Boolean(active)));
+  button.querySelector("span").textContent = active ? "Close design" : "Design";
+  button.title = active ? "Hide graph design tools" : "Show graph design tools";
+  requestAnimationFrame(() => {
+    updateGraphViewport();
+    render();
+  });
+}
+
 function clearCallTrace({ restoreViewport = false } = {}) {
   if (!state.callTrace) return;
   const returnView = state.callTrace.returnView;
@@ -1102,6 +1114,12 @@ document.querySelector("#collapse-tree").addEventListener("click", () => {
 document.querySelector("#hide-node").addEventListener("click", hideSelectedNode);
 document.querySelector("#lock-layout").addEventListener("click", toggleGraphLayoutLock);
 document.querySelector("#reset-view").addEventListener("click", resetGraphView);
+document.querySelector("#design-mode-toggle").addEventListener("click", (event) => {
+  setGraphDesignMode(event.currentTarget.getAttribute("aria-pressed") !== "true");
+});
+document.querySelector("#graph-more").addEventListener("click", (event) => {
+  if (event.target.closest("button")) event.currentTarget.removeAttribute("open");
+});
 
 const pythonTokenPattern = /(#[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b(?:from|import|class|def|return|if|else|elif|for|while|in|is|not|and|or|as|with|async|await|raise|try|except|finally|yield|lambda|pass|break|continue)\b|\b(?:True|False|None)\b|\b\d+(?:\.\d+)?\b)/g;
 

@@ -51,10 +51,32 @@
       <section id="graph-panel" class="canvas-shell" aria-label="Software graph">
         <header class="panel-heading">
           <div><span class="panel-kicker" id="graph-view-label">Flow Graph</span><strong id="graph-count"></strong></div>
-          <div class="graph-view-switch" role="group" aria-label="Graph view">
-            <button type="button" data-graph-view="structure" data-command="view.structure" aria-pressed="false">Hierarchy</button>
-            <button type="button" data-graph-view="flow" data-command="view.flow" aria-pressed="true">Flow</button>
-            <button type="button" data-graph-view="focus" data-command="view.focus" aria-pressed="false">Focus</button>
+          <div class="graph-header-actions">
+            <div class="graph-view-switch" role="group" aria-label="Graph view">
+              <button type="button" data-graph-view="structure" data-command="view.structure" aria-pressed="false">Hierarchy</button>
+              <button type="button" data-graph-view="flow" data-command="view.flow" aria-pressed="true">Flow</button>
+              <button type="button" data-graph-view="focus" data-command="view.focus" aria-pressed="false">Focus</button>
+            </div>
+            <button id="design-mode-toggle" class="graph-header-command" type="button" aria-pressed="false" title="Show graph design tools"><b aria-hidden="true">D</b><span>Design</span></button>
+            <button id="canvas-focus" class="graph-header-command" type="button" aria-pressed="false" title="Hide supporting panels"><b aria-hidden="true">&#9633;</b><span>Focus canvas</span></button>
+            <details id="graph-more" class="graph-more-menu">
+              <summary aria-label="More graph actions" title="More graph actions"><span aria-hidden="true">&#8230;</span></summary>
+              <div class="graph-more-menu-content" role="group" aria-label="More graph actions">
+                <button id="hide-node" class="graph-menu-button" type="button" disabled><b aria-hidden="true">H</b><span>Hide selection</span></button>
+                <button id="lock-layout" class="graph-menu-button" type="button" aria-pressed="false"><b aria-hidden="true">L</b><span>Lock view</span></button>
+                <button id="reset-view" class="graph-menu-button" type="button" disabled><b aria-hidden="true">o</b><span>Reset view</span></button>
+                <button id="shortcut-help" class="graph-menu-button" type="button" data-command="shortcuts.help"><b aria-hidden="true">?</b><span>Shortcuts</span></button>
+                <details class="design-legend">
+                  <summary>Legend</summary>
+                  <div class="design-legend-content">
+                    <div class="status-legend"><span><i class="status-sample observed"></i>Observed code</span><span><i class="status-sample proposed"></i>Proposed</span><span><i class="status-sample modified"></i>To modify</span><span><i class="status-sample removed"></i>To remove</span></div>
+                    <p class="legend-title">Relationship status</p>
+                    <div class="relation-status-legend"><span><i class="relation-sample observed"></i>Code</span><span><i class="relation-sample proposed"></i>New</span><span><i class="relation-sample modified"></i>Edit</span><span><i class="relation-sample removed"></i>Delete</span></div>
+                    <div class="legend"><span><i class="swatch package"></i>Area</span><span><i class="swatch module"></i>Module</span><span><i class="swatch class"></i>Class</span><span><i class="swatch function"></i>Function</span><span><i class="line-sample"></i>Calls</span></div>
+                  </div>
+                </details>
+              </div>
+            </details>
           </div>
         </header>
         <div class="scope-bar">
@@ -76,34 +98,26 @@
           <div class="graph-tool-group" role="group" aria-labelledby="graph-tools-navigate">
             <span class="graph-tool-group-label" id="graph-tools-navigate">Navigate</span>
             <div class="graph-tool-actions">
-              <button id="trace-calls" class="graph-tool-button" type="button" data-command="calls.trace" aria-pressed="false" disabled><b aria-hidden="true">&#8594;</b><span>Trace calls</span></button>
-              <button id="expand-node" class="graph-tool-button" type="button" data-command="node.expand" disabled><b aria-hidden="true">+</b><span>Expand</span></button>
-              <button id="collapse-node" class="graph-tool-button" type="button" data-command="node.collapse" disabled><b aria-hidden="true">-</b><span>Collapse</span></button>
+              <button id="trace-calls" class="graph-tool-button" type="button" data-command="calls.trace" aria-pressed="false" title="Trace calls (T)" disabled><b aria-hidden="true">&#8594;</b><span>Trace calls</span></button>
+              <button id="expand-node" class="graph-tool-button" type="button" data-command="node.expand" title="Expand or follow (E)" disabled><b aria-hidden="true">+</b><span>Expand</span></button>
+              <button id="collapse-node" class="graph-tool-button" type="button" data-command="node.collapse" title="Collapse or go back" disabled><b aria-hidden="true">-</b><span>Collapse</span></button>
             </div>
           </div>
           <div class="graph-tool-group" role="group" aria-labelledby="graph-tools-inspect">
             <span class="graph-tool-group-label" id="graph-tools-inspect">Inspect</span>
             <div class="graph-tool-actions">
-              <button id="explain-node" class="graph-tool-button" type="button" data-command="selection.explain" disabled><b aria-hidden="true">I</b><span>Explain</span></button>
-              <button id="diagram-node" class="graph-tool-button" type="button" data-command="selection.diagram" disabled><b aria-hidden="true">M</b><span>Diagram</span></button>
-              <button id="project-node" class="graph-tool-button" type="button" data-command="selection.project" disabled><b aria-hidden="true">G</b><span>Projection</span></button>
+              <button id="explain-node" class="graph-tool-button" type="button" data-command="selection.explain" title="Explain selection (I)" disabled><b aria-hidden="true">I</b><span>Explain</span></button>
+              <button id="diagram-node" class="graph-tool-button" type="button" data-command="selection.diagram" title="Open Mermaid diagrams (M)" disabled><b aria-hidden="true">M</b><span>Diagram</span></button>
+              <button id="project-node" class="graph-tool-button" type="button" data-command="selection.project" title="Open interactive projection (G)" disabled><b aria-hidden="true">G</b><span>Projection</span></button>
             </div>
           </div>
           <div class="graph-tool-group design-tools" role="group" aria-labelledby="design-tools-title">
             <span class="graph-tool-group-label" id="design-tools-title">Design</span>
             <div class="graph-tool-actions">
-              <button id="add-node" class="graph-tool-button" type="button" data-command="node.add"><b aria-hidden="true">+</b><span>Add node</span></button>
-              <button id="add-relation" class="graph-tool-button" type="button" data-command="relation.add" disabled><b aria-hidden="true">R</b><span>Add relation</span></button>
-              <button id="edit-node" class="graph-tool-button" type="button" disabled><b aria-hidden="true">I</b><span>Edit</span></button>
-              <button id="delete-node" class="graph-tool-button destructive" type="button" data-command="selection.delete" disabled><b aria-hidden="true">x</b><span>Delete</span></button>
-            </div>
-          </div>
-          <div class="graph-tool-group" role="group" aria-labelledby="graph-tools-view">
-            <span class="graph-tool-group-label" id="graph-tools-view">View</span>
-            <div class="graph-tool-actions">
-              <button id="hide-node" class="graph-tool-button" type="button" disabled><b aria-hidden="true">H</b><span>Hide</span></button>
-              <button id="lock-layout" class="graph-tool-button" type="button" aria-pressed="false"><b aria-hidden="true">L</b><span>Lock view</span></button>
-              <button id="reset-view" class="graph-tool-button" type="button" disabled><b aria-hidden="true">o</b><span>Reset view</span></button>
+              <button id="add-node" class="graph-tool-button" type="button" data-command="node.add" title="Add node proposal (A)"><b aria-hidden="true">+</b><span>Add node</span></button>
+              <button id="add-relation" class="graph-tool-button" type="button" data-command="relation.add" title="Add relation proposal (R)" disabled><b aria-hidden="true">R</b><span>Add relation</span></button>
+              <button id="edit-node" class="graph-tool-button" type="button" title="Edit selection" disabled><b aria-hidden="true">I</b><span>Edit</span></button>
+              <button id="delete-node" class="graph-tool-button destructive" type="button" data-command="selection.delete" title="Delete or restore selection" disabled><b aria-hidden="true">x</b><span>Delete</span></button>
             </div>
           </div>
           <div class="graph-tool-group graph-draft-tools" role="group" aria-labelledby="graph-tools-draft">
@@ -112,18 +126,6 @@
               <button id="sync-design" class="graph-draft-action sync-design" type="button" disabled>Save map</button>
               <button id="reset-design" class="graph-draft-action destructive" type="button" title="Discard all proposals">Discard draft</button>
             </div>
-          </div>
-          <div class="graph-toolbar-utilities" role="group" aria-label="Graph help">
-            <button id="shortcut-help" class="graph-tool-button" type="button" data-command="shortcuts.help"><b aria-hidden="true">?</b><span>Shortcuts</span></button>
-            <details class="design-legend">
-              <summary>Legend</summary>
-              <div class="design-legend-content">
-                <div class="status-legend"><span><i class="status-sample observed"></i>Observed code</span><span><i class="status-sample proposed"></i>Proposed</span><span><i class="status-sample modified"></i>To modify</span><span><i class="status-sample removed"></i>To remove</span></div>
-                <p class="legend-title">Relationship status</p>
-                <div class="relation-status-legend"><span><i class="relation-sample observed"></i>Code</span><span><i class="relation-sample proposed"></i>New</span><span><i class="relation-sample modified"></i>Edit</span><span><i class="relation-sample removed"></i>Delete</span></div>
-                <div class="legend"><span><i class="swatch package"></i>Area</span><span><i class="swatch module"></i>Module</span><span><i class="swatch class"></i>Class</span><span><i class="swatch function"></i>Function</span><span><i class="line-sample"></i>Calls</span></div>
-              </div>
-            </details>
           </div>
         </div>
         <div id="graph-viewport" class="graph-viewport" tabindex="0" aria-label="Graph canvas. Drag the background to pan and use Control plus mouse wheel to zoom.">

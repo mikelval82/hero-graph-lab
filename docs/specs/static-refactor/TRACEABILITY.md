@@ -20,7 +20,7 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | SFR-014 | D-020 | Semantic control groups and content-driven graph panel layout in `index.html` and `styles.css` | Served markup/style contract; 22 Node tests; 41 Python tests; all static JavaScript syntax valid | UI-030 through UI-032 pending because browser control is unavailable | In progress |
 | SFR-015 | D-021 | Canvas-first v2 layout profile and temporary manual focus in `panel-layout.js` | Default-layout Node test; served focus lifecycle contract; 22 Node and 8 focused Python tests | UI-033 and UI-034 pending | In progress |
 | SFR-016 | D-022 | Projection-owned focus lifecycle in `graph-projection.js`; focused projection CSS; projection Fit control | Served projection/layout integration contract; 22 Node and 8 focused Python tests | UI-035 through UI-037 pending | In progress |
-| SFR-017 | D-023 | Contextual/Design/overflow controls and Graphite + Emerald tokens in `index.html` and `styles.css` | Served UI contract pending | UI-038 pending | Planned |
+| SFR-017 | D-023 | Contextual/Design/overflow controls in `index.html` and `app.js`; Graphite + Emerald tokens and container-responsive controls in `styles.css` | Served UI contract; all static JavaScript syntax valid; 22 Node tests; 41 Python tests | UI-038 pending because browser control is unavailable | In progress |
 
 ## Evidence log
 
@@ -67,6 +67,7 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | 2026-08-14 | post-`c4be50e` | Playwright UI-028 | `G` generated a projection containing the proposed module and functions, but focus remained on `BODY`; immediate `Esc` was ignored and pointer-driven **Restore view** was required |
 | 2026-08-24 | pre-SFR-014 commit | Semantic Flow Graph control implementation | All static JavaScript syntax valid; 22 Node tests; 41 Python tests; `git diff --check` clean. Rendered UI-030 through UI-032 remain pending because the browser plugin rejected its installed service path as untrusted. |
 | 2026-08-24 | pre-SFR-015/SFR-016 commit | Canvas-first layout and projection-owned focus | 22 Node tests and 8 focused Python server tests passed; `git diff --check` clean. Browser-visible layout restoration remains pending. |
+| 2026-08-24 | pre-SFR-017 commit | Contextual tools and Graphite + Emerald visual system | All static JavaScript syntax valid; 22 Node tests; 41 Python tests; active server returned HTTP 200 with canvas-focus, Design-mode, and projection-Fit controls; `git diff --check` clean. UI-038 remains pending. |
 
 ## Post-refactor size evidence
 

@@ -264,6 +264,7 @@
         const manuallyFocused = canvasFocusActive("manual");
         button.setAttribute("aria-pressed", String(manuallyFocused));
         button.querySelector("span").textContent = manuallyFocused ? "Restore layout" : "Focus canvas";
+        button.title = manuallyFocused ? "Restore supporting panels" : "Hide supporting panels";
       }
     }
 
