@@ -461,6 +461,8 @@ class LabServerTest(TestCase):
                 self.assertNotIn("body.explorer-collapsed .panel-heading-actions {", styles)
                 self.assertIn("body.graph-design-mode .design-tools", styles)
                 self.assertIn("@container (max-width: 720px)", styles)
+                self.assertIn("@media (max-width: 980px)", styles)
+                self.assertNotIn("@media (max-width: 900px)", styles)
                 self.assertIn(".graph-more-menu-content { position: absolute", styles)
                 self.assertIn(".workplan-list", styles)
                 self.assertIn(".document-group-list", styles)

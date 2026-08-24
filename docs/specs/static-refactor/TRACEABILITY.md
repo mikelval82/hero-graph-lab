@@ -28,7 +28,7 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | SFR-022 | D-028 | Total projected Focus strategy in `graph-render.js` | 2 direct-versus-multi-hop strategy tests; 30 Node tests | UI-043 passed: all 12 generated class nodes were positioned and rendered with no status or console error | Verified |
 | SFR-023 | D-029 | Centered content-aware projected column span in `graph-render.js` | 2 span-policy tests; 10 focused renderer tests; 32 Node tests; 41 Python tests | UI-044 passed at 1920×900; dense class projection regression also passed | Verified |
 | SFR-024 | D-030 | Final focus-mode grid precedence in `styles.css` | Served `!important` precedence contract; 32 Node tests; 41 Python tests | UI-045 passed at 1920 pixels and panel collapse state restored after closing `G` | Verified |
-| SFR-025 | D-031 | Responsive desktop-to-stacked breakpoint in `styles.css` | Breakpoint contract pending | UI-046 pre-fix reproduced 16–76 pixels of hidden right-hand content between 961 and 901 pixels | In progress |
+| SFR-025 | D-031 | Responsive desktop-to-stacked breakpoint in `styles.css` | Focused red/green server contract; 32 Node tests; 41 Python tests | UI-046 passed from 1000 through 680 pixels in normal and `G` layouts with zero horizontal document overflow | Verified |
 
 ## Evidence log
 
@@ -87,6 +87,7 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | 2026-08-24 | pre-SFR-024 fix | Playwright focus/collapse matrix at 1920, 1250, 900, and 680 pixels | Every single-panel collapse and manual-focus combination used the full viewport, but Explorer + Code + Inspector collapsed together overrode projection focus at every width: workspace 38 pixels and viewport 55 pixels. |
 | 2026-08-24 | post-SFR-024 fix | Playwright UI-045 exact all-collapsed Call graph at 1920×900 | Main, workspace, graph panel, and viewport each measured x=0 / width=1920; the two nodes rendered between x=396 and x=1509. Restore removed projection focus while preserving all three collapsed classes; zero console errors or warnings. Final suites: 32 Node and 41 Python tests passed. |
 | 2026-08-24 | pre-SFR-025 fix | Playwright UI-046 intermediate-width matrix | The desktop shell fit at 962 pixels and stacked correctly at 900, but widths between those breakpoints overflowed horizontally: 16 pixels at 961, 27 at 950, 47 at 930, and 76 at 901. The Inspector ended at x=962 outside Chrome's visible viewport. |
+| 2026-08-24 | post-SFR-025 fix | Playwright UI-046 responsive boundary and `G` regression | Normal layout had zero document overflow at 1000, 980, 950, 930, 901, and 900 pixels; at 980 and below Explorer, workspace, and Inspector each matched the visible client width. The exact two-node `G` projection also kept main, workspace, graph panel, and viewport at full width from 1000 through 680 pixels, with zero console warnings or errors. Final suites: 32 Node and 41 Python tests passed. |
 
 ## Post-refactor size evidence
 
