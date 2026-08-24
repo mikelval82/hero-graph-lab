@@ -146,6 +146,18 @@ Agent proposals shall remain bounded graph-design actions with an explicit persi
 - If a proposed subtree contains any non-proposed descendant, removal is refused rather than deleting extracted/modified evidence or leaving an orphan.
 - These corrections remain in the existing `app.js` coordination boundary; no new module is introduced without evidence of reusable proposal-domain logic.
 
+### SFR-014 — Semantic and responsive Flow Graph controls
+
+The Flow Graph header shall organize commands by user intent rather than implementation history:
+
+- navigation actions group **Trace calls**, **Expand/Follow**, and **Collapse/Back**;
+- inspection actions group **Explain**, Mermaid **Diagram** (`M`), and interactive **Projection** (`G`);
+- design actions group **Add node**, **Add relation**, **Edit**, and **Delete/Restore**;
+- view actions group **Hide**, **Lock view**, and **Reset view**;
+- draft persistence exposes its status, **Save map**, and **Discard draft** without hiding them inside the legend.
+
+The header and graph viewport shall use content-driven layout rather than fixed vertical offsets. Tool groups may wrap as units when the resizable graph panel narrows, but individual commands must remain in their semantic group. Existing element IDs, command bindings, shortcuts, enabled states, and `M`/`G` behavior shall remain unchanged.
+
 ## Rendered-UI acceptance checks
 
 | ID | Scenario | Expected result |
@@ -179,6 +191,9 @@ Agent proposals shall remain bounded graph-design actions with an explicit persi
 | UI-027 | Try to delete a proposed parent containing a non-proposed descendant | Removal is refused with an actionable status and the graph remains unchanged. |
 | UI-028 | Open `G` from a proposed node and immediately press `Esc` | The projection restores its source view without requiring a click inside the newly rendered graph. |
 | UI-029 | Ask Propose mode for a module, two functions, and an existing-component relationship | The first accepted batch uses those requested node kinds and includes the explicit relationship; it does not require a corrective second prompt. |
+| UI-030 | Resize the Flow Graph from a wide split to its minimum supported width | Semantic tool groups wrap without clipping, overlapping the scope bar, or covering the graph viewport. |
+| UI-031 | Select nodes across Flow, Focus, and `G` projection states | Existing command labels and enabled/disabled state transitions remain correct in their new groups. |
+| UI-032 | Create a local proposal draft | Draft status, **Save map**, and **Discard draft** are visible outside **Legend**; **Delete** remains visually distinct from **Hide**. |
 
 ## Delivery sequence
 

@@ -132,19 +132,8 @@ body.resizing-panels { cursor: col-resize; -webkit-user-select: none; user-selec
 .tree-row.proposed .tree-item-label { color: var(--relation-proposed); }
 .tree-row.modified .tree-item-label { color: var(--relation-modified); }
 .tree-row.removed .tree-item-label { color: var(--relation-removed); text-decoration: line-through; opacity: .65; }
-.design-tools { flex: 0 0 auto; padding: 18px 14px 20px; }
 .section-heading { display: flex; align-items: baseline; justify-content: space-between; }
-.design-commands { display: flex; gap: 8px; }
-.reset-button { padding: 2px; border: 0; color: var(--muted); background: transparent; font: 9px var(--mono); text-decoration: underline; }
-.reset-button:disabled { color: #abb2ae; cursor: not-allowed; text-decoration: none; }
 .sync-design:not(:disabled) { color: var(--relation-proposed); font-weight: 700; }
-.sync-status { min-height: 12px; margin: -4px 0 9px; color: var(--muted); font: 8px var(--mono); }
-.tool-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
-.tool-button { min-width: 0; display: grid; place-items: center; gap: 4px; padding: 9px 3px; color: var(--ink); border: 1px solid var(--button-border); background: var(--button-surface); font-size: 9px; font-weight: 600; }
-.tool-button b { font: 16px var(--mono); }
-.tool-button:hover:not(:disabled) { border-color: var(--muted); background: var(--button-hover); }
-.tool-button:disabled { color: #7b8781; background: #e3e7e4; opacity: .72; cursor: not-allowed; }
-.tool-button.destructive:not(:disabled) b { color: var(--danger); }
 .status-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 4px; margin-top: 12px; color: var(--muted); font-size: 8px; }
 .status-legend span { display: flex; align-items: center; gap: 5px; }
 .status-sample { width: 14px; height: 8px; border: 2px solid var(--relation-observed); }
@@ -164,9 +153,9 @@ body.resizing-panels { cursor: col-resize; -webkit-user-select: none; user-selec
 .swatch.package { background: var(--package); } .swatch.module { background: var(--module); } .swatch.class { background: var(--class); } .swatch.function { background: var(--function); }
 .line-sample { width: 14px; border-top: 2px dashed var(--relation-observed); }
 
-.canvas-shell { position: relative; min-width: 0; overflow: hidden; background: var(--graph-surface); box-shadow: inset 0 3px var(--graph-accent); }
+.canvas-shell { position: relative; min-width: 0; overflow: hidden; display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); background: var(--graph-surface); box-shadow: inset 0 3px var(--graph-accent); }
 .panel-heading { position: absolute; z-index: 4; inset: 0 0 auto; min-height: 54px; display: flex; align-items: center; justify-content: space-between; padding: 9px 16px; background: rgba(248, 250, 247, .97); border-bottom: 1px solid var(--line); }
-.canvas-shell > .panel-heading { min-height: 142px; align-items: flex-start; justify-content: flex-start; gap: 18px; padding-right: 16px; background: var(--graph-header); border-bottom-color: var(--button-border); }
+.canvas-shell > .panel-heading { position: relative; inset: auto; min-height: 54px; align-items: center; justify-content: flex-start; gap: 18px; padding-right: 16px; background: var(--graph-header); border-bottom-color: var(--button-border); }
 .panel-heading > div { min-width: 0; display: grid; gap: 2px; }
 .panel-heading strong { overflow: hidden; font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .panel-heading small { overflow: hidden; color: #aebcb6; font: 9px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
@@ -177,10 +166,10 @@ body.resizing-panels { cursor: col-resize; -webkit-user-select: none; user-selec
 .graph-view-switch button:last-child { border-right: 1px solid var(--line); border-radius: 0 3px 3px 0; }
 .graph-view-switch button:hover { color: var(--ink); background: var(--button-hover); }
 .graph-view-switch button[aria-pressed="true"] { color: white; background: var(--accent); border-color: var(--accent); }
-.scope-bar { position: absolute; z-index: 3; inset: 152px 16px auto; height: 32px; display: flex; align-items: stretch; gap: 8px; pointer-events: none; }
+.scope-bar { position: relative; z-index: 3; inset: auto; min-height: 48px; display: flex; align-items: stretch; flex-wrap: wrap; gap: 6px; padding: 8px 10px; background: var(--graph-header); border-bottom: 1px solid var(--button-border); }
 .scope-up { width: 32px; flex: 0 0 auto; padding: 0; color: var(--ink); background: var(--button-surface); border: 1px solid var(--button-border); pointer-events: auto; }
 .scope-up:disabled { color: #7b8781; opacity: .72; cursor: not-allowed; }
-.scope-breadcrumbs { min-width: 0; display: flex; align-items: stretch; overflow-x: auto; background: var(--panel); border: 1px solid var(--button-border); pointer-events: auto; }
+.scope-breadcrumbs { min-width: 80px; flex: 1 1 140px; display: flex; align-items: stretch; overflow-x: auto; background: var(--panel); border: 1px solid var(--button-border); pointer-events: auto; }
 .scope-bar .font-size-controls { pointer-events: auto; }
 .scope-crumb { flex: 0 0 auto; padding: 0 10px; color: var(--muted); background: transparent; border: 0; border-right: 1px solid var(--line); font: 9px var(--mono); }
 .scope-crumb.origin-crumb { color: var(--ink); background: var(--accent-soft); border-right-color: var(--graph-accent); font-weight: 700; }
@@ -195,39 +184,38 @@ body.resizing-panels { cursor: col-resize; -webkit-user-select: none; user-selec
 .graph-zoom #zoom-fit { width: 36px; }
 .graph-zoom button:hover:not(:disabled) { background: var(--button-hover); }
 .graph-zoom button:disabled { color: #7b8781; cursor: not-allowed; }
-.graph-control-strip { position: absolute; z-index: 5; top: 54px; right: 10px; left: 10px; display: flex; align-items: flex-start; justify-content: flex-start; flex-wrap: wrap; gap: 5px; }
-.graph-toolbar { display: flex; gap: 3px; }
-.graph-toolbar button { min-width: 56px; height: 38px; display: grid; grid-template-columns: 13px auto; place-content: center; align-items: center; gap: 3px; padding: 0 6px; color: var(--ink); background: var(--button-surface); border: 1px solid var(--button-border); font-size: 9px; font-weight: 600; }
-.graph-toolbar button:last-child { min-width: 72px; }
-.graph-toolbar button b { color: var(--ink); font: 13px var(--mono); }
-.graph-toolbar button:hover:not(:disabled) { color: var(--ink); background: var(--button-hover); border-color: var(--muted); }
-.graph-toolbar button:disabled { color: #7b8781; background: #e3e7e4; opacity: .72; cursor: not-allowed; }
-.graph-toolbar button[aria-pressed="true"] { color: white; background: var(--ink); border-color: var(--ink); }
-.graph-toolbar button[aria-pressed="true"] b { color: var(--function); }
+.graph-control-strip { position: relative; z-index: 5; inset: auto; min-width: 0; display: flex; align-items: flex-end; flex-wrap: wrap; gap: 7px 10px; padding: 7px 10px 9px; background: var(--graph-header); border-bottom: 1px solid var(--button-border); }
+.graph-tool-group { min-width: 0; max-width: 100%; flex: 0 1 auto; display: grid; gap: 3px; padding-right: 10px; border-right: 1px solid var(--button-border); }
+.graph-tool-group-label { display: flex; align-items: baseline; gap: 5px; color: var(--muted); font: 700 8px var(--mono); letter-spacing: .04em; text-transform: uppercase; }
+.graph-tool-actions { min-width: 0; display: flex; flex-wrap: wrap; gap: 3px; }
+.graph-tool-button, .graph-draft-action { min-width: 48px; height: 34px; display: grid; grid-template-columns: 12px auto; place-content: center; align-items: center; gap: 3px; padding: 0 5px; color: var(--ink); background: var(--button-surface); border: 1px solid var(--button-border); font-size: 8px; font-weight: 600; white-space: nowrap; }
+.graph-tool-button b { color: var(--ink); font: 12px var(--mono); }
+.graph-tool-button:hover:not(:disabled), .graph-draft-action:hover:not(:disabled) { color: var(--ink); background: var(--button-hover); border-color: var(--muted); }
+.graph-tool-button:disabled, .graph-draft-action:disabled { color: #7b8781; background: #e3e7e4; opacity: .72; cursor: not-allowed; }
+.graph-tool-button[aria-pressed="true"] { color: white; background: var(--ink); border-color: var(--ink); }
+.graph-tool-button[aria-pressed="true"] b { color: var(--function); }
+.graph-tool-button.destructive:not(:disabled), .graph-draft-action.destructive:not(:disabled) { border-color: var(--danger); }
+.graph-tool-button.destructive:not(:disabled) b, .graph-draft-action.destructive:not(:disabled) { color: var(--danger); }
 #lock-layout[aria-pressed="true"] { color: white; background: var(--graph-accent); border-color: var(--graph-accent); }
 #lock-layout[aria-pressed="true"] b { color: white; }
-#hide-node:not(:disabled) b { color: var(--relation-removed); }
-.graph-control-strip .design-tools { min-width: 0; display: flex; align-items: center; gap: 3px; padding: 0; }
-.graph-control-strip .design-tools > .eyebrow { margin: 0 4px 0 0; color: var(--ink); font-size: 9px; font-weight: 700; }
-.graph-control-strip .tool-grid { display: flex; gap: 3px; }
-.graph-control-strip .tool-button { width: 48px; height: 38px; display: grid; grid-template-columns: 11px auto; place-content: center; align-items: center; gap: 2px; padding: 0 4px; font-size: 8px; }
-.graph-control-strip .tool-button b { font-size: 13px; }
+.graph-draft-tools .sync-status { color: var(--ink); font: 400 8px var(--mono); letter-spacing: 0; text-transform: none; }
+.graph-draft-action { grid-template-columns: auto; padding-inline: 7px; }
+.graph-toolbar-utilities { flex: 0 0 auto; display: flex; align-items: flex-end; gap: 3px; }
 .design-legend { position: relative; align-self: stretch; }
-.design-legend summary { height: 38px; display: grid; place-items: center; padding: 0 7px; color: var(--ink); background: var(--button-surface); border: 1px solid var(--button-border); font-size: 9px; font-weight: 600; list-style: none; cursor: pointer; }
+.design-legend summary { height: 34px; display: grid; place-items: center; padding: 0 7px; color: var(--ink); background: var(--button-surface); border: 1px solid var(--button-border); font-size: 8px; font-weight: 600; list-style: none; cursor: pointer; }
 .design-legend summary::-webkit-details-marker { display: none; }
 .design-legend[open] summary { color: white; background: var(--ink); border-color: var(--ink); }
 .design-legend-content { position: absolute; top: 43px; right: 0; width: 230px; padding: 13px; color: var(--ink); background: rgba(248, 250, 247, .99); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(24, 35, 31, .16); }
-.design-legend-content .design-commands { justify-content: flex-end; }
-.design-legend-content .sync-status { margin: 2px 0 9px; }
 .design-legend-content .status-legend { margin-top: 0; }
 .design-legend-content .legend { margin-top: 16px; }
-.graph-viewport { position: absolute; inset: 192px 0 0; overflow: auto; cursor: grab; outline: 0; touch-action: none; scrollbar-color: var(--button-border) var(--graph-surface); scrollbar-width: thin; }
+.graph-viewport { position: relative; grid-row: 4; min-width: 0; min-height: 0; overflow: auto; cursor: grab; outline: 0; touch-action: none; scrollbar-color: var(--button-border) var(--graph-surface); scrollbar-width: thin; }
 .graph-viewport:focus-visible { box-shadow: inset 0 0 0 2px var(--graph-accent); }
 .graph-viewport.panning { cursor: grabbing; -webkit-user-select: none; user-select: none; }
 .graph-viewport .graph-node, .graph-viewport .edge-label, .graph-viewport .connector, .graph-viewport .connector-halo { cursor: pointer; }
 .graph-command-status { position: absolute; z-index: 6; right: 10px; bottom: 10px; max-width: min(440px, calc(100% - 20px)); margin: 0; padding: 7px 9px; color: white; background: rgba(24, 35, 31, .9); font: 11px/1.4 var(--mono); pointer-events: none; }
 .graph-command-status:empty { display: none; }
-.graph-projection-bar { position: absolute; z-index: 7; top: 198px; right: 10px; left: 10px; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: 6px; padding: 7px 8px; color: white; background: rgba(24, 35, 31, .94); border-left: 4px solid var(--function); box-shadow: 0 3px 12px rgba(24, 35, 31, .2); }
+#empty-state { z-index: 2; grid-row: 4; grid-column: 1; place-self: center; }
+.graph-projection-bar { position: relative; z-index: 7; grid-row: 4; grid-column: 1; align-self: start; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: 6px; margin: 6px 10px; padding: 7px 8px; color: white; background: rgba(24, 35, 31, .94); border-left: 4px solid var(--function); box-shadow: 0 3px 12px rgba(24, 35, 31, .2); }
 .graph-projection-bar[hidden] { display: none; }
 .graph-projection-bar > div { min-width: 0; display: grid; gap: 2px; }
 .graph-projection-bar strong, .graph-projection-bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -630,17 +618,15 @@ textarea { min-height: 110px; resize: vertical; }
 
 .eyebrow,
 .quiet-command,
-.reset-button,
-.tool-button,
 .panel-heading small,
 .panel-kicker,
 .graph-view-switch button,
 .scope-crumb,
 .graph-zoom button,
 .graph-zoom output,
-.graph-toolbar button,
-.graph-control-strip .design-tools > .eyebrow,
-.graph-control-strip .tool-button,
+.graph-tool-button,
+.graph-draft-action,
+.graph-tool-group-label,
 .design-legend summary,
 .node-kind,
 .inspector-tabs button,
@@ -798,8 +784,9 @@ body.explorer-collapsed.inspector-collapsed main { grid-template-columns: 38px 0
   body.code-collapsed #workspace-splitter { display: none; }
   body.code-collapsed .code-panel { grid-template-rows: 38px; }
   body.code-collapsed .code-panel-heading { min-height: 38px; height: 38px; border-bottom-width: 1px; }
-  .graph-toolbar button { min-width: 50px; padding: 0 4px; }
-  .graph-toolbar button:last-child { min-width: 64px; }
+  .graph-control-strip { gap-inline: 7px; padding-inline: 7px; }
+  .graph-tool-group { padding-right: 7px; }
+  .graph-tool-button, .graph-draft-action { min-width: 46px; padding-inline: 4px; }
   .mission-form-row { grid-template-columns: 1fr; }
   .mission-file-row { align-items: stretch; flex-direction: column; }
   .shortcut-list { grid-template-columns: 1fr; }

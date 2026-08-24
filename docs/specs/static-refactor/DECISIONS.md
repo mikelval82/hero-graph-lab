@@ -157,3 +157,12 @@ Date: 2026-08-14
 The first Gemini E2E request explicitly asked for a module, functional elements, and relationships with existing components, but the model staged a package plus two classes and no explicit relationship. The tool schemas were valid and the second, more prescriptive prompt produced the intended structure, so the defect is in instruction fidelity rather than graph mutation.
 
 Propose mode will explicitly require preservation of user-requested node kinds and relationships. A general natural-language validator or automatic rollback is not justified: semantic intent is broader than the bounded graph schema, and every proposal remains reviewable and reversible in the UI.
+
+## D-020 — Replace fixed Flow Graph offsets with semantic layout
+
+Status: Accepted
+Date: 2026-08-24
+
+The current visualization toolbar requires roughly 660 pixels before the separate design controls, while the resizable graph column supports widths down to 250 pixels. Because the header, scope bar, toolbar, projection bar, and viewport use independent fixed offsets, wrapping can overlap or clip controls instead of increasing the header's height.
+
+The graph panel will become a small content-driven CSS grid. Existing buttons will be regrouped in the HTML without changing IDs or JavaScript command ownership. Group-level wrapping is preferred over a new component framework, icon dependency, overflow menu, or JavaScript measurement logic. This resolves the observed information architecture and sizing defect at the existing HTML/CSS boundary.
