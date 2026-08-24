@@ -218,6 +218,16 @@ The `G` viewport shall continue to occupy the full focused workspace, but a spar
 
 Manual canvas focus and projection-owned `G` focus shall override every combination of persisted Explorer, Code, and Inspector collapsed classes, including the all-collapsed state. The focused workspace and graph panel shall occupy the full application width while preserving, but not applying, the stored panel geometry until focus closes.
 
+### SFR-025 — No hidden right-hand region at intermediate widths
+
+The application shell shall not require more horizontal space than Chrome's
+visible viewport. Before the desktop three-region layout reaches its minimum
+width, Graph Lab shall switch to the existing stacked responsive layout. This
+transition shall preserve the full Explorer, workspace, and Inspector width
+without introducing document-level horizontal scrolling. Canvas focus and `G`
+projection focus shall continue to occupy the complete viewport at the same
+widths.
+
 ## Rendered-UI acceptance checks
 
 | ID | Scenario | Expected result |
@@ -267,6 +277,7 @@ Manual canvas focus and projection-owned `G` focus shall override every combinat
 | UI-043 | Open `G` on a class whose generated collaborators include indirect hops | Every generated node renders, every relationship has positioned endpoints, and no missing-position error appears. |
 | UI-044 | Open the two-node `_index_package_symbols` Call graph at 1920×900 | The full viewport and centered projection bar remain visible; both nodes and their relationship form a readable centered composition instead of touching opposite edges. |
 | UI-045 | Collapse Explorer, Code, and Inspector, then open `G` | The workspace, graph panel, and graph viewport still span the full application width; closing `G` restores the three collapsed rails. |
+| UI-046 | Resize Chrome through 1000, 980, 950, 930, 901, and 900 pixels in the normal and `G` layouts | No application region extends beyond the visible viewport and the document has no horizontal overflow; the existing stacked layout activates before the desktop grid reaches its 962-pixel minimum. |
 
 ## Delivery sequence
 

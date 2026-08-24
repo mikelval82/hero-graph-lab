@@ -248,3 +248,20 @@ Date: 2026-08-24
 Rendered acceptance reproduced the 45-pixel graph shown by the user only when Explorer, Code, and Inspector were all collapsed before entering `G`. The combined `body.explorer-collapsed.inspector-collapsed main` selector has greater specificity than `body.projection-focus-mode main`, so its five-column template survives even though the supporting panels are hidden. The workspace remains in the 38-pixel Explorer rail and the graph viewport measures 55 pixels.
 
 Canvas and projection focus are intentional temporary overrides of persisted layout geometry. Their final `main` and `.workspace` grid templates will therefore use `!important`, narrowly scoped to these focus classes, so every stored collapse combination and responsive rule yields to the focused canvas. Panel state itself remains unchanged and returns after focus closes.
+
+## D-031 — Enter the stacked layout before the desktop minimum overflows
+
+Status: Accepted
+Date: 2026-08-24
+
+Browser measurement found a responsive gap between 901 and 961 pixels. The
+desktop grid requires 230 pixels for Explorer, 480 for the workspace, 240 for
+Inspector, and 12 for its splitters: 962 pixels in total. The stacked layout
+does not activate until 900 pixels, so at a 901-pixel Chrome viewport the
+Inspector ends at x=962 and as much as 76 pixels are hidden to the right.
+
+The existing stacked layout will activate at 980 pixels, just before the
+desktop grid loses its usable minimum after scrollbar space is considered.
+This reuses the established responsive behavior and avoids adding another
+layout variant, JavaScript measurement, or overflow clipping that would merely
+hide inaccessible controls.
