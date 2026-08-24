@@ -22,10 +22,10 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | SFR-016 | D-022 | Projection-owned focus lifecycle in `graph-projection.js`; focused projection CSS; projection Fit control | Served projection/layout integration contract; 22 Node and 8 focused Python tests | UI-035 through UI-037 pending | In progress |
 | SFR-017 | D-023 | Contextual/Design/overflow controls in `index.html` and `app.js`; Graphite + Emerald tokens and container-responsive controls in `styles.css` | Served UI contract; all static JavaScript syntax valid; 22 Node tests; 41 Python tests | UI-038 pending because browser control is unavailable | In progress |
 | SFR-018 | D-024 | Collapsed Explorer heading exposes only its restore control in `styles.css` | Served scoped-style contract; 8 focused Python server tests | UI-039 reported failing before fix; post-fix recheck pending | In progress |
-| SFR-019 | D-025 | Projected layout geometry in `graph-render.js` | 3 minimum-size tests; 25 Node tests; 41 Python tests; served asset contract | UI-040 still failed after the first correction: SVG filled the viewport but projected Focus content remained clustered | In progress |
-| SFR-020 | D-026 | Projected Focus column placement in `graph-render.js` | 3 directed-column tests; full suites passed | UI-041 blocked by the grid displacement and multi-hop rendering error found in the first browser run | In progress |
-| SFR-021 | D-027 | Shared grid cell for `.graph-viewport` and `.graph-projection-bar` in `styles.css` | Served CSS contract pending | UI-042 failed before fix: viewport started at x=521 on a 1536-pixel workspace | Planned |
-| SFR-022 | D-028 | Total projected Focus strategy in `graph-render.js` | Direct-versus-multi-hop strategy tests pending | UI-043 failed before fix: 12 generated nodes, 4 positioned nodes, and `reading 'x'` | Planned |
+| SFR-019 | D-025 | Projected layout geometry in `graph-render.js` | 8 focused renderer tests; 30 Node tests; 41 Python tests; served asset contract | UI-040 passed for class Focus and package Flow projections at 1536 pixels | Verified |
+| SFR-020 | D-026, D-028 | Projected direct-neighborhood Focus columns in `graph-render.js` | 3 directed-column tests; 30 Node tests | Multi-hop UI-041 path passed through Flow fallback; direct one- and two-sided rendered checks remain pending | In progress |
+| SFR-021 | D-027 | Shared grid cell for `.graph-viewport` and `.graph-projection-bar` in `styles.css` | Served CSS contract; 41 Python tests | UI-042 passed twice: workspace and viewport both started at x=0 and measured 1536 pixels wide | Verified |
+| SFR-022 | D-028 | Total projected Focus strategy in `graph-render.js` | 2 direct-versus-multi-hop strategy tests; 30 Node tests | UI-043 passed: all 12 generated class nodes were positioned and rendered with no status or console error | Verified |
 
 ## Evidence log
 
@@ -75,6 +75,9 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | 2026-08-24 | pre-SFR-017 commit | Contextual tools and Graphite + Emerald visual system | All static JavaScript syntax valid; 22 Node tests; 41 Python tests; active server returned HTTP 200 with canvas-focus, Design-mode, and projection-Fit controls; `git diff --check` clean. UI-038 remains pending. |
 | 2026-08-24 | pre-SFR-018 commit | Collapsed Explorer restore regression | User reported the restore button was clipped; source diagnosis found visible typography controls occupying the 38-pixel rail. Scoped CSS contract and 8 focused Python server tests passed; browser recheck remains pending. |
 | 2026-08-24 | pre-SFR-019 commit | Viewport-aware `G` projection geometry | 3 focused renderer tests, all 25 Node tests, all 41 Python tests, JavaScript syntax, and the active server asset passed. Playwright launched Chrome but it exited before creating a page, so UI-040 remains pending. |
+| 2026-08-24 | pre-SFR-021/SFR-022 fix | Playwright `G` class projection at 1536 pixels | The 501-pixel projection bar occupied grid column 1 and auto-placed the 1015-pixel graph viewport at x=521. The 12-node projection had only 4 positions and stopped with `Cannot read properties of undefined (reading 'x')`. |
+| 2026-08-24 | post-SFR-021/SFR-022 fix | Playwright UI-040, UI-042, and UI-043 on class Focus | Workspace and viewport both measured x=0 / width=1536; the bar overlaid at x=378 / width=780; all 12 nodes were positioned and rendered across x=145 through x=1385; focus stayed on the selected class; zero console errors or warnings. |
+| 2026-08-24 | post-SFR-021/SFR-022 fix | Playwright package Flow regression | Workspace and viewport again measured x=0 / width=1536; all 10 generated nodes were positioned and rendered; projection navigation status remained healthy. Final suites: 30 Node and 41 Python tests passed. |
 
 ## Post-refactor size evidence
 

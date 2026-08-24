@@ -15,6 +15,30 @@ function graphMinimumSize({ projectionActive = false, compact = false, viewportW
   };
 }
 
+function focusColumnPositions({ width, columnGap, maxWidth, scale = 1, projectionActive = false, incomingCount = 0, outgoingCount = 0 }) {
+  const center = width / 2;
+  if (!projectionActive) {
+    return { selected: center, incoming: center - columnGap, outgoing: center + columnGap };
+  }
+  const inset = Math.max(100 * scale, maxWidth / 2 + 48 * scale);
+  const left = Math.min(center, inset);
+  const right = Math.max(center, width - inset);
+  if (incomingCount && outgoingCount) return { selected: center, incoming: left, outgoing: right };
+  if (incomingCount) return { selected: right, incoming: left, outgoing: right };
+  if (outgoingCount) return { selected: left, incoming: left, outgoing: right };
+  return { selected: center, incoming: center, outgoing: center };
+}
+
+function focusLayoutStrategy({ projectionActive = false, nodes = [], edges = [], selectedId = null }) {
+  if (!projectionActive || !selectedId) return "focus";
+  const directNodeIds = new Set([selectedId]);
+  edges.forEach((edge) => {
+    if (edge.source === selectedId) directNodeIds.add(edge.target);
+    if (edge.target === selectedId) directNodeIds.add(edge.source);
+  });
+  return nodes.every((node) => directNodeIds.has(node.id)) ? "focus" : "flow";
+}
+
 function graphCanvasMinimumSize() {
   return graphMinimumSize({
     projectionActive: Boolean(state.graphProjection),
@@ -276,19 +300,31 @@ function focusLayout(nodes, edges) {
   const minimumSize = graphCanvasMinimumSize();
   const selected = nodes.find((node) => node.id === state.selected);
   if (!selected) return flowLayout(nodes, edges);
+  if (focusLayoutStrategy({ projectionActive: Boolean(state.graphProjection), nodes, edges, selectedId: selected.id }) === "flow") {
+    return flowLayout(nodes, edges);
+  }
   const outgoingIds = new Set(edges.filter((edge) => edge.source === selected.id).map((edge) => edge.target));
   const incomingIds = new Set(edges.filter((edge) => edge.target === selected.id && !outgoingIds.has(edge.source)).map((edge) => edge.source));
   const width = Math.max(minimumSize.width, 2 * columnGap + maxWidth);
   const height = Math.max(minimumSize.height, 180 * scale + Math.max(incomingIds.size, outgoingIds.size, 1) * rowGap);
-  const positions = { [selected.id]: { x: width / 2, y: height / 2 } };
+  const columns = focusColumnPositions({
+    width,
+    columnGap,
+    maxWidth,
+    scale,
+    projectionActive: Boolean(state.graphProjection),
+    incomingCount: incomingIds.size,
+    outgoingCount: outgoingIds.size,
+  });
+  const positions = { [selected.id]: { x: columns.selected, y: height / 2 } };
   const placeColumn = (nodeIds, x) => {
     const ids = [...nodeIds];
     ids.forEach((nodeId, index) => {
       positions[nodeId] = { x, y: height * (index + 1) / (ids.length + 1) };
     });
   };
-  placeColumn(incomingIds, width / 2 - columnGap);
-  placeColumn(outgoingIds, width / 2 + columnGap);
+  placeColumn(incomingIds, columns.incoming);
+  placeColumn(outgoingIds, columns.outgoing);
   return { width, height, positions };
 }
 
@@ -496,4 +532,4 @@ function render() {
   });
 }
 
-if (typeof module !== "undefined" && module.exports) module.exports = { graphMinimumSize };
+if (typeof module !== "undefined" && module.exports) module.exports = { focusColumnPositions, focusLayoutStrategy, graphMinimumSize };

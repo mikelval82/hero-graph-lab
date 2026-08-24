@@ -450,6 +450,7 @@ class LabServerTest(TestCase):
                 self.assertIn(".graph-control-strip { position: relative", styles)
                 self.assertIn(".graph-tool-actions { min-width: 0; display: flex; flex-wrap: wrap", styles)
                 self.assertIn(".graph-viewport { position: relative; grid-row: 4", styles)
+                self.assertIn(".graph-viewport { position: relative; grid-row: 4; grid-column: 1", styles)
                 self.assertNotIn(".graph-viewport { position: absolute; inset: 192px", styles)
                 self.assertNotIn(".graph-control-strip { position: absolute", styles)
                 self.assertIn("body.projection-focus-mode .graph-control-strip", styles)
