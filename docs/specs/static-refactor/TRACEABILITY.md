@@ -23,7 +23,9 @@ Status values: `Planned`, `In progress`, `Verified`, `Deferred`, `Blocked`.
 | SFR-017 | D-023 | Contextual/Design/overflow controls in `index.html` and `app.js`; Graphite + Emerald tokens and container-responsive controls in `styles.css` | Served UI contract; all static JavaScript syntax valid; 22 Node tests; 41 Python tests | UI-038 pending because browser control is unavailable | In progress |
 | SFR-018 | D-024 | Collapsed Explorer heading exposes only its restore control in `styles.css` | Served scoped-style contract; 8 focused Python server tests | UI-039 reported failing before fix; post-fix recheck pending | In progress |
 | SFR-019 | D-025 | Projected layout geometry in `graph-render.js` | 3 minimum-size tests; 25 Node tests; 41 Python tests; served asset contract | UI-040 still failed after the first correction: SVG filled the viewport but projected Focus content remained clustered | In progress |
-| SFR-020 | D-026 | Projected Focus column placement in `graph-render.js` | Directed-column unit contract pending | UI-041 pending | Planned |
+| SFR-020 | D-026 | Projected Focus column placement in `graph-render.js` | 3 directed-column tests; full suites passed | UI-041 blocked by the grid displacement and multi-hop rendering error found in the first browser run | In progress |
+| SFR-021 | D-027 | Shared grid cell for `.graph-viewport` and `.graph-projection-bar` in `styles.css` | Served CSS contract pending | UI-042 failed before fix: viewport started at x=521 on a 1536-pixel workspace | Planned |
+| SFR-022 | D-028 | Total projected Focus strategy in `graph-render.js` | Direct-versus-multi-hop strategy tests pending | UI-043 failed before fix: 12 generated nodes, 4 positioned nodes, and `reading 'x'` | Planned |
 
 ## Evidence log
 

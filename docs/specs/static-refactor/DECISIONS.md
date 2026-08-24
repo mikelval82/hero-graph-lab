@@ -212,3 +212,21 @@ Date: 2026-08-24
 Post-change rendered acceptance showed that the projected SVG now fills the canvas but a class-collaboration projection still leaves most of it empty. The Focus layout always places incoming and outgoing nodes one fixed `columnGap` to either side of the selection; increasing the SVG dimensions therefore increases the unused space instead of the diagram.
 
 Only while `G` is active, Focus will use the available horizontal span as a directed two- or three-column diagram. If relationships exist on one side only, the selection and that side occupy opposite columns; if both exist, the selection remains central. Normal Focus keeps its established compact geometry. A force-directed renderer is not justified for this deterministic placement defect.
+
+## D-027 — Overlay the projection bar without creating a graph column
+
+Status: Accepted
+Date: 2026-08-24
+
+Browser measurement identified the actual left-hand loss: the projection bar is explicitly placed in row 4, column 1, while the graph viewport specifies only row 4. When the bar becomes visible, CSS Grid auto-places the viewport in an implicit second column. At 1536 pixels the bar consumed the first 521 pixels and the graph began at `x=521`.
+
+The graph viewport will explicitly occupy row 4, column 1 so the projection bar remains an overlay in the same grid cell. Absolute positioning or JavaScript measurement is unnecessary.
+
+## D-028 — Use Flow geometry for multi-hop Focus projections
+
+Status: Accepted
+Date: 2026-08-24
+
+The same browser run exposed a projection with 12 class nodes but positions for only the selected class and its three direct neighbors. `focusLayout` is a total layout only for a direct neighborhood; the class generator can return additional connected hops, causing rendering to read an undefined position.
+
+Projected Focus retains the wide two- or three-column layout from D-026 when every node is a direct neighbor. If the generated projection contains indirect nodes, it reuses the existing deterministic Flow layout so every node receives a position. Normal Focus remains unchanged.

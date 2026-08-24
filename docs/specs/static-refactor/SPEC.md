@@ -202,6 +202,14 @@ While `G` renders a Focus projection, incoming nodes, the selected node, and out
 
 Normal Focus column placement shall remain unchanged.
 
+### SFR-021 — Projection controls overlay the graph viewport
+
+The compact `G` projection bar and the graph viewport shall occupy the same canvas grid cell. Making the projection bar visible shall not create an implicit grid column, shift the graph viewport horizontally, or reduce its width.
+
+### SFR-022 — Total layout for multi-hop Focus projections
+
+A projected Focus layout shall assign a position to every visible node. Direct neighborhoods shall use the wide directed columns from SFR-020; projections containing indirect nodes shall use the existing deterministic Flow geometry. Rendering shall never attempt to draw a node or relationship with a missing position.
+
 ## Rendered-UI acceptance checks
 
 | ID | Scenario | Expected result |
@@ -247,6 +255,8 @@ Normal Focus column placement shall remain unchanged.
 | UI-039 | Collapse Explorer and then restore it | The collapsed rail keeps its restore button visible and operable; typography and tree controls do not displace it. |
 | UI-040 | Open a sparse `G` projection on a wide viewport and use **Fit** | The projected SVG occupies the focused canvas with only the fit padding; no large unused band remains at the left below the projection controls. |
 | UI-041 | Open `G` on a class with one-sided and two-sided collaborators | One-sided projections use two wide columns; two-sided projections use three wide columns; the normal Focus view retains its compact spacing. |
+| UI-042 | Open any `G` projection and inspect the canvas bounds | The graph viewport starts at the left edge of the focused workspace and spans its full width while the compact projection bar overlays it. |
+| UI-043 | Open `G` on a class whose generated collaborators include indirect hops | Every generated node renders, every relationship has positioned endpoints, and no missing-position error appears. |
 
 ## Delivery sequence
 
