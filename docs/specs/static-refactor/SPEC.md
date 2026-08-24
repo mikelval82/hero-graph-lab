@@ -232,6 +232,7 @@ The application shall use one neutral Graphite surface hierarchy, Emerald as the
 | UI-036 | Expand, change depth, use Back, then Restore in `G` | Projection navigation remains usable and the exact pre-projection application layout returns. |
 | UI-037 | Open and close `G` while manual canvas focus is active | Closing `G` preserves the user's manual canvas-focus state. |
 | UI-038 | Toggle Design mode and resize the graph panel | Design/draft commands appear only in Design mode; normal controls stay compact and accessible at narrow widths. |
+| UI-039 | Collapse Explorer and then restore it | The collapsed rail keeps its restore button visible and operable; typography and tree controls do not displace it. |
 
 ## Delivery sequence
 

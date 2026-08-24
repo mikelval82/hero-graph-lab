@@ -187,3 +187,10 @@ Status: Accepted
 Date: 2026-08-24
 
 The semantic groups introduced by D-020 improve comprehension but consume excessive height when all commands remain visible. Normal navigation/inspection stays compact, Design becomes an explicit mode, and infrequent view/help actions move behind a conventional overflow control. A small local icon vocabulary and CSS tokens are preferred over an admin template or UI framework because Graph Lab is a no-build canvas application, not a dashboard.
+
+## D-024 — Reserve the collapsed Explorer rail for restoration
+
+Status: Accepted
+Date: 2026-08-24
+
+Rendered acceptance showed that Explorer's typography controls remained in the 38-pixel collapsed rail and pushed its restore button outside the clipped panel. Collapsed Explorer will expose only its panel-restore command. The rule is scoped to the Explorer heading so collapsing Explorer cannot alter action groups in Code or other panels.

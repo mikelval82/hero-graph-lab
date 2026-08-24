@@ -454,6 +454,8 @@ class LabServerTest(TestCase):
                 self.assertNotIn(".graph-control-strip { position: absolute", styles)
                 self.assertIn("body.projection-focus-mode .graph-control-strip", styles)
                 self.assertIn("body.canvas-focus-mode .workspace", styles)
+                self.assertIn("body.explorer-collapsed .explorer-heading .panel-heading-actions > :not(.panel-collapse)", styles)
+                self.assertNotIn("body.explorer-collapsed .panel-heading-actions {", styles)
                 self.assertIn("body.graph-design-mode .design-tools", styles)
                 self.assertIn("@container (max-width: 720px)", styles)
                 self.assertIn(".graph-more-menu-content { position: absolute", styles)
