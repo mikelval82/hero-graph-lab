@@ -1,5 +1,5 @@
 ((globalScope) => {
-  const LAYOUT_STORAGE_KEY = "hero-graph-lab-layout-v1";
+  const LAYOUT_STORAGE_KEY = "hero-graph-lab-layout-v2";
   const TYPOGRAPHY_STORAGE_KEY = "hero-graph-lab-typography-v1";
   const PANELS = ["explorer", "code", "inspector"];
   const typographyDefaults = { explorer: 14, graph: 14, code: 14, inspector: 14 };
@@ -15,7 +15,7 @@
   }
 
   function defaultLayout() {
-    return { explorerWidth: null, graphRatio: 50, inspectorWidth: null, collapsed: [] };
+    return { explorerWidth: null, graphRatio: 65, inspectorWidth: null, collapsed: ["code"] };
   }
 
   function normalizeLayout(value) {
@@ -251,6 +251,30 @@
       return structuredClone(layout);
     }
 
+    function canvasFocusActive(owner = "manual") {
+      const className = owner === "projection" ? "projection-focus-mode" : "canvas-focus-mode";
+      return document.body.classList.contains(className);
+    }
+
+    function setCanvasFocus(owner, active) {
+      const className = owner === "projection" ? "projection-focus-mode" : "canvas-focus-mode";
+      document.body.classList.toggle(className, Boolean(active));
+      const button = document.querySelector("#canvas-focus");
+      if (button) {
+        const manuallyFocused = canvasFocusActive("manual");
+        button.setAttribute("aria-pressed", String(manuallyFocused));
+        button.querySelector("span").textContent = manuallyFocused ? "Restore layout" : "Focus canvas";
+      }
+    }
+
+    function refreshFocusedCanvas() {
+      requestAnimationFrame(() => {
+        updateGraphViewport();
+        render();
+        if (state.graph) fitGraphToView();
+      });
+    }
+
     function initialize() {
       restore();
       setupSplitter("#explorer-splitter", "explorer");
@@ -265,6 +289,10 @@
           });
         });
       });
+      document.querySelector("#canvas-focus")?.addEventListener("click", () => {
+        setCanvasFocus("manual", !canvasFocusActive("manual"));
+        refreshFocusedCanvas();
+      });
       initializeTypography();
       addEventListener("resize", () => requestAnimationFrame(() => {
         apply();
@@ -274,7 +302,7 @@
     }
 
     initialize();
-    return Object.freeze({ ...modelApi, apply, expand, save, snapshot });
+    return Object.freeze({ ...modelApi, apply, canvasFocusActive, expand, save, setCanvasFocus, snapshot });
   }
 
   const api = typeof document === "undefined" ? modelApi : installBrowserController();

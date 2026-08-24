@@ -169,6 +169,7 @@ class LabServerTest(TestCase):
                 self.assertIn('data-command="selection.project"', index)
                 self.assertIn('id="graph-projection-bar"', index)
                 self.assertIn('id="graph-projection-back"', index)
+                self.assertIn('id="graph-projection-fit"', index)
                 self.assertIn('id="graph-projection-restore"', index)
                 self.assertIn('id="diagram-type"', index)
                 self.assertIn('id="diagram-depth"', index)
@@ -339,6 +340,9 @@ class LabServerTest(TestCase):
                 self.assertIn("function expandProjection", projection_script)
                 self.assertIn("function backProjection", projection_script)
                 self.assertIn("function restoreProjection", projection_script)
+                self.assertIn('setCanvasFocus("projection", true)', projection_script)
+                self.assertIn('setCanvasFocus("projection", false)', projection_script)
+                self.assertIn('querySelector("#graph-projection-fit").addEventListener("click", fitGraphToView)', projection_script)
                 activate_projection_script = projection_script[projection_script.index("function activateProjection"):projection_script.index("function containmentExpansion")]
                 restore_projection_script = projection_script[projection_script.index("function restoreProjection"):projection_script.index("function backProjection")]
                 back_projection_script = projection_script[projection_script.index("function backProjection"):projection_script.index("function projectSelection")]
@@ -407,6 +411,10 @@ class LabServerTest(TestCase):
                 self.assertIn("function updateCodeSearch", app_script)
                 self.assertIn("function initializeTypography", panel_layout_script)
                 self.assertIn("hero-graph-lab-typography-v1", panel_layout_script)
+                self.assertIn("hero-graph-lab-layout-v2", panel_layout_script)
+                self.assertIn('collapsed: ["code"]', panel_layout_script)
+                self.assertIn("function setCanvasFocus", panel_layout_script)
+                self.assertIn('setCanvasFocus("manual"', panel_layout_script)
                 self.assertIn('addEventListener("mission-document-opened"', app_script)
                 self.assertIn("function normalizeLayout", panel_layout_script)
                 self.assertIn('HeroPanelLayout.expand("inspector")', explore_script)
@@ -439,6 +447,8 @@ class LabServerTest(TestCase):
                 self.assertIn(".graph-viewport { position: relative; grid-row: 4", styles)
                 self.assertNotIn(".graph-viewport { position: absolute; inset: 192px", styles)
                 self.assertNotIn(".graph-control-strip { position: absolute", styles)
+                self.assertIn("body.projection-focus-mode .graph-control-strip", styles)
+                self.assertIn("body.canvas-focus-mode .workspace", styles)
                 self.assertIn(".workplan-list", styles)
                 self.assertIn(".document-group-list", styles)
                 self.assertIn(".activity-agent_progress", styles)

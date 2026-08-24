@@ -28,6 +28,12 @@ test("invalid persisted layout falls back to stable defaults", () => {
   assert.deepEqual(normalizeLayout(null), defaultLayout());
   assert.deepEqual(normalizeLayout("invalid"), defaultLayout());
   assert.deepEqual(normalizeLayout({ graphRatio: Number.NaN, collapsed: "explorer" }), defaultLayout());
+  assert.deepEqual(defaultLayout(), {
+    explorerWidth: null,
+    graphRatio: 65,
+    inspectorWidth: null,
+    collapsed: ["code"],
+  });
 });
 
 test("normalizes typography within each panel limit", () => {

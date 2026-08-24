@@ -194,6 +194,7 @@
       state.positions = {};
       state.currentLayout = null;
       state.selectedRelation = null;
+      globalScope.HeroPanelLayout?.setCanvasFocus("projection", true);
       releaseGraphLayout();
       setProjectionView(recommendation.view, recommendation.label);
       renderProjectionBar();
@@ -320,6 +321,7 @@
       state.selectedRelation = previous.selectedRelation;
       state.layoutLocked = previous.layoutLocked;
       state.layoutSnapshot = previous.layoutSnapshot;
+      globalScope.HeroPanelLayout?.setCanvasFocus("projection", false);
       document.querySelectorAll("[data-graph-view]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.graphView === state.view)));
       const viewLabel = state.view === "structure" ? "Hierarchy" : `${state.view[0].toUpperCase()}${state.view.slice(1)}`;
       document.querySelector("#graph-view-label").textContent = `${viewLabel} Graph`;
@@ -421,6 +423,7 @@
     createDepthSelect.addEventListener("change", validateProjectionChoice);
     projectionForm.addEventListener("submit", confirmProjection);
     document.querySelector("#graph-projection-back").addEventListener("click", backProjection);
+    document.querySelector("#graph-projection-fit").addEventListener("click", fitGraphToView);
     document.querySelector("#graph-projection-restore").addEventListener("click", restoreProjection);
     projectionDepthSelect.addEventListener("change", setProjectionDepth);
 

@@ -215,7 +215,7 @@ body.resizing-panels { cursor: col-resize; -webkit-user-select: none; user-selec
 .graph-command-status { position: absolute; z-index: 6; right: 10px; bottom: 10px; max-width: min(440px, calc(100% - 20px)); margin: 0; padding: 7px 9px; color: white; background: rgba(24, 35, 31, .9); font: 11px/1.4 var(--mono); pointer-events: none; }
 .graph-command-status:empty { display: none; }
 #empty-state { z-index: 2; grid-row: 4; grid-column: 1; place-self: center; }
-.graph-projection-bar { position: relative; z-index: 7; grid-row: 4; grid-column: 1; align-self: start; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: 6px; margin: 6px 10px; padding: 7px 8px; color: white; background: rgba(24, 35, 31, .94); border-left: 4px solid var(--function); box-shadow: 0 3px 12px rgba(24, 35, 31, .2); }
+.graph-projection-bar { position: relative; z-index: 7; grid-row: 4; grid-column: 1; align-self: start; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto auto; align-items: center; gap: 6px; margin: 6px 10px; padding: 7px 8px; color: white; background: rgba(24, 35, 31, .94); border-left: 4px solid var(--function); box-shadow: 0 3px 12px rgba(24, 35, 31, .2); }
 .graph-projection-bar[hidden] { display: none; }
 .graph-projection-bar > div { min-width: 0; display: grid; gap: 2px; }
 .graph-projection-bar strong, .graph-projection-bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -746,6 +746,27 @@ body.inspector-collapsed .inspector-tabs > :not([data-collapse-panel]), body.ins
 body.inspector-collapsed .inspector-font-toolbar { display: none !important; }
 
 body.explorer-collapsed.inspector-collapsed main { grid-template-columns: 38px 0 minmax(0, 1fr) 0 38px; }
+
+body.canvas-focus-mode main,
+body.projection-focus-mode main { grid-template-columns: minmax(0, 1fr); }
+body.canvas-focus-mode .project-panel,
+body.canvas-focus-mode #explorer-splitter,
+body.canvas-focus-mode #workspace-splitter,
+body.canvas-focus-mode .code-panel,
+body.canvas-focus-mode #inspector-splitter,
+body.canvas-focus-mode .inspector,
+body.projection-focus-mode .project-panel,
+body.projection-focus-mode #explorer-splitter,
+body.projection-focus-mode #workspace-splitter,
+body.projection-focus-mode .code-panel,
+body.projection-focus-mode #inspector-splitter,
+body.projection-focus-mode .inspector { display: none; }
+body.canvas-focus-mode .workspace,
+body.projection-focus-mode .workspace { grid-template-columns: minmax(0, 1fr); }
+body.projection-focus-mode .scope-bar,
+body.projection-focus-mode .graph-control-strip,
+body.projection-focus-mode .graph-view-switch { display: none; }
+body.projection-focus-mode .canvas-shell > .panel-heading { min-height: 44px; padding-block: 6px; }
 
 @media (max-width: 1250px) {
   .topbar { grid-template-columns: 170px auto 1fr auto; }
