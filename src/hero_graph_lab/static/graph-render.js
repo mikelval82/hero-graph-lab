@@ -95,7 +95,7 @@ function nodeStatusText(node) {
 function graphNodeMetrics(node) {
   const scale = graphTextScale();
   const fontSize = graphFontSize();
-  const baseWidth = node.kind === "package" ? 180 : node.kind === "module" ? 170 : node.kind === "class" ? 150 : 138;
+  const baseWidth = node.kind === "package" ? 180 : node.kind === "module" ? 170 : ["class", "interface"].includes(node.kind) ? 150 : 138;
   const baseHeight = node.kind === "package" || node.kind === "module" ? 76 : 62;
   const labelWidth = graphTextWidth(nodeDisplayLabel(node), fontSize, 500, "--sans");
   const metadataSize = Math.max(11, fontSize - 2);
@@ -518,7 +518,7 @@ function render() {
     const group = svgElement("g", { class: `graph-node ${status}${node.context ? " context" : ""}${node.journey ? " journey" : ""}${traceClass}${state.selected === node.id ? " selected" : ""}${traceDimmed || (!state.callTrace && dimSelection && !related.has(node.id)) ? " dimmed" : ""}`, transform: `translate(${position.x} ${position.y})`, tabindex: "0", role: "button", "aria-label": `${status} ${node.kind} ${node.label}`, "data-node-id": node.id });
     const { width, height, scale } = graphNodeMetrics(node);
     group.append(svgElement("rect", { x: -width / 2, y: -height / 2, width, height, rx: 3, class: `node-shape ${node.kind}` }));
-    const dark = node.kind === "package" || node.kind === "module" || node.kind === "class";
+    const dark = ["package", "module", "class", "interface"].includes(node.kind);
     const kind = svgElement("text", { x: 0, y: -13 * scale, "text-anchor": "middle", class: `node-kind${dark ? " on-dark" : ""}` }); kind.textContent = node.kind;
     const label = svgElement("text", { x: 0, y: 4 * scale, "text-anchor": "middle", class: `node-label${dark ? " on-dark" : ""}` }); label.textContent = nodeDisplayLabel(node);
     const statusLabel = svgElement("text", { x: 0, y: height / 2 - 7 * scale, "text-anchor": "middle", class: `node-status${dark ? " on-dark" : ""}` });

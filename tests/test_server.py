@@ -120,11 +120,11 @@ class LabServerTest(TestCase):
             second_graph = state.graph()
             second_source = state.source()
 
-        file_node = next(
+        script_module = next(
             node for node in second_graph["nodes"] if node["source"] == "static/app.js"
         )
-        self.assertEqual(file_node["kind"], "file")
-        self.assertEqual(file_node["end_line"], 2)
+        self.assertEqual(script_module["kind"], "module")
+        self.assertEqual(script_module["end_line"], 2)
         self.assertIn("static/app.js", first_source["sources"])
         self.assertIn("version = 2", second_source["sources"]["static/app.js"]["content"])
         self.assertIsNot(first_graph, second_graph)

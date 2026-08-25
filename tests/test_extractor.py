@@ -14,7 +14,7 @@ FIXTURE = Path(__file__).parents[1] / "fixtures" / "order_service.py"
 
 
 class PythonGraphExtractorTest(TestCase):
-    def test_exposes_supported_web_sources_as_file_nodes_without_invented_symbols(self) -> None:
+    def test_exposes_script_symbols_while_css_and_html_remain_file_nodes(self) -> None:
         with TemporaryDirectory() as directory:
             project = Path(directory) / "project"
             static = project / "src" / "web" / "static"
@@ -35,12 +35,22 @@ class PythonGraphExtractorTest(TestCase):
         self.assertEqual(files, [python_file, javascript_file, page, stylesheet])
         nodes = {node["id"]: node for node in graph["nodes"]}
         javascript_node = next(
-            node for node in nodes.values() if node["source"] == "src/web/static/app.js"
+            node
+            for node in nodes.values()
+            if node["source"] == "src/web/static/app.js" and node["kind"] == "module"
         )
-        self.assertEqual(javascript_node["kind"], "file")
+        self.assertEqual(javascript_node["kind"], "module")
         self.assertEqual(javascript_node["label"], "app.js")
         self.assertEqual(javascript_node["parent"], "package:project.src.web.static")
-        self.assertFalse(any(edge["source"] == javascript_node["id"] for edge in graph["edges"]))
+        render_node = next(
+            node for node in nodes.values() if node["source"] == "src/web/static/app.js" and node["label"] == "render"
+        )
+        self.assertEqual(render_node["kind"], "function")
+        self.assertEqual(render_node["parent"], javascript_node["id"])
+        self.assertEqual(
+            {node["kind"] for node in nodes.values() if node["source"] in {"src/web/static/styles.css", "src/web/static/index.html"}},
+            {"file"},
+        )
         self.assertNotIn("README.md", {node["source"] for node in nodes.values()})
 
     def test_ignores_generated_and_virtual_environment_directories(self) -> None:

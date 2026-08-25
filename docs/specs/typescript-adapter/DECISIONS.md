@@ -5,14 +5,22 @@
 Status: Accepted
 Date: 2026-08-26
 
-Python Tree-sitter exposes an error-tolerant concrete syntax tree and the
+Python Tree-sitter exposes an error-tolerant concrete syntax tree, and the
 official JavaScript and TypeScript projects publish precompiled Python wheels.
-This supports JS/JSX and the distinct TS/TSX grammars without introducing npm, a
-frontend build, regex parsing or a long-running parser subprocess.
+This supports each dialect with its matching grammar without introducing npm, a
+frontend build, regex parsing or a parser subprocess.
 
-Validated development versions are `tree-sitter==0.26.0`,
-`tree-sitter-javascript==0.25.0` and `tree-sitter-typescript==0.23.2`. Project
-metadata uses compatible bounded ranges rather than an unbounded latest version.
+Validated development versions are `tree-sitter==0.23.2`,
+`tree-sitter-javascript==0.23.1` and `tree-sitter-typescript==0.23.2`. Project
+metadata keeps all three on the ABI-compatible 0.23 line rather than accepting
+an unbounded latest version.
+
+An initial mix of the `tree-sitter==0.26.0` core with 0.23 grammar wheels passed
+small fixtures but became non-deterministic while traversing the real
+`static/app.js` syntax tree. Aligning core and grammars on ABI 14 removed the
+failure: five consecutive full static-tree extractions produced identical
+`205`-node/`509`-edge results. The version bound is therefore part of the
+runtime contract, not incidental development metadata.
 
 ## TSA-D002 - One adapter, no generic plugin framework
 

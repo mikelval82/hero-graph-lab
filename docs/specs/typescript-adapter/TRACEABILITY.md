@@ -2,15 +2,15 @@
 
 | Requirement | Decisions | Planned implementation | Evidence | Status |
 |---|---|---|---|---|
-| TSA-001 | TSA-D001 | suffix-to-grammar parser selection | Pending | Specified |
-| TSA-002 | TSA-D002, TSA-D007 | script module nodes and source ranges | Pending | Specified |
-| TSA-003 | TSA-D003, TSA-D006 | declaration collector | Pending | Specified |
-| TSA-004 | TSA-D003, TSA-D005 | relative module resolver | Pending | Specified |
-| TSA-005 | TSA-D003, TSA-D004 | bounded call resolver | Pending | Specified |
-| TSA-006 | TSA-D003, TSA-D004 | stable deduplication and error tolerance | Pending | Specified |
-| TSA-007 | TSA-D002 | extractor dispatch and compatibility tests | Pending | Specified |
-| TSA-008 | TSA-D005, TSA-D006, TSA-D007 | existing graph/UI consumers and small kind styling | Pending | Specified |
-| TSA-009 | TSA-D001 | bounded Python dependencies | Pending | Specified |
+| TSA-001 | TSA-D001 | suffix-to-grammar parser selection | Adapter dialect fixture tests | Verified |
+| TSA-002 | TSA-D002, TSA-D007 | script module nodes and source ranges | Adapter and extractor integration tests | Verified |
+| TSA-003 | TSA-D003, TSA-D006 | declaration collector | TS/TSX declaration fixture test | Verified |
+| TSA-004 | TSA-D003, TSA-D005 | relative module resolver | ES and CommonJS dependency fixture test | Verified |
+| TSA-005 | TSA-D003, TSA-D004 | bounded call resolver | Positive and negative call fixture assertions | Verified |
+| TSA-006 | TSA-D003, TSA-D004 | stable deduplication and error tolerance | malformed, reversed-input and repeated real-frontend tests | Verified |
+| TSA-007 | TSA-D002 | extractor dispatch and compatibility tests | 52-test Python regression suite | Verified |
+| TSA-008 | TSA-D005, TSA-D006, TSA-D007 | existing graph/UI consumers and small kind styling | 40-test JavaScript suite; rendered check pending | In progress |
+| TSA-009 | TSA-D001 | bounded Python dependencies | aligned 0.23 wheel install and repeated static extraction | Verified |
 
 ## Baseline evidence - 2026-08-26
 
@@ -28,3 +28,19 @@
 - Rendered acceptance is currently at risk because the in-app Browser runtime
   rejects its installed service path before navigation. This remains an external
   validation blocker, not permission to substitute endpoint tests for TSA-A09.
+
+## Implementation evidence - 2026-08-26
+
+- Official JavaScript, TypeScript and TSX grammars are selected by suffix behind
+  `TypeScriptGraphAdapter`; `extractor.py` remains the sole project orchestrator.
+- Fixture coverage verifies declarations, containment, relative ES/CommonJS
+  dependencies, conservative calls, malformed syntax and deterministic order.
+- A real-frontend regression extracts every `static/*.js` file twice and checks
+  the exact `renderCodePanel` source anchor.
+- Five consecutive real-static extractions returned identical `205` nodes and
+  `509` edges after aligning the Tree-sitter core and grammar ABI on 0.23.
+- Full automated regression: `52` Python tests and `40` JavaScript tests pass.
+- A resolved-root Graph Lab smoke completed in `0.472 s` with `621` nodes and
+  `1423` edges; `app.js` and `renderCodePanel` were present with exact ranges.
+- The process currently serving port 8765 predates this implementation and must
+  be restarted before rendered acceptance can exercise the new graph.

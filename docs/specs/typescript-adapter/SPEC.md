@@ -24,8 +24,9 @@ system.
 ### TSA-001 - Supported dialects and parser boundary
 
 The adapter supports `.js`, `.mjs`, `.cjs`, `.jsx`, `.ts` and `.tsx`. It uses
-the official Tree-sitter JavaScript/JSX and TypeScript/TSX grammars through their
-Python bindings. Parser selection depends only on the file suffix.
+the official Tree-sitter JavaScript grammar for JS/MJS/CJS, the TypeScript
+grammar for TS, and the TSX grammar for JSX/TSX through Python bindings. Parser
+selection depends only on the file suffix.
 
 ### TSA-002 - Stable module identity and source evidence
 

@@ -38,6 +38,8 @@
   --package: #0f766e;
   --module: #33413c;
   --class: #7c3aed;
+  --interface: #6d28d9;
+  --type: #ddd6fe;
   --function: #2563eb;
   --method: #0e7490;
   --relation-observed: #64748b;
@@ -278,6 +280,7 @@ body.relation-command-active .graph-viewport { box-shadow: inset 0 0 0 3px var(-
 .graph-node { cursor: pointer; transition: opacity 160ms ease; }
 .node-shape { stroke: var(--paper); stroke-width: 3; }
 .node-shape.package { fill: var(--package); } .node-shape.module { fill: var(--module); } .node-shape.class { fill: var(--class); }
+.node-shape.interface { fill: var(--interface); } .node-shape.type { fill: var(--type); }
 .node-shape.function { fill: var(--function); } .node-shape.method { fill: var(--method); }
 .node-shape.file { fill: var(--surface-selected); }
 .graph-node.context .node-shape { stroke: #7a8882; stroke-dasharray: 4 3; }

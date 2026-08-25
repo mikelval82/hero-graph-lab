@@ -183,7 +183,7 @@ function rebuildGraphIndexes(graph = state.graph) {
 }
 
 function sortedTreeChildren(nodeId) {
-  const kindOrder = { package: 0, module: 1, class: 2, function: 3, method: 3 };
+  const kindOrder = { package: 0, module: 1, class: 2, interface: 2, type: 3, function: 4, method: 4 };
   return scopeChildren(nodeId).sort((left, right) => {
     const order = (kindOrder[left.kind] ?? 4) - (kindOrder[right.kind] ?? 4);
     return order || left.label.localeCompare(right.label);

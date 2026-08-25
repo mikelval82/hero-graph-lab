@@ -7,6 +7,12 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from hero_graph_lab.typescript_adapter import (
+    SCRIPT_SOURCE_SUFFIXES,
+    ScriptSource,
+    TypeScriptGraphAdapter,
+)
+
 
 EXCLUDED_DIRECTORY_NAMES = frozenset(
     {
@@ -215,6 +221,13 @@ def extract_project_graph(path: Path) -> dict[str, Any]:
     if path.is_file():
         if path.suffix.lower() == ".py":
             return PythonGraphExtractor(path).extract()
+        if path.suffix.lower() in SCRIPT_SOURCE_SUFFIXES:
+            module_name = path.name[: -len(path.suffix)]
+            graph = TypeScriptGraphAdapter().extract(
+                [ScriptSource(path, module_name, None, path.name)]
+            )
+            graph.update({"source": path.name, "root": f"module:{module_name}"})
+            return graph
         return _extract_single_file(path)
     return _extract_python_package(path, include_project_files=True)
 
@@ -285,8 +298,22 @@ def _extract_python_package(path: Path, *, include_project_files: bool = False) 
         edges.extend(Edge(**edge) for edge in graph["edges"])
 
     if include_project_files:
+        script_sources: list[ScriptSource] = []
         for file in source_files:
-            if file.suffix.lower() == ".py":
+            if file.suffix.lower() not in SCRIPT_SOURCE_SUFFIXES:
+                continue
+            relative = file.relative_to(path)
+            parent_id = add_package_path(relative.parent)
+            module_name = ".".join((root_name, *relative.with_suffix("").parts))
+            script_sources.append(
+                ScriptSource(file, module_name, parent_id, relative.as_posix())
+            )
+        script_graph = TypeScriptGraphAdapter().extract(script_sources)
+        nodes.extend(Node(**node) for node in script_graph["nodes"])
+        edges.extend(Edge(**edge) for edge in script_graph["edges"])
+
+        for file in source_files:
+            if file.suffix.lower() == ".py" or file.suffix.lower() in SCRIPT_SOURCE_SUFFIXES:
                 continue
             relative = file.relative_to(path)
             parent_id = add_package_path(relative.parent)
