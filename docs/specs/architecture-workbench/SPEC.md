@@ -3,7 +3,7 @@
 Status: Approved as a graph design contract
 Date: 2026-08-25
 Graph baseline: `56af981`
-Implementation status: Proposed, not source code
+Implementation status: Incremental (`AW-003` implemented; `AW-004` specified)
 
 ## Purpose
 
@@ -20,7 +20,7 @@ or claim that the classes already exist.
 | Capability | Proposed module and interface | Observed integration anchors |
 |---|---|---|
 | Architecture scenarios and A/B comparison | `scenarios.py` / `ArchitectureScenarioService.compare` | `mission.js`, `proposal-contract.js` |
-| Architectural layers and semantic zoom | `semantic_zoom.py` / `SemanticZoomProjector.project` | `graph-views.js`, `graph-projection.js` |
+| Architectural layers and semantic zoom | `static/semantic-zoom.js` / `SemanticZoomProjector.project` | `graph-views.js`, `graph-render.js`, `graph-projection.js` |
 | Contract drift and change impact | `impact.py` / `ContractImpactAnalyzer.analyze` | `proposal-contract.js`, `contract_gateway.py` |
 | LLM guided walkthrough | `walkthrough.py` / `GuidedWalkthroughPlanner.plan` | `explore/service.py`, `explore.js` |
 | TypeScript/JavaScript adapter | `typescript_adapter.py` / `TypeScriptGraphAdapter.extract` | `extractor.py`, `server.py` |
@@ -94,4 +94,5 @@ does not change Python AST behavior.
 4. Guided walkthrough over the stable graph/query interfaces.
 5. TypeScript/JavaScript extraction as an independent adapter.
 
-This order records priority; it does not authorize source implementation.
+This order records priority. Each capability still requires its own reviewed
+specification before source implementation.

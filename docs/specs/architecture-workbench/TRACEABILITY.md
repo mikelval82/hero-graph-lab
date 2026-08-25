@@ -4,8 +4,8 @@
 |---|---|---|---|---|
 | AW-001 | AW-D001, AW-D003 | Package plus five module/class/method slices | All below | Specified |
 | AW-002 | AW-D002, AW-D004 | All proposed nodes | Proposal contract inspector | Specified |
-| AW-003 | AW-D001, AW-D005 | `scenarios.py`, `ArchitectureScenarioService.compare` | `mission.js`, `proposal-contract.js` | Specified |
-| AW-004 | AW-D001, AW-D003 | `semantic_zoom.py`, `SemanticZoomProjector.project` | `graph-views.js`, `graph-projection.js` | Specified |
+| AW-003 | AW-D001, AW-D005 | `scenarios.py`, `ArchitectureScenarioService.compare` | `architecture-scenarios.js`, `proposal-contract.js` | Implemented in `af429d5` and `6d95c1c` |
+| AW-004 | AW-D001, AW-D003, SZ-D003 | `static/semantic-zoom.js`, `SemanticZoomProjector.project` | `graph-views.js`, `graph-render.js`, `graph-projection.js` | Amended and specified |
 | AW-005 | AW-D001, AW-D005 | `impact.py`, `ContractImpactAnalyzer.analyze` | `proposal-contract.js`, `contract_gateway.py` | Specified |
 | AW-006 | AW-D001, AW-D005 | `walkthrough.py`, `GuidedWalkthroughPlanner.plan` | `explore/service.py`, `explore.js` | Specified |
 | AW-007 | AW-D002, AW-D005 | `typescript_adapter.py`, `TypeScriptGraphAdapter.extract` | `extractor.py`, `server.py` | Specified |
@@ -14,5 +14,9 @@
 
 - `GraphSearch` verified each JavaScript file anchor after project-source graph
   commit `56af981`.
-- No Workbench proposal has been emitted at this point; publication and rendered
-  evidence will be appended after the MCP inbox and browser-local draft agree.
+- The original Workbench proposal was published to the browser-local draft and
+  connected to observed source anchors before implementation began.
+- `AW-003` implementation evidence is maintained in
+  `docs/specs/architecture-scenarios/TRACEABILITY.md`.
+- `AW-004` target-path amendment and implementation evidence are maintained in
+  `docs/specs/semantic-zoom/TRACEABILITY.md`.

@@ -12,7 +12,7 @@ that they change together.
 
 ## AW-D002 - Keep the proposal Python-first
 
-Status: Accepted
+Status: Accepted except `AW-004`; amended by `SZ-D003`
 Date: 2026-08-25
 
 The proposed domain services use Python interfaces, matching the current server,
@@ -20,6 +20,11 @@ HARNESS boundary and contract preview. Browser files remain explicit observed
 integration anchors. The TypeScript/JavaScript adapter is itself a Python adapter
 that may delegate parsing later; this avoids pretending the current preview is a
 TypeScript declaration renderer.
+
+After auditing the browser-local draft boundary, semantic projection became the
+first justified exception. Its rationale and amended target are recorded in
+`docs/specs/semantic-zoom/DECISIONS.md` rather than silently diverging from this
+design contract.
 
 ## AW-D003 - Connect capabilities to exact observed files
 
