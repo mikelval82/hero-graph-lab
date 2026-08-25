@@ -483,6 +483,22 @@ dialog::backdrop { background: rgba(19, 29, 26, .58); }
 .code-empty[hidden] { display: none; }
 .code-empty strong { font-size: 18px; }
 .code-empty p { max-width: 360px; margin: 0; color: var(--code-muted); font-size: 12px; line-height: 1.6; }
+.proposal-contract { min-height: 0; overflow: auto; display: grid; align-content: start; gap: 12px; padding: 16px; color: var(--code-text); background: var(--code-bg); }
+.proposal-contract[hidden] { display: none; }
+.proposal-contract-summary, .proposal-contract-section { padding: 14px; background: #18231f; border: 1px solid #2c3a35; }
+.proposal-contract-summary { border-left: 4px solid var(--accent); }
+.proposal-contract-summary .eyebrow { margin: 0 0 8px; color: var(--accent); }
+.proposal-contract-summary > p:not(.eyebrow) { margin: 0 0 12px; color: #d8e2dd; line-height: 1.55; }
+.proposal-contract-summary dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 5px 12px; margin: 0; font: 10px/1.5 var(--mono); }
+.proposal-contract-summary dt { color: var(--code-muted); }
+.proposal-contract-summary dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: #e8eee9; }
+.proposal-contract-section h3 { margin: 0 0 9px; color: white; font-size: 12px; }
+.proposal-contract-section ul { display: grid; gap: 6px; margin: 0; padding-left: 18px; color: #d1ddd7; font: 10px/1.55 var(--mono); }
+.proposal-contract-muted, .proposal-readiness p { margin: 0; color: var(--code-muted); font: 10px/1.55 var(--mono); }
+.proposal-interface pre { overflow: auto; margin: 10px 0 0; padding: 14px; color: #dce9e3; background: #101815; border: 1px solid #304039; white-space: pre; font: 11px/1.6 var(--mono); }
+.proposal-preview-warning { margin: 0; color: #d9c77d; font: 9px/1.5 var(--mono); }
+.proposal-readiness.incomplete { border-left: 4px solid #e58a70; }
+.proposal-readiness.ready { border-left: 4px solid #64b895; }
 .document-editor { min-height: 0; display: grid; grid-template-rows: 38px minmax(0, 1fr) 34px; background: var(--code-bg); }
 .document-editor[hidden] { display: none; }
 .document-mode { display: flex; align-items: center; padding: 5px 10px; background: var(--code-surface); border-bottom: 1px solid var(--code-line); }
@@ -538,6 +554,9 @@ dialog::backdrop { background: rgba(19, 29, 26, .58); }
 .mermaid-error pre { max-height: 220px; overflow: auto; margin: 8px 0 0; padding: 8px; color: #e7eee9; background: #18231f; white-space: pre; }
 .document-editor footer { grid-row: 3; display: flex; justify-content: space-between; align-items: center; padding: 0 14px; color: #84928c; background: #18231f; border-top: 1px solid #2b3833; font: 8px var(--mono); }
 #feedback-form, #node-form, #relation-form { display: grid; gap: 18px; padding: 26px; }
+.proposal-dialog { width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; }
+.proposal-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.proposal-form-wide { grid-column: 1 / -1; }
 #mission-form { display: grid; gap: 16px; padding: 26px; }
 .mission-dialog { width: min(640px, calc(100vw - 32px)); }
 .mission-form-row { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 10px; }
@@ -751,6 +770,7 @@ body.code-collapsed .code-panel-heading > div:first-child,
 body.code-collapsed #code-search,
 body.code-collapsed .editor-command-group > :not([data-collapse-panel]),
 body.code-collapsed #code-content,
+body.code-collapsed #proposal-contract,
 body.code-collapsed #document-editor,
 body.code-collapsed #code-empty { display: none !important; }
 

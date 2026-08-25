@@ -227,7 +227,17 @@ class ExploreAssistantTest(TestCase):
             [
                 ModelResponse(
                     tool_calls=(
-                        ToolCall("call-1", "ProposeNode", {"label": "PaymentPolicy", "kind": "class", "parent_id": nodes[0]["id"], "description": "Own payment rules"}),
+                        ToolCall("call-1", "ProposeNode", {
+                            "label": "PaymentPolicy",
+                            "kind": "class",
+                            "parent_id": nodes[0]["id"],
+                            "description": "Own payment rules",
+                            "target_path": "application/payment_policy.py",
+                            "qualified_name": "PaymentPolicy",
+                            "docstring": "Decide whether a payment may proceed.",
+                            "satisfies": ["BR-001"],
+                            "acceptance": ["Rejected payments expose a stable reason."],
+                        }),
                         ToolCall("call-2", "ProposeRelation", {"source_id": nodes[0]["id"], "target_id": nodes[1]["id"], "kind": "depends_on", "label": "uses policy"}),
                     )
                 ),
@@ -245,6 +255,8 @@ class ExploreAssistantTest(TestCase):
 
         self.assertEqual([action["op"] for action in result["actions"]], ["add_node", "add_relation"])
         self.assertEqual(result["actions"][0]["label"], "PaymentPolicy")
+        self.assertEqual(result["actions"][0]["target_path"], "application/payment_policy.py")
+        self.assertEqual(result["actions"][0]["satisfies"], ["BR-001"])
         self.assertEqual(result["actions"][1]["kind"], "depends_on")
         self.assertIn("PROPOSE MODE IS ACTIVE", client.requests[0].system_prompt)
         self.assertIn("MUST use ProposeNode", client.requests[0].system_prompt)
@@ -252,6 +264,8 @@ class ExploreAssistantTest(TestCase):
         self.assertIn("Save map", client.requests[0].system_prompt)
         self.assertIn("Preserve every graph element kind explicitly requested", client.requests[0].system_prompt)
         self.assertIn("Do not substitute package for module", client.requests[0].system_prompt)
+        self.assertIn("structured contract", client.requests[0].system_prompt)
+        self.assertIn("observed implementation", client.requests[0].system_prompt)
         self.assertNotIn("not persisted until the user saves", client.requests[0].system_prompt)
         self.assertNotIn("actions", service.session(session_id))
 

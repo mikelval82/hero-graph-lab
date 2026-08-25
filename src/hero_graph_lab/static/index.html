@@ -158,7 +158,7 @@
       <section id="code-panel" class="code-panel" aria-label="Source code" aria-live="polite">
         <header class="panel-heading code-panel-heading">
           <div>
-            <span class="panel-kicker">Code</span>
+            <span id="code-kicker" class="panel-kicker">Code</span>
             <strong id="code-title">No file open</strong>
             <small id="code-meta">Select a script in Explorer or a node in Flow Graph.</small>
           </div>
@@ -182,6 +182,7 @@
           </div>
         </header>
         <div id="code-content" class="code-content" aria-label="Selected source code" hidden></div>
+        <article id="proposal-contract" class="proposal-contract" aria-label="Selected proposal contract" hidden></article>
         <section id="document-editor" class="document-editor" aria-label="Mission document editor" hidden>
           <div class="document-mode" role="group" aria-label="Document view">
             <button type="button" data-document-mode="preview" aria-pressed="true">Preview</button>
@@ -360,17 +361,26 @@
     </div>
   </dialog>
 
-  <dialog id="node-dialog">
+  <dialog id="node-dialog" class="proposal-dialog">
     <form id="node-form">
       <div class="dialog-heading">
         <div><p class="eyebrow">Design proposal</p><h2 id="node-dialog-title">Add node</h2></div>
         <button type="button" id="node-close" class="icon-button" aria-label="Close">x</button>
       </div>
-      <label>Name<input id="node-name" required maxlength="40" autocomplete="off"></label>
-      <label>Kind
-        <select id="node-type"><option value="class">Class</option><option value="method">Method</option><option value="function">Function</option><option value="module">Module</option></select>
-      </label>
-      <label>Contained by<select id="node-parent"></select></label>
+      <div class="proposal-form-grid">
+        <label>Name<input id="node-name" required maxlength="120" autocomplete="off"></label>
+        <label>Kind
+          <select id="node-type"><option value="package">Package</option><option value="module">Module</option><option value="class">Class</option><option value="method">Method</option><option value="function">Function</option></select>
+        </label>
+        <label class="proposal-form-wide">Contained by<select id="node-parent"></select></label>
+        <label>Target path<input id="node-target-path" maxlength="500" autocomplete="off" placeholder="src/package/module.py"></label>
+        <label>Qualified name<input id="node-qualified-name" maxlength="500" autocomplete="off" placeholder="Package.Class.method"></label>
+        <label class="proposal-form-wide">Signature<input id="node-signature" maxlength="1000" autocomplete="off" placeholder="(self, value: str) -> Result"></label>
+        <label class="proposal-form-wide">Responsibility<textarea id="node-description" maxlength="2000" rows="3" placeholder="Why this element exists and what it owns"></textarea></label>
+        <label class="proposal-form-wide">Docstring<textarea id="node-docstring" maxlength="2000" rows="3" placeholder="Public intent of the proposed declaration"></textarea></label>
+        <label>Requirements <span class="field-help">One identifier per line</span><textarea id="node-satisfies" rows="3" placeholder="BR-001"></textarea></label>
+        <label>Acceptance criteria <span class="field-help">One criterion per line</span><textarea id="node-acceptance" rows="3" placeholder="Provider errors use the domain exception."></textarea></label>
+      </div>
       <button class="submit-button" type="submit">Save proposal</button>
     </form>
   </dialog>
@@ -438,6 +448,7 @@
   <script src="https://cdn.jsdelivr.net/npm/mermaid@11.6.0/dist/mermaid.min.js" defer></script>
   <script src="/flow-navigation.js" defer></script>
   <script src="/graph-views.js" defer></script>
+  <script src="/proposal-contract.js" defer></script>
   <script src="/app.js" defer></script>
   <script src="/graph-render.js" defer></script>
   <script src="/panel-layout.js" defer></script>

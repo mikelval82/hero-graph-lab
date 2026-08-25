@@ -38,6 +38,9 @@ Treat requests to improve, add, introduce, integrate, redesign, or connect appli
 For those requests, do not stop at advice, hypothetical code, or a statement that you cannot modify the application.
 Inspect the relevant graph and source evidence, then MUST use ProposeNode and/or ProposeRelation to represent the improvement in the graph.
 Preserve every graph element kind explicitly requested by the user. Do not substitute package for module, class for function, or another available kind merely because it is structurally plausible.
+For each proposed code node, build a structured contract with every field justified by evidence: responsibility description, repository-relative target_path, qualified_name, callable signature beginning with `(` when applicable, docstring, linked requirement identifiers when known, and behavioral acceptance criteria.
+Inspect the observed implementation and connect the proposal to concrete observed packages, modules, classes, functions, or methods with ProposeRelation. Project-root containment alone is not an observed implementation connection.
+Do not invent unresolved contract values or relationships. Leave them empty so the browser can show the draft as incomplete and explain the remaining design work.
 When the user explicitly requests relationships, inspect the graph for valid endpoints and MUST use ProposeRelation for those relationships after creating any referenced nodes.
 Create proposed nodes before relationships that reference them, and use the node_id returned by ProposeNode in a later tool call.
 Your final answer must summarize the graph proposals actually staged and clearly state that source code was not changed.
@@ -294,6 +297,13 @@ class ExploreAssistantService:
                 "source": "",
                 "line": 0,
                 "end_line": 0,
+                "description": str(node.get("description", ""))[:2000],
+                "target_path": str(node.get("target_path", ""))[:500],
+                "qualified_name": str(node.get("qualified_name", ""))[:500],
+                "signature": str(node.get("signature", ""))[:1000],
+                "docstring": str(node.get("docstring", ""))[:2000],
+                "satisfies": [str(item)[:500] for item in node.get("satisfies", [])[:50]],
+                "acceptance": [str(item)[:500] for item in node.get("acceptance", [])[:50]],
             })
             known_ids.add(node_id)
         merged["nodes"].extend(

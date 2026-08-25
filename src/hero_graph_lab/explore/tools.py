@@ -241,6 +241,36 @@ def _required_text(arguments: dict[str, Any], name: str, maximum: int = 120) -> 
     return value
 
 
+def _optional_text(arguments: dict[str, Any], name: str, maximum: int) -> str:
+    return str(arguments.get(name, "")).strip()[:maximum]
+
+
+def _text_list(arguments: dict[str, Any], name: str) -> list[str]:
+    value = arguments.get(name, [])
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError(f"{name} must be an array")
+    normalized: list[str] = []
+    for item in value[:50]:
+        entry = str(item).strip()[:500]
+        if entry and entry not in normalized:
+            normalized.append(entry)
+    return normalized
+
+
+def _target_path(arguments: dict[str, Any]) -> str:
+    value = _optional_text(arguments, "target_path", 500).replace("\\", "/")
+    if not value:
+        return ""
+    parts = value.split("/")
+    if value.startswith("/") or re.match(r"^[A-Za-z]:", value) or any(
+        part in {"", ".", ".."} for part in parts
+    ):
+        raise ValueError("target_path must be repository-relative without empty, dot, or parent segments")
+    return value
+
+
 def _propose_node(arguments: dict[str, Any], environment: ToolEnvironment) -> dict[str, Any]:
     if not environment.allow_proposals:
         raise ValueError("graph proposal mode is disabled")
@@ -258,7 +288,13 @@ def _propose_node(arguments: dict[str, Any], environment: ToolEnvironment) -> di
         "label": _required_text(arguments, "label", 80),
         "kind": kind,
         "parent_id": parent_id,
-        "description": str(arguments.get("description", "")).strip()[:500],
+        "description": _optional_text(arguments, "description", 2000),
+        "target_path": _target_path(arguments),
+        "qualified_name": _optional_text(arguments, "qualified_name", 500),
+        "signature": _optional_text(arguments, "signature", 1000),
+        "docstring": _optional_text(arguments, "docstring", 2000),
+        "satisfies": _text_list(arguments, "satisfies"),
+        "acceptance": _text_list(arguments, "acceptance"),
     }
     environment.actions.append(action)
     return action
@@ -303,6 +339,6 @@ def _default_tools() -> list[ExploreTool]:
         ExploreTool(ToolSpec("GraphNeighbors", "Get incoming/outgoing neighboring nodes and relationships.", _schema({"node_id": {"type": "string"}, "direction": {"type": "string", "enum": ["incoming", "outgoing", "both"]}, "relation": {"type": "string"}}, ["node_id"])), _graph_neighbors),
         ExploreTool(ToolSpec("GraphPath", "Find the shortest undirected path between two graph nodes.", _schema({"source_id": {"type": "string"}, "target_id": {"type": "string"}, "relation": {"type": "string"}}, ["source_id", "target_id"])), _graph_path),
         ExploreTool(ToolSpec("GraphScope", "Return a containment subtree from a graph node.", _schema({"node_id": {"type": "string"}, "depth": {"type": "integer"}}, ["node_id"])), _graph_scope),
-        ExploreTool(ToolSpec("ProposeNode", "Emit a reviewable node proposal for the browser-local design draft. This tool does not edit source files or synchronize the map to HARNESS.", _schema({"label": {"type": "string"}, "kind": {"type": "string", "enum": sorted(PROPOSAL_NODE_KINDS)}, "parent_id": {"type": "string"}, "description": {"type": "string"}}, ["label", "kind"])), _propose_node),
+        ExploreTool(ToolSpec("ProposeNode", "Emit a reviewable structured node contract for the browser-local design draft. Include justified interface, behavior, and target metadata; this tool does not edit source files or synchronize the map to HARNESS.", _schema({"label": {"type": "string"}, "kind": {"type": "string", "enum": sorted(PROPOSAL_NODE_KINDS)}, "parent_id": {"type": "string"}, "description": {"type": "string"}, "target_path": {"type": "string"}, "qualified_name": {"type": "string"}, "signature": {"type": "string"}, "docstring": {"type": "string"}, "satisfies": {"type": "array", "items": {"type": "string"}}, "acceptance": {"type": "array", "items": {"type": "string"}}}, ["label", "kind"])), _propose_node),
         ExploreTool(ToolSpec("ProposeRelation", "Emit a reviewable relationship proposal for the browser-local design draft. This tool does not edit source files or synchronize the map to HARNESS.", _schema({"source_id": {"type": "string"}, "target_id": {"type": "string"}, "kind": {"type": "string", "enum": sorted(PROPOSAL_RELATION_KINDS)}, "label": {"type": "string"}, "properties": {"type": "object"}}, ["source_id", "target_id", "kind"])), _propose_relation),
     ]

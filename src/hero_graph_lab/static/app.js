@@ -582,7 +582,7 @@ function setSelection(nodeId) {
   state.selected = nodeId;
   state.selectedRelation = null;
   const node = state.graph.nodes.find((candidate) => candidate.id === state.selected);
-  if (node?.source) renderCodePanel(node);
+  if (node) renderCodePanel(node);
   updateGraphCount();
   updateTools();
   syncTreeSelection();
@@ -1234,9 +1234,127 @@ function setCodeSearchAvailable(available) {
   }
 }
 
+function appendContractList(container, title, values, emptyText) {
+  const section = document.createElement("section");
+  section.className = "proposal-contract-section";
+  const heading = document.createElement("h3");
+  heading.textContent = title;
+  section.append(heading);
+  if (!values.length) {
+    const empty = document.createElement("p");
+    empty.className = "proposal-contract-muted";
+    empty.textContent = emptyText;
+    section.append(empty);
+  } else {
+    const list = document.createElement("ul");
+    values.forEach((value) => {
+      const item = document.createElement("li");
+      item.textContent = value;
+      list.append(item);
+    });
+    section.append(list);
+  }
+  container.append(section);
+}
+
+function renderProposalContract(node) {
+  const contractApi = globalThis.HeroProposalContract;
+  if (!contractApi) return;
+  const normalized = contractApi.normalizeContractNode(node);
+  const connections = contractApi.contractConnections(node.id, state.graph);
+  const issues = contractApi.contractIssues(normalized, state.graph);
+  const panel = document.querySelector("#proposal-contract");
+  panel.replaceChildren();
+  panel.hidden = false;
+  document.querySelector("#code-content").hidden = true;
+  document.querySelector("#code-empty").hidden = true;
+  document.querySelector("#document-editor").hidden = true;
+  document.querySelector("#code-kicker").textContent = "Proposal contract";
+  document.querySelector("#code-title").textContent = normalized.label;
+  document.querySelector("#code-meta").textContent = `${normalized.target_path || "No target path"} / proposed interface, not source code`;
+  const statusElement = document.querySelector("#code-status");
+  statusElement.className = `code-status ${normalized.status || "proposed"}`;
+  statusElement.textContent = normalized.status === "modified" ? "EDIT" : "NEW";
+  statusElement.hidden = false;
+  setCodeSearchAvailable(false);
+
+  const summary = document.createElement("section");
+  summary.className = "proposal-contract-summary";
+  const eyebrow = document.createElement("p");
+  eyebrow.className = "eyebrow";
+  eyebrow.textContent = `${normalized.kind || "proposal"} · ${normalized.designProvenance || "HUMAN"}`;
+  const responsibility = document.createElement("p");
+  responsibility.textContent = normalized.designDescription || "No responsibility has been defined yet.";
+  const metadata = document.createElement("dl");
+  [
+    ["Target", normalized.target_path || "Not defined"],
+    ["Qualified name", normalized.qualified_name || "Not defined"],
+    ["Signature", normalized.signature || "Not defined"],
+  ].forEach(([termText, detailText]) => {
+    const term = document.createElement("dt");
+    term.textContent = termText;
+    const detail = document.createElement("dd");
+    detail.textContent = detailText;
+    metadata.append(term, detail);
+  });
+  summary.append(eyebrow, responsibility, metadata);
+
+  const interfaceSection = document.createElement("section");
+  interfaceSection.className = "proposal-contract-section proposal-interface";
+  const interfaceHeading = document.createElement("h3");
+  interfaceHeading.textContent = "Proposed interface";
+  const warning = document.createElement("p");
+  warning.className = "proposal-preview-warning";
+  warning.textContent = "Virtual contract preview — no repository source has been created.";
+  const preview = document.createElement("pre");
+  const code = document.createElement("code");
+  code.textContent = contractApi.interfacePreview(normalized, state.graph);
+  preview.append(code);
+  interfaceSection.append(interfaceHeading, warning, preview);
+
+  panel.append(summary, interfaceSection);
+  appendContractList(panel, "Requirements", normalized.satisfies, "No brief requirement linked yet.");
+  appendContractList(panel, "Acceptance criteria", normalized.acceptance, "No behavioral acceptance criterion defined yet.");
+
+  const connectionValues = connections.direct.map(({ node: endpoint, relation }) => {
+    const direction = relation.direction === "outgoing" ? "→" : "←";
+    return `${direction} ${endpoint.label} [${endpoint.status === "proposed" ? "proposed" : "observed"}] · ${relation.label}`;
+  });
+  appendContractList(panel, "Direct relationships", connectionValues, "No direct relationship defined.");
+  const anchorValues = connections.observedAnchors.map(({ node: anchor, viaNode, relation }) =>
+    `${anchor.label} (${anchor.source || anchor.kind}) via ${viaNode?.label || normalized.label} · ${relation.label}`
+  );
+  appendContractList(panel, "Observed implementation anchors", anchorValues, "No observed implementation anchor found for this proposal component.");
+
+  const issueSection = document.createElement("section");
+  issueSection.className = `proposal-contract-section proposal-readiness ${issues.length ? "incomplete" : "ready"}`;
+  const issueHeading = document.createElement("h3");
+  issueHeading.textContent = issues.length ? `Contract incomplete · ${issues.length}` : "Contract ready for design review";
+  issueSection.append(issueHeading);
+  if (issues.length) {
+    const issueList = document.createElement("ul");
+    issues.forEach((issue) => {
+      const item = document.createElement("li");
+      item.textContent = issue;
+      issueList.append(item);
+    });
+    issueSection.append(issueList);
+  } else {
+    const ready = document.createElement("p");
+    ready.textContent = "The structural draft is complete and connected. HARNESS approval and verification are still required.";
+    issueSection.append(ready);
+  }
+  panel.append(issueSection);
+}
+
 function renderCodePanel(node = graphNode(state.selected)) {
-  if (!node || !state.source) return;
+  if (!node) return;
   dispatchEvent(new CustomEvent("code-selection-opened"));
+  if (node.status === "proposed" || (!node.source && (node.designDescription || node.target_path || node.docstring))) {
+    renderProposalContract(node);
+    return;
+  }
+  if (!state.source) return;
   const source = state.source.sources?.[node.source] || (state.source.content ? state.source : null);
   if (!source) return;
   const status = node.status || "observed";
@@ -1246,6 +1364,8 @@ function renderCodePanel(node = graphNode(state.selected)) {
   document.querySelector("#code-title").textContent = node.label;
   const content = document.querySelector("#code-content");
   const empty = document.querySelector("#code-empty");
+  document.querySelector("#proposal-contract").hidden = true;
+  document.querySelector("#code-kicker").textContent = "Code";
   content.replaceChildren();
   content.scrollTop = 0;
   const hasSource = node.line > 0 && node.end_line >= node.line;
@@ -1291,6 +1411,7 @@ document.querySelector("#code-search-clear").addEventListener("click", () => {
 });
 addEventListener("mission-document-opened", () => {
   document.querySelector("#code-search").hidden = true;
+  document.querySelector("#proposal-contract").hidden = true;
   clearCodeSearchHighlights();
 });
 addEventListener("mission-document-closed", () => {
@@ -1360,7 +1481,7 @@ function applyAgentGraphProposals(actions) {
       rejected += 1;
       return;
     }
-    state.graph.nodes.push({
+    state.graph.nodes.push(globalThis.HeroProposalContract.normalizeContractNode({
       id: action.node_id,
       kind: action.kind,
       label: action.label.trim(),
@@ -1370,8 +1491,14 @@ function applyAgentGraphProposals(actions) {
       source: "",
       status: "proposed",
       designDescription: action.description || "",
+      target_path: action.target_path || "",
+      qualified_name: action.qualified_name || "",
+      signature: action.signature || "",
+      docstring: action.docstring || "",
+      satisfies: action.satisfies || [],
+      acceptance: action.acceptance || [],
       designProvenance: "AGENT",
-    });
+    }));
     if (parent) {
       state.graph.edges.push({ id: `containment:${crypto.randomUUID()}`, source: parent, target: action.node_id, kind: "contains", status: "proposed", properties: {}, generated: true, designProvenance: "AGENT" });
       state.treeExpanded.add(parent);
@@ -1545,6 +1672,14 @@ function openNodeDialog(mode) {
   document.querySelector("#node-name").value = mode === "edit" ? node.label : "";
   document.querySelector("#node-type").value = mode === "edit" ? node.kind : "class";
   document.querySelector("#node-parent").value = mode === "edit" ? node.parent || "" : node && node.status !== "removed" ? node.id : state.scope;
+  const contract = globalThis.HeroProposalContract.normalizeContractNode(mode === "edit" ? node : {});
+  document.querySelector("#node-target-path").value = contract.target_path;
+  document.querySelector("#node-qualified-name").value = contract.qualified_name;
+  document.querySelector("#node-signature").value = contract.signature;
+  document.querySelector("#node-description").value = contract.designDescription;
+  document.querySelector("#node-docstring").value = contract.docstring;
+  document.querySelector("#node-satisfies").value = contract.satisfies.join("\n");
+  document.querySelector("#node-acceptance").value = contract.acceptance.join("\n");
   nodeDialog.showModal();
   document.querySelector("#node-name").focus();
 }
@@ -1615,15 +1750,24 @@ nodeForm.addEventListener("submit", (event) => {
   const name = document.querySelector("#node-name").value.trim();
   const kind = document.querySelector("#node-type").value;
   const parent = document.querySelector("#node-parent").value || null;
+  const contract = globalThis.HeroProposalContract.normalizeContractNode({
+    target_path: document.querySelector("#node-target-path").value,
+    qualified_name: document.querySelector("#node-qualified-name").value,
+    signature: document.querySelector("#node-signature").value,
+    designDescription: document.querySelector("#node-description").value,
+    docstring: document.querySelector("#node-docstring").value,
+    satisfies: document.querySelector("#node-satisfies").value,
+    acceptance: document.querySelector("#node-acceptance").value,
+  });
   clearCallTrace();
   if (mode === "add") {
     const nodeId = `proposal:${crypto.randomUUID()}`;
-    state.graph.nodes.push({ id: nodeId, kind, label: name, parent, line: 0, end_line: 0, source: "", status: "proposed" });
+    state.graph.nodes.push({ ...contract, id: nodeId, kind, label: name, parent, line: 0, end_line: 0, source: "", status: "proposed", designProvenance: "HUMAN" });
     if (parent) state.graph.edges.push({ id: `containment:${crypto.randomUUID()}`, source: parent, target: nodeId, kind: "contains", status: "proposed", properties: {}, generated: true });
     state.selected = nodeId;
   } else {
     const node = state.graph.nodes.find((candidate) => candidate.id === state.selected);
-    node.label = name; node.kind = kind; node.parent = parent;
+    Object.assign(node, contract, { label: name, kind, parent });
     if (node.status === "observed") node.status = "modified";
     state.graph.edges = state.graph.edges.filter((edge) => !(edge.kind === "contains" && edge.target === node.id));
     if (parent) state.graph.edges.push({ id: `containment:${crypto.randomUUID()}`, source: parent, target: node.id, kind: "contains", status: node.status === "proposed" ? "proposed" : "modified", properties: {}, generated: true });

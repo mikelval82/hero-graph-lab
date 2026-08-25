@@ -39,6 +39,16 @@ class GraphToolGatewayTest(TestCase):
         self.assertFalse(proposal["annotations"]["readOnlyHint"])
         self.assertTrue(search["annotations"]["readOnlyHint"])
         self.assertEqual(proposal["inputSchema"]["additionalProperties"], False)
+        self.assertTrue(
+            {
+                "target_path",
+                "qualified_name",
+                "signature",
+                "docstring",
+                "satisfies",
+                "acceptance",
+            }.issubset(proposal["inputSchema"]["properties"])
+        )
 
     def test_executes_queries_against_the_active_graph(self) -> None:
         result = self.gateway.execute("GraphSearch", {"query": "OrderService"})
@@ -56,9 +66,25 @@ class GraphToolGatewayTest(TestCase):
                 "kind": "class",
                 "parent_id": parent["id"],
                 "description": "Sends Telegram notifications",
+                "target_path": "src/application/telegram.py",
+                "qualified_name": "TelegramNotifier",
+                "docstring": "Send application notifications through Telegram.",
+                "satisfies": ["BR-002"],
+                "acceptance": ["Provider failures do not escape the adapter."],
             },
         )
         proposed_node = proposed["actions"][0]
+        self.assertEqual(proposed_node["target_path"], "src/application/telegram.py")
+        self.assertEqual(proposed_node["qualified_name"], "TelegramNotifier")
+        self.assertEqual(
+            proposed_node["docstring"],
+            "Send application notifications through Telegram.",
+        )
+        self.assertEqual(proposed_node["satisfies"], ["BR-002"])
+        self.assertEqual(
+            proposed_node["acceptance"],
+            ["Provider failures do not escape the adapter."],
+        )
         related = self.gateway.execute(
             "ProposeRelation",
             {
@@ -79,6 +105,7 @@ class GraphToolGatewayTest(TestCase):
             self.gateway.execute("GraphSearch", {"query": "TelegramNotifier"})["content"]
         )
         self.assertEqual(found[0]["id"], proposed_node["node_id"])
+        self.assertEqual(found[0]["target_path"], "src/application/telegram.py")
         self.assertEqual(related["actions"][0]["source_id"], proposed_node["node_id"])
 
     def test_rejects_invalid_calls_without_advancing_the_inbox(self) -> None:
@@ -88,6 +115,11 @@ class GraphToolGatewayTest(TestCase):
             self.gateway.execute(
                 "ProposeNode",
                 {"label": "Orphan", "kind": "class", "parent_id": "missing"},
+            )
+        with self.assertRaisesRegex(ValueError, "target_path must be repository-relative"):
+            self.gateway.execute(
+                "ProposeNode",
+                {"label": "Escape", "kind": "module", "target_path": "../escape.py"},
             )
 
         self.assertEqual(self.gateway.pending_proposals(), {"revision": 0, "items": []})

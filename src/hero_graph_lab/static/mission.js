@@ -717,6 +717,7 @@ async function saveOpenDocument() {
 
 function locatorForVisualNode(node) {
   if (node.locator) return node.locator;
+  if (node.target_path) return node.qualified_name ? `${node.target_path}:${node.qualified_name}` : node.target_path;
   if (node.kind === "module") return node.source || null;
   if (!node.source || node.kind === "package") return null;
   const names = [];
@@ -764,7 +765,7 @@ function mergeMissionDesign() {
       visual = {
         id: designNode.id,
         label: designNode.label,
-        kind: visualKind(designNode.level, designNode.label),
+        kind: designNode.kind && designNode.kind !== "unknown" ? designNode.kind : visualKind(designNode.level, designNode.label),
         parent: null,
         line: 0,
         end_line: 0,
@@ -775,6 +776,12 @@ function mergeMissionDesign() {
     visual.designId = designNode.id;
     visual.locator = designNode.locator;
     visual.designDescription = designNode.description;
+    visual.target_path = designNode.target_path || "";
+    visual.qualified_name = designNode.qualified_name || "";
+    visual.signature = designNode.signature || "";
+    visual.docstring = designNode.docstring || "";
+    visual.satisfies = [...(designNode.satisfies || [])];
+    visual.acceptance = [...(designNode.acceptance || [])];
     visual.resolution = designNode.resolution;
     visual.status = intentStatus(designNode.intent);
     visualByDesignId.set(designNode.id, visual);
@@ -839,17 +846,27 @@ function desiredDesignState() {
     const matching = [...backendNodes.values()].find((item) => locator && item.locator === locator);
     designIds.set(node.id, node.designId || matching?.id || (node.status === "proposed" ? node.id : `observed:${node.id}`));
   });
-  const nodes = candidates.map((node) => ({
+  const nodes = candidates.map((node) => {
+    const contract = globalThis.HeroProposalContract.normalizeContractNode(node);
+    return ({
     id: designIds.get(node.id),
     label: node.label,
     level: visualLevel(node),
+    kind: node.kind,
     provenance: node.designProvenance || backendNodes.get(designIds.get(node.id))?.provenance || "HUMAN",
     location: "IN_REPOSITORY",
     intent: statusIntent(node.status),
     parent_id: designIds.get(node.parent) || null,
     locator: locatorForVisualNode(node),
-    description: node.designDescription || "",
-  }));
+    description: contract.designDescription,
+    target_path: contract.target_path,
+    qualified_name: contract.qualified_name,
+    signature: contract.signature,
+    docstring: contract.docstring,
+    satisfies: contract.satisfies,
+    acceptance: contract.acceptance,
+  });
+  });
   const edges = activeEdges.map((edge) => ({
     source: designIds.get(edge.source),
     target: designIds.get(edge.target),
@@ -878,8 +895,11 @@ function designOperations() {
       operations.push({ op: "add_node", ...node });
       return;
     }
-    const mutable = ["label", "level", "location", "intent", "parent_id", "locator", "description"];
-    const changes = Object.fromEntries(mutable.filter((field) => (current[field] ?? null) !== (node[field] ?? null)).map((field) => [field, node[field]]));
+    const mutable = ["label", "level", "kind", "location", "intent", "parent_id", "locator", "description", "target_path", "qualified_name", "signature", "docstring", "satisfies", "acceptance"];
+    const differs = (field) => ["satisfies", "acceptance"].includes(field)
+      ? JSON.stringify(current[field] || []) !== JSON.stringify(node[field] || [])
+      : (current[field] ?? null) !== (node[field] ?? null);
+    const changes = Object.fromEntries(mutable.filter(differs).map((field) => [field, node[field]]));
     if (Object.keys(changes).length) operations.push({ op: "update_node", id, ...changes });
   });
   desiredEdges.forEach((edge, key) => {
