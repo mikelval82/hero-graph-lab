@@ -1802,4 +1802,5 @@ document.querySelector("#feedback-form").addEventListener("submit", async (event
     event.target.reset(); document.querySelector("#friction-value").textContent = "3"; status.textContent = ""; dialog.close();
   } catch (error) { status.textContent = error.message || "Could not save the finding."; }
 });
+globalThis.HeroArchitectureScenarios?.install(() => state.graph);
 loadExperiment();

@@ -237,6 +237,10 @@ class LabServerTest(TestCase):
                 self.assertIn('id="project-dialog"', index)
                 self.assertIn('id="project-form"', index)
                 self.assertIn('id="project-path"', index)
+                self.assertIn('id="open-scenarios"', index)
+                self.assertIn('id="scenario-dialog"', index)
+                self.assertIn('id="scenario-capture-form"', index)
+                self.assertIn('id="scenario-result"', index)
                 self.assertIn('id="trace-calls"', index)
                 self.assertIn('id="graph-viewport"', index)
                 self.assertIn('id="zoom-in"', index)
@@ -345,6 +349,8 @@ class LabServerTest(TestCase):
                     explore_script = response.read().decode("utf-8")
                 with urlopen(f"{base_url}/app.js") as response:
                     app_script = response.read().decode("utf-8")
+                with urlopen(f"{base_url}/architecture-scenarios.js") as response:
+                    scenario_script = response.read().decode("utf-8")
                 with urlopen(f"{base_url}/flow-navigation.js") as response:
                     flow_navigation_script = response.read().decode("utf-8")
                 with urlopen(f"{base_url}/graph-views.js") as response:
@@ -376,6 +382,10 @@ class LabServerTest(TestCase):
                 self.assertIn('jsonOptions("POST", { path: projectPath })', mission_script)
                 self.assertIn("function currentExploreContext", explore_script)
                 self.assertIn("function renderPinnedNodes", explore_script)
+                self.assertIn("function draftSnapshot", scenario_script)
+                self.assertIn('fetchJson("/api/scenarios"', scenario_script)
+                self.assertIn("renderComparison(result, comparison)", scenario_script)
+                self.assertIn("HeroArchitectureScenarios?.install", app_script)
                 self.assertIn("function updateExploreBusyState", explore_script)
                 self.assertIn("applyAgentGraphProposals(session.actions", explore_script)
                 self.assertIn("async function pollMcpProposals", explore_script)

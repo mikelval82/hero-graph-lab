@@ -124,6 +124,7 @@
             <span class="graph-tool-group-label" id="graph-tools-draft">Draft <span id="design-sync-status" class="sync-status" role="status">Local draft</span></span>
             <div class="graph-tool-actions">
               <button id="sync-design" class="graph-draft-action sync-design" type="button" disabled>Save map</button>
+              <button id="open-scenarios" class="graph-draft-action" type="button">Scenarios</button>
               <button id="reset-design" class="graph-draft-action destructive" type="button" title="Discard all proposals">Discard draft</button>
             </div>
           </div>
@@ -385,6 +386,39 @@
     </form>
   </dialog>
 
+  <dialog id="scenario-dialog" class="scenario-dialog" aria-labelledby="scenario-dialog-title">
+    <div class="scenario-workspace">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">Architecture alternatives</p><h2 id="scenario-dialog-title">Compare scenarios A/B</h2></div>
+        <button type="button" id="scenario-close" class="icon-button" aria-label="Close">x</button>
+      </div>
+      <p class="scenario-intro">Freeze the current design overlay, then compare exact nodes, relationships and contract fields without replacing the active graph.</p>
+      <div class="scenario-workspace-grid">
+        <form id="scenario-capture-form" class="scenario-capture-card">
+          <header><p class="eyebrow">Current draft</p><strong id="scenario-draft-meta">0 design nodes</strong></header>
+          <label for="scenario-name">Scenario name
+            <input id="scenario-name" type="text" required maxlength="120" autocomplete="off" placeholder="Alternative A">
+          </label>
+          <label for="scenario-description">Decision context
+            <textarea id="scenario-description" maxlength="1000" placeholder="What assumption or trade-off does this alternative represent?"></textarea>
+          </label>
+          <button id="scenario-capture" class="submit-button" type="submit">Capture immutable scenario</button>
+        </form>
+        <section class="scenario-compare-card" aria-labelledby="scenario-compare-title">
+          <header><p class="eyebrow">Exact delta</p><strong id="scenario-compare-title">Choose two saved alternatives</strong></header>
+          <div class="scenario-selectors">
+            <label for="scenario-left">Scenario A<select id="scenario-left"></select></label>
+            <span aria-hidden="true">&rarr;</span>
+            <label for="scenario-right">Scenario B<select id="scenario-right"></select></label>
+          </div>
+          <button id="scenario-compare" type="button" disabled>Compare A → B</button>
+          <p id="scenario-status" role="status" aria-live="polite"></p>
+          <div id="scenario-result" class="scenario-result" aria-live="polite" hidden></div>
+        </section>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="feedback-dialog">
     <form id="feedback-form">
       <div class="dialog-heading">
@@ -449,6 +483,7 @@
   <script src="/flow-navigation.js" defer></script>
   <script src="/graph-views.js" defer></script>
   <script src="/proposal-contract.js" defer></script>
+  <script src="/architecture-scenarios.js" defer></script>
   <script src="/app.js" defer></script>
   <script src="/graph-render.js" defer></script>
   <script src="/panel-layout.js" defer></script>
