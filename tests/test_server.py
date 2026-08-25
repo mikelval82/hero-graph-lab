@@ -20,6 +20,34 @@ FIXTURE = Path(__file__).parents[1] / "fixtures" / "order_app"
 
 
 class LabServerTest(TestCase):
+    def test_web_source_nodes_and_source_delivery_share_the_cache_boundary(self) -> None:
+        with TemporaryDirectory() as directory:
+            project = Path(directory) / "project"
+            static = project / "static"
+            static.mkdir(parents=True)
+            (project / "service.py").write_text("def run():\n    return True\n", encoding="utf-8")
+            script = static / "app.js"
+            script.write_text("export const version = 1;\n", encoding="utf-8")
+            state = LabState(project, Path(directory) / "observations.json")
+
+            first_graph = state.graph()
+            first_source = state.source()
+            script.write_text(
+                "export const version = 2;\nexport const ready = true;\n",
+                encoding="utf-8",
+            )
+            second_graph = state.graph()
+            second_source = state.source()
+
+        file_node = next(
+            node for node in second_graph["nodes"] if node["source"] == "static/app.js"
+        )
+        self.assertEqual(file_node["kind"], "file")
+        self.assertEqual(file_node["end_line"], 2)
+        self.assertIn("static/app.js", first_source["sources"])
+        self.assertIn("version = 2", second_source["sources"]["static/app.js"]["content"])
+        self.assertIsNot(first_graph, second_graph)
+
     def test_when_explore_provider_fails_expect_json_bad_gateway(self) -> None:
         class FailingModelClient:
             provider = "gemini"

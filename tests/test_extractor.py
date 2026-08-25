@@ -2,13 +2,47 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 
-from hero_graph_lab.extractor import extract_python_graph, python_source_files
+from hero_graph_lab.extractor import (
+    extract_project_graph,
+    extract_python_graph,
+    project_source_files,
+    python_source_files,
+)
 
 
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "order_service.py"
 
 
 class PythonGraphExtractorTest(TestCase):
+    def test_exposes_supported_web_sources_as_file_nodes_without_invented_symbols(self) -> None:
+        with TemporaryDirectory() as directory:
+            project = Path(directory) / "project"
+            static = project / "src" / "web" / "static"
+            static.mkdir(parents=True)
+            python_file = project / "src" / "service.py"
+            javascript_file = static / "app.js"
+            stylesheet = static / "styles.css"
+            page = static / "index.html"
+            python_file.write_text("def run():\n    return True\n", encoding="utf-8")
+            javascript_file.write_text("export function render() {}\n", encoding="utf-8")
+            stylesheet.write_text("body { color: black; }\n", encoding="utf-8")
+            page.write_text("<main>Graph Lab</main>\n", encoding="utf-8")
+            (project / "README.md").write_text("not a code anchor\n", encoding="utf-8")
+
+            files = project_source_files(project)
+            graph = extract_project_graph(project)
+
+        self.assertEqual(files, [python_file, javascript_file, page, stylesheet])
+        nodes = {node["id"]: node for node in graph["nodes"]}
+        javascript_node = next(
+            node for node in nodes.values() if node["source"] == "src/web/static/app.js"
+        )
+        self.assertEqual(javascript_node["kind"], "file")
+        self.assertEqual(javascript_node["label"], "app.js")
+        self.assertEqual(javascript_node["parent"], "package:project.src.web.static")
+        self.assertFalse(any(edge["source"] == javascript_node["id"] for edge in graph["edges"]))
+        self.assertNotIn("README.md", {node["source"] for node in nodes.values()})
+
     def test_ignores_generated_and_virtual_environment_directories(self) -> None:
         with TemporaryDirectory() as directory:
             project = Path(directory) / "project"

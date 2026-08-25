@@ -125,6 +125,7 @@ body.resizing-panels { cursor: col-resize; -webkit-user-select: none; user-selec
 .tree-icon.package::before { content: ""; position: absolute; left: 1px; top: -3px; width: 7px; height: 4px; background: var(--function); }
 .tree-icon.module { border: 1px solid var(--method); background: white; }
 .tree-icon.module::after { content: ""; position: absolute; top: -1px; right: -1px; width: 4px; height: 4px; background: var(--panel); border-left: 1px solid var(--method); border-bottom: 1px solid var(--method); }
+.tree-icon.file { border: 1px dashed var(--muted); background: var(--surface-muted); }
 .tree-icon.class { color: var(--class); border: 1px solid currentColor; }
 .tree-icon.function, .tree-icon.method { color: var(--accent); font-style: italic; }
 .tree-row.proposed .tree-item-label { color: var(--relation-proposed); }
@@ -278,6 +279,7 @@ body.relation-command-active .graph-viewport { box-shadow: inset 0 0 0 3px var(-
 .node-shape { stroke: var(--paper); stroke-width: 3; }
 .node-shape.package { fill: var(--package); } .node-shape.module { fill: var(--module); } .node-shape.class { fill: var(--class); }
 .node-shape.function { fill: var(--function); } .node-shape.method { fill: var(--method); }
+.node-shape.file { fill: var(--surface-selected); }
 .graph-node.context .node-shape { stroke: #7a8882; stroke-dasharray: 4 3; }
 .graph-node.context .node-status { font-style: italic; }
 .graph-node.journey .node-shape { stroke: var(--graph-accent); stroke-width: 4; }

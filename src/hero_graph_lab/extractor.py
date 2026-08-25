@@ -30,11 +30,22 @@ EXCLUDED_DIRECTORY_NAMES = frozenset(
         "venv",
     }
 )
+PROJECT_SOURCE_SUFFIXES = frozenset(
+    {".cjs", ".css", ".htm", ".html", ".js", ".jsx", ".mjs", ".py", ".ts", ".tsx"}
+)
 
 
 def python_source_files(path: Path) -> list[Path]:
+    return _source_files(path, frozenset({".py"}))
+
+
+def project_source_files(path: Path) -> list[Path]:
+    return _source_files(path, PROJECT_SOURCE_SUFFIXES)
+
+
+def _source_files(path: Path, suffixes: frozenset[str]) -> list[Path]:
     if path.is_file():
-        return [path] if path.suffix == ".py" else []
+        return [path] if path.suffix.lower() in suffixes else []
     files: list[Path] = []
     for root, directories, names in os.walk(path):
         directories[:] = sorted(
@@ -43,7 +54,7 @@ def python_source_files(path: Path) -> list[Path]:
         files.extend(
             Path(root) / name
             for name in sorted(names)
-            if name.endswith(".py")
+            if Path(name).suffix.lower() in suffixes
         )
     return files
 
@@ -200,11 +211,33 @@ def extract_python_graph(path: Path) -> dict[str, Any]:
     return _extract_python_package(path)
 
 
-def _extract_python_package(path: Path) -> dict[str, Any]:
+def extract_project_graph(path: Path) -> dict[str, Any]:
+    if path.is_file():
+        if path.suffix.lower() == ".py":
+            return PythonGraphExtractor(path).extract()
+        return _extract_single_file(path)
+    return _extract_python_package(path, include_project_files=True)
+
+
+def _extract_single_file(path: Path) -> dict[str, Any]:
+    source = path.name
+    node_id = f"file:{source}"
+    content = path.read_text(encoding="utf-8")
+    node = Node(node_id, "file", path.name, None, 1, max(1, len(content.splitlines())), source)
+    return {
+        "source": source,
+        "root": node_id,
+        "nodes": [asdict(node)],
+        "edges": [],
+    }
+
+
+def _extract_python_package(path: Path, *, include_project_files: bool = False) -> dict[str, Any]:
     root_name = path.name
     root_id = f"package:{root_name}"
-    source_files = python_source_files(path)
-    files = [file for file in source_files if file.name != "__init__.py"]
+    source_files = project_source_files(path) if include_project_files else python_source_files(path)
+    python_files = [file for file in source_files if file.suffix.lower() == ".py"]
+    files = [file for file in python_files if file.name != "__init__.py"]
     parsed: list[tuple[Path, str, str, ast.AST]] = []
     symbol_candidates: dict[str, set[str]] = defaultdict(set)
 
@@ -234,7 +267,7 @@ def _extract_python_package(path: Path) -> dict[str, Any]:
             parent_id = package_id
         return parent_id
 
-    init_files = (file for file in source_files if file.name == "__init__.py")
+    init_files = (file for file in python_files if file.name == "__init__.py")
     for file in init_files:
         add_package_path(file.relative_to(path).parent)
 
@@ -250,6 +283,28 @@ def _extract_python_package(path: Path) -> dict[str, Any]:
         graph = extractor.extract(tree, index_symbols=False)
         nodes.extend(Node(**node) for node in graph["nodes"])
         edges.extend(Edge(**edge) for edge in graph["edges"])
+
+    if include_project_files:
+        for file in source_files:
+            if file.suffix.lower() == ".py":
+                continue
+            relative = file.relative_to(path)
+            parent_id = add_package_path(relative.parent)
+            source = relative.as_posix()
+            content = file.read_text(encoding="utf-8")
+            node_id = f"file:{root_name}:{source}"
+            nodes.append(
+                Node(
+                    node_id,
+                    "file",
+                    file.name,
+                    parent_id,
+                    1,
+                    max(1, len(content.splitlines())),
+                    source,
+                )
+            )
+            edges.append(Edge(parent_id, node_id, "contains"))
 
     return {
         "source": root_name,

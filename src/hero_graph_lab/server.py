@@ -12,7 +12,7 @@ from typing import Any
 from urllib.parse import urlparse
 from uuid import uuid4
 
-from hero_graph_lab.extractor import extract_python_graph, python_source_files
+from hero_graph_lab.extractor import extract_project_graph, project_source_files
 from hero_graph_lab.contract_gateway import HarnessContractGateway
 from hero_graph_lab.explore import ExploreAssistantService, create_model_client
 from hero_graph_lab.explore.gateway import MCP_INSTRUCTIONS, GraphToolGateway
@@ -70,7 +70,7 @@ class LabState:
                 or self._graph_fixture != fixture
                 or self._graph_fingerprint != fingerprint
             ):
-                self._graph_cache = extract_python_graph(fixture)
+                self._graph_cache = extract_project_graph(fixture)
                 self._graph_fixture = fixture
                 self._graph_fingerprint = fingerprint
             return self._graph_cache
@@ -79,7 +79,7 @@ class LabState:
     def _source_fingerprint(fixture: Path) -> tuple[tuple[str, int, int], ...]:
         root = fixture.parent if fixture.is_file() else fixture
         fingerprint = []
-        for file in python_source_files(fixture):
+        for file in project_source_files(fixture):
             metadata = file.stat()
             fingerprint.append(
                 (
@@ -95,7 +95,7 @@ class LabState:
             files = [self.fixture]
             root = self.fixture.parent
         else:
-            files = python_source_files(self.fixture)
+            files = project_source_files(self.fixture)
             root = self.fixture
         sources = {}
         for file in files:
