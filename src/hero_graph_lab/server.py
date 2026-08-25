@@ -12,6 +12,7 @@ from typing import Any
 from urllib.parse import urlparse
 from uuid import uuid4
 
+from hero_graph_lab.architecture import ArchitectureScenarioService
 from hero_graph_lab.extractor import extract_project_graph, project_source_files
 from hero_graph_lab.contract_gateway import HarnessContractGateway
 from hero_graph_lab.explore import ExploreAssistantService, create_model_client
@@ -40,6 +41,10 @@ class LabState:
     ) -> None:
         self.fixture = fixture
         self.observations_path = observations_path
+        self.scenarios = ArchitectureScenarioService(
+            observations_path.with_name("architecture-scenarios.json"),
+            lambda: self.fixture,
+        )
         self.harness_host = harness_host
         self.project_selected = project_selected
         self._lock = threading.RLock()
@@ -198,6 +203,18 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
             if path == "/api/observations":
                 self._send_json(state.observations())
                 return
+            if path == "/api/scenarios":
+                self._send_json({"scenarios": state.scenarios.list()})
+                return
+            scenario_id = self._scenario_id(path)
+            if scenario_id:
+                try:
+                    self._send_json(state.scenarios.get(scenario_id))
+                except KeyError as error:
+                    self._send_json({"error": str(error)}, HTTPStatus.NOT_FOUND)
+                except ValueError as error:
+                    self._send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+                return
             if path == "/api/harness/status":
                 self._send_json(state.harness_status())
                 return
@@ -240,6 +257,12 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
                 return
             if parsed.path == "/api/explore/sessions":
                 self._send_json(state.explore.create_session(), HTTPStatus.CREATED)
+                return
+            if parsed.path == "/api/scenarios":
+                self._capture_scenario()
+                return
+            if parsed.path == "/api/scenarios/compare":
+                self._compare_scenarios()
                 return
             tool_name = self._mcp_tool_name(parsed.path)
             if tool_name:
@@ -312,6 +335,29 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
                 return
             self._send_json(response)
 
+        def _capture_scenario(self) -> None:
+            try:
+                payload = self._read_json()
+                scenario = state.scenarios.capture(payload)
+            except (ValueError, json.JSONDecodeError) as error:
+                self._send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+                return
+            self._send_json(scenario, HTTPStatus.CREATED)
+
+        def _compare_scenarios(self) -> None:
+            try:
+                payload = self._read_json(max_bytes=16_000)
+                comparison = state.scenarios.compare(
+                    payload.get("left_id"), payload.get("right_id")
+                )
+            except KeyError as error:
+                self._send_json({"error": str(error)}, HTTPStatus.NOT_FOUND)
+                return
+            except (ValueError, json.JSONDecodeError) as error:
+                self._send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+                return
+            self._send_json(comparison)
+
         def _execute_mcp_tool(self, tool_name: str) -> None:
             try:
                 payload = self._read_json(max_bytes=128_000)
@@ -351,6 +397,11 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
         def _explore_message_session_id(path: str) -> str | None:
             segments = path.strip("/").split("/")
             return segments[3] if len(segments) == 5 and segments[:3] == ["api", "explore", "sessions"] and segments[4] == "messages" else None
+
+        @staticmethod
+        def _scenario_id(path: str) -> str | None:
+            segments = path.strip("/").split("/")
+            return segments[2] if len(segments) == 3 and segments[:2] == ["api", "scenarios"] else None
 
         def _start_harness(self) -> None:
             if state.harness_host is None:

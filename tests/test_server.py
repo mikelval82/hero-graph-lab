@@ -20,6 +20,87 @@ FIXTURE = Path(__file__).parents[1] / "fixtures" / "order_app"
 
 
 class LabServerTest(TestCase):
+    def test_scenario_api_captures_lists_retrieves_and_compares_project_drafts(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "project"
+            project.mkdir()
+            state = LabState(project, root / "observations.json")
+            server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(state))
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            snapshot = {
+                "nodes": [
+                    {
+                        "id": "proposal:scenario",
+                        "label": "ArchitectureScenarioService",
+                        "kind": "class",
+                        "parent": "observed:server",
+                        "status": "proposed",
+                        "description": "Compare immutable alternatives.",
+                        "target_path": "src/hero_graph_lab/architecture/scenarios.py",
+                        "qualified_name": "ArchitectureScenarioService",
+                        "signature": "",
+                        "docstring": "Compare architecture alternatives.",
+                        "satisfies": ["AW-003"],
+                        "acceptance": ["Reports exact changes."],
+                    }
+                ],
+                "edges": [],
+                "observed_endpoints": [
+                    {
+                        "id": "observed:server",
+                        "label": "server.py",
+                        "kind": "module",
+                        "source": "src/hero_graph_lab/server.py",
+                    }
+                ],
+            }
+            try:
+                base_url = f"http://127.0.0.1:{server.server_port}"
+
+                def post(path: str, body: dict):  # noqa: ANN202
+                    request = Request(
+                        f"{base_url}{path}",
+                        data=json.dumps(body).encode(),
+                        headers={"Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    with urlopen(request) as response:
+                        return response.status, json.load(response)
+
+                status, left = post(
+                    "/api/scenarios", {"name": "A", "snapshot": snapshot}
+                )
+                changed = json.loads(json.dumps(snapshot))
+                changed["nodes"][0]["description"] = "Compare exact contract alternatives."
+                _, right = post("/api/scenarios", {"name": "B", "snapshot": changed})
+
+                with urlopen(f"{base_url}/api/scenarios") as response:
+                    listed = json.load(response)
+                with urlopen(f"{base_url}/api/scenarios/{left['id']}") as response:
+                    retrieved = json.load(response)
+                _, comparison = post(
+                    "/api/scenarios/compare",
+                    {"left_id": left["id"], "right_id": right["id"]},
+                )
+
+                self.assertEqual(status, 201)
+                self.assertEqual([item["name"] for item in listed["scenarios"]], ["A", "B"])
+                self.assertEqual(retrieved["id"], left["id"])
+                self.assertEqual(comparison["summary"]["changed_nodes"], 1)
+
+                with self.assertRaises(HTTPError) as raised:
+                    post(
+                        "/api/scenarios",
+                        {"name": "Broken", "snapshot": {"nodes": [], "edges": []}},
+                    )
+                self.assertEqual(raised.exception.code, 400)
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join()
+
     def test_web_source_nodes_and_source_delivery_share_the_cache_boundary(self) -> None:
         with TemporaryDirectory() as directory:
             project = Path(directory) / "project"
