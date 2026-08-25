@@ -2,6 +2,8 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const DESIGN_STORAGE_KEY = "hero-graph-lab-design-v1";
 const flowNavigation = globalThis.HeroFlowNavigation;
 const graphViews = globalThis.HeroGraphViews;
+const semanticZoom = globalThis.HeroSemanticZoom;
+const semanticProjector = new semanticZoom.SemanticZoomProjector();
 const state = {
   graph: null,
   baseGraph: null,
@@ -34,6 +36,9 @@ const state = {
   currentLayout: null,
   viewStates: { structure: null, flow: null, focus: null },
   focusReturnView: "flow",
+  architectureLevel: "native",
+  rememberedArchitectureSelection: null,
+  architectureReturnView: null,
   nodeById: new Map(),
   childrenByParent: new Map(),
 };
@@ -108,6 +113,9 @@ function applyGraphScale() {
   document.querySelector("#zoom-level").textContent = `${Math.round(state.graphZoom * 100)}%`;
   document.querySelector("#zoom-out").disabled = state.graphZoom <= GRAPH_MIN_ZOOM;
   document.querySelector("#zoom-in").disabled = state.graphZoom >= GRAPH_MAX_ZOOM;
+  const detail = semanticZoom.semanticDetail(state.graphZoom);
+  document.querySelector("#semantic-detail").textContent = `${detail[0].toUpperCase()}${detail.slice(1)}`;
+  document.body.dataset.semanticDetail = detail;
 }
 
 function setGraphZoom(zoom, anchorClientX, anchorClientY) {
@@ -118,8 +126,10 @@ function setGraphZoom(zoom, anchorClientX, anchorClientY) {
   const anchorY = anchorClientY === undefined ? graphViewport.clientHeight / 2 : anchorClientY - bounds.top;
   const contentX = (graphViewport.scrollLeft + anchorX) / state.graphZoom;
   const contentY = (graphViewport.scrollTop + anchorY) / state.graphZoom;
+  const previousDetail = semanticZoom.semanticDetail(state.graphZoom);
   state.graphZoom = nextZoom;
   applyGraphScale();
+  if (semanticZoom.semanticDetail(state.graphZoom) !== previousDetail) render();
   graphViewport.scrollLeft = contentX * nextZoom - anchorX;
   graphViewport.scrollTop = contentY * nextZoom - anchorY;
 }
@@ -128,8 +138,10 @@ function fitGraphToView() {
   const availableWidth = Math.max(1, graphViewport.offsetWidth - GRAPH_FIT_PADDING);
   const availableHeight = Math.max(1, graphViewport.offsetHeight - GRAPH_FIT_PADDING);
   const fittedScale = Math.min(availableWidth / state.graphWidth, availableHeight / state.graphHeight);
+  const previousDetail = semanticZoom.semanticDetail(state.graphZoom);
   state.graphZoom = clamp(fittedScale / graphBaseScale(), GRAPH_MIN_ZOOM, GRAPH_MAX_ZOOM);
   applyGraphScale();
+  if (semanticZoom.semanticDetail(state.graphZoom) !== previousDetail) render();
   graphViewport.scrollTo({
     left: Math.max(0, (graphViewport.scrollWidth - graphViewport.clientWidth) / 2),
     top: Math.max(0, (graphViewport.scrollHeight - graphViewport.clientHeight) / 2),
@@ -383,10 +395,25 @@ function graphViewContext(overrides = {}) {
   };
 }
 
+function architectureLayerActive() {
+  return state.architectureLevel !== "native";
+}
+
+function architectureGraph(view = state.view, selectedId = state.selected, level = state.architectureLevel) {
+  return semanticProjector.project(state.graph, {
+    level,
+    view,
+    scopeId: state.scope || state.graph?.root,
+    selectedId,
+    hiddenNodeIds: state.hiddenGraphNodes,
+  });
+}
+
 function navigationGraph() {
   if (state.callTrace) return callTraceGraph();
   if (state.graphProjection) return state.graphProjection.graph;
   if (state.layoutLocked && state.layoutSnapshot) return state.layoutSnapshot.graph;
+  if (architectureLayerActive()) return architectureGraph();
   if (state.view === "structure") return structureGraph();
   if (state.view === "focus") return focusGraph();
   return flowJourneyGraph();
@@ -397,7 +424,7 @@ function graphProjectionKey(graph) {
 }
 
 function captureGraphViewState() {
-  if (!state.currentLayout) return;
+  if (!state.currentLayout || architectureLayerActive()) return;
   state.viewStates[state.view] = {
     layout: structuredClone(state.currentLayout),
     selected: state.selected,
@@ -511,7 +538,7 @@ function startDrag(event, nodeId, position) {
 
 function dragNode(event) {
   if (!state.drag || event.pointerId !== state.drag.pointerId) return;
-  if (state.layoutLocked) return;
+  if (state.layoutLocked || architectureLayerActive()) return;
   const bounds = graphElement.getBoundingClientRect();
   const deltaX = (event.clientX - state.drag.startClientX) * (state.graphWidth / bounds.width);
   const deltaY = (event.clientY - state.drag.startClientY) * (state.graphHeight / bounds.height);
@@ -549,6 +576,7 @@ function stopDrag(event) {
   setSelection(clickTransition.selected);
   if (clickTransition.isDoubleClick) {
     if (state.graphProjection) globalThis.HeroDiagrams?.expandProjection(completedDrag.nodeId);
+    else if (architectureLayerActive()) document.querySelector("#graph-command-status").textContent = "Return to Native layer to expand nodes.";
     else if (state.view === "flow" || canEnterScope(completedDrag.nodeId)) expandSelectedNode();
     fitGraphToView();
     focusRenderedGraphNode(completedDrag.nodeId);
@@ -556,6 +584,11 @@ function stopDrag(event) {
 }
 
 function setSelection(nodeId) {
+  if (
+    architectureLayerActive()
+    && state.rememberedArchitectureSelection
+    && nodeId !== state.rememberedArchitectureSelection.mappedId
+  ) state.rememberedArchitectureSelection = null;
   const previousNodeId = state.selected;
   if (state.view === "flow" && previousNodeId && nodeId && previousNodeId !== nodeId) {
     const visibleGraph = navigationGraph();
@@ -601,6 +634,7 @@ function clearSelection() {
     return;
   }
   state.selected = null;
+  state.rememberedArchitectureSelection = null;
   state.selectedRelation = null;
   state.flowEntryCandidate = null;
   updateGraphCount();
@@ -621,6 +655,67 @@ function updateGraphCount() {
   const changedRelations = state.graph.edges.filter((edge) => (edge.status || "observed") !== "observed" && !edge.generated).length;
   const proposals = changedNodes + changedRelations;
   document.querySelector("#graph-count").textContent = `${visibleGraph.nodes.length} visible / ${state.graph.nodes.length} total / ${proposals} changes`;
+  updateGraphViewLabel();
+}
+
+function updateGraphViewLabel() {
+  const viewLabel = state.view === "structure" ? "Hierarchy" : `${state.view[0].toUpperCase()}${state.view.slice(1)}`;
+  const levelLabel = architectureLayerActive()
+    ? document.querySelector("#architecture-level").selectedOptions[0]?.textContent
+    : "";
+  document.querySelector("#graph-view-label").textContent = `${viewLabel} Graph${levelLabel ? ` · ${levelLabel}` : ""}`;
+}
+
+function mapArchitectureSelection(nodeId, level) {
+  return architectureGraph("flow", nodeId, level).selectedId;
+}
+
+function setArchitectureLevel(level) {
+  if (state.graphProjection || state.callTrace || level === state.architectureLevel) return;
+  const enteringLayer = !architectureLayerActive() && level !== "native";
+  const returningNative = architectureLayerActive() && level === "native";
+  if (enteringLayer) {
+    captureGraphViewState();
+    state.architectureReturnView = {
+      view: state.view,
+      zoom: state.graphZoom,
+      scrollLeft: graphViewport.scrollLeft,
+      scrollTop: graphViewport.scrollTop,
+    };
+  }
+  const returnView = returningNative ? state.architectureReturnView : null;
+  const transition = semanticZoom.transitionSelection({
+    currentLevel: state.architectureLevel,
+    nextLevel: level,
+    selectedId: state.selected,
+    rememberedSelection: state.rememberedArchitectureSelection,
+    mapSelection: mapArchitectureSelection,
+  });
+  releaseGraphLayout();
+  state.architectureLevel = level;
+  state.rememberedArchitectureSelection = transition.rememberedSelection;
+  state.selected = transition.selectedId;
+  state.selectedRelation = null;
+  state.currentLayout = null;
+  if (returnView?.view === state.view) state.graphZoom = returnView.zoom;
+  document.querySelector("#architecture-level").value = level;
+  updateGraphCount();
+  updateTools();
+  render();
+  if (returnView?.view === state.view) {
+    requestAnimationFrame(() => {
+      applyGraphScale();
+      graphViewport.scrollTo({ left: returnView.scrollLeft, top: returnView.scrollTop });
+    });
+  } else fitGraphToView();
+  if (returningNative) state.architectureReturnView = null;
+  syncTreeSelection();
+  const node = graphNode(state.selected);
+  if (node) renderCodePanel(node);
+  document.querySelector("#graph-command-status").textContent = level === "native"
+    ? "Native graph navigation restored."
+    : `${document.querySelector("#architecture-level").selectedOptions[0].textContent} layer opened. Return to Native for inline expansion.`;
+  dispatchEvent(new CustomEvent("graph-selection-changed"));
 }
 
 function setGraphView(view) {
@@ -636,7 +731,7 @@ function setGraphView(view) {
   if (view === "focus") state.focusReturnView = sourceView;
   state.view = view;
   state.selectedRelation = null;
-  let savedView = state.viewStates[view];
+  let savedView = architectureLayerActive() ? null : state.viewStates[view];
   if (view === "focus" && savedView?.selected !== selectedAtEntry) {
     state.viewStates.focus = null;
     savedView = null;
@@ -651,8 +746,7 @@ function setGraphView(view) {
   document.querySelectorAll("[data-graph-view]").forEach((button) => {
     button.setAttribute("aria-pressed", String(button.dataset.graphView === view));
   });
-  const viewLabel = view === "structure" ? "Hierarchy" : `${view[0].toUpperCase()}${view.slice(1)}`;
-  document.querySelector("#graph-view-label").textContent = `${viewLabel} Graph`;
+  updateGraphViewLabel();
   updateGraphCount();
   updateTools();
   render();
@@ -669,9 +763,10 @@ function updateTools() {
   const visibleNodeIds = state.graph ? new Set(navigationGraph().nodes.map((candidate) => candidate.id)) : new Set();
   const inlineNode = node && visibleNodeIds.has(node.id) && isDescendantOf(node.id, state.scope);
   const projectionActive = Boolean(state.graphProjection);
+  const layerActive = architectureLayerActive();
   const traceButton = document.querySelector("#trace-calls");
   const hasOutgoingCalls = node && ["function", "method"].includes(node.kind) && state.graph.edges.some((edge) => edge.kind === "calls" && edge.status !== "removed" && edge.source === node.id);
-  traceButton.disabled = Boolean(state.graphProjection) || state.view !== "flow" || (!state.callTrace && !hasOutgoingCalls);
+  traceButton.disabled = layerActive || Boolean(state.graphProjection) || state.view !== "flow" || (!state.callTrace && !hasOutgoingCalls);
   traceButton.setAttribute("aria-pressed", String(Boolean(state.callTrace)));
   traceButton.querySelector("span").textContent = state.callTrace ? "Restore view" : "Trace calls";
   document.querySelector("#edit-node").disabled = projectionActive || !node || node.status === "removed";
@@ -682,13 +777,14 @@ function updateTools() {
     state.flowEntryCandidate?.target === node.id || !state.flowJourney.length
   );
   const canExpand = inlineNode && scopeChildren(node?.id).length && !state.inlineExpanded.has(node.id);
-  document.querySelector("#expand-node").disabled = projectionActive ? !node : temporaryFocus || !canExpand && !canFollow;
-  document.querySelector("#collapse-node").disabled = projectionActive ? !state.graphProjection.history.length : temporaryFocus || !inlineNode || !state.inlineExpanded.has(node.id);
+  document.querySelector("#expand-node").disabled = layerActive || (projectionActive ? !node : temporaryFocus || !canExpand && !canFollow);
+  document.querySelector("#collapse-node").disabled = layerActive || (projectionActive ? !state.graphProjection.history.length : temporaryFocus || !inlineNode || !state.inlineExpanded.has(node.id));
   document.querySelector("#expand-node span").textContent = projectionActive ? "Expand node" : canFollow && !canExpand ? "Follow" : "Expand";
   document.querySelector("#collapse-node span").textContent = projectionActive ? "Back" : "Collapse";
   document.querySelector("#hide-node").disabled = projectionActive || temporaryFocus || !node || !visibleNodeIds.has(node.id);
   document.querySelector("#reset-view").disabled = projectionActive || !state.inlineExpanded.size && !state.hiddenGraphNodes.size && !Object.keys(state.positions).length;
   document.querySelector("#reset-design").disabled = projectionActive;
+  document.querySelector("#architecture-level").disabled = projectionActive || Boolean(state.callTrace);
   globalThis.HeroCommands?.refresh();
 }
 
@@ -834,6 +930,7 @@ function hideSelectedNode() {
   state.flowEntryCandidate = null;
   invalidateLayout();
   state.selected = null;
+  state.rememberedArchitectureSelection = null;
   saveDesign();
   syncTreeSelection();
   renderBreadcrumbs();
@@ -850,6 +947,7 @@ function resetGraphView() {
   state.hiddenGraphNodes.clear();
   invalidateLayout();
   state.selected = null;
+  state.rememberedArchitectureSelection = null;
   state.selectedRelation = null;
   if (resetFromFocus) {
     state.view = "flow";
@@ -1062,12 +1160,19 @@ async function loadExperiment({ restoreLocalDesign = true } = {}) {
     const [graphResponse, sourceResponse] = await Promise.all([fetch("/api/graph"), fetch("/api/source")]);
     if (!graphResponse.ok || !sourceResponse.ok) throw new Error("Request failed");
     const extractedGraph = await graphResponse.json();
+    const projectChanged = Boolean(state.graph && state.graph.source !== extractedGraph.source);
     state.source = await sourceResponse.json();
     state.flowJourney = [];
     state.flowEntryCandidate = null;
     state.viewStates = { structure: null, flow: null, focus: null };
     state.focusReturnView = "flow";
     state.currentLayout = null;
+    if (projectChanged) {
+      state.architectureLevel = "native";
+      state.rememberedArchitectureSelection = null;
+      state.architectureReturnView = null;
+      document.querySelector("#architecture-level").value = "native";
+    }
     normalizeGraph(extractedGraph);
     state.baseGraph = structuredClone(extractedGraph);
     state.graph = normalizeGraph(restoreLocalDesign ? restoreDesign(extractedGraph) : extractedGraph);
@@ -1106,6 +1211,7 @@ graphViewport.addEventListener("pointercancel", stopGraphPan);
 document.querySelector("#zoom-out").addEventListener("click", () => setGraphZoom(state.graphZoom - .1));
 document.querySelector("#zoom-in").addEventListener("click", () => setGraphZoom(state.graphZoom + .1));
 document.querySelector("#zoom-fit").addEventListener("click", fitGraphToView);
+document.querySelector("#architecture-level").addEventListener("change", (event) => setArchitectureLevel(event.target.value));
 document.querySelector("#scope-up").addEventListener("click", navigateGraphBack);
 document.querySelector("#collapse-tree").addEventListener("click", () => {
   state.treeExpanded = new Set([state.graph.root]);
@@ -1725,6 +1831,7 @@ function removeOrRestoreSelected() {
       state.treeExpanded.delete(nodeId);
     });
     state.selected = null;
+    state.rememberedArchitectureSelection = null;
   } else {
     clearCallTrace();
     node.previousStatus = node.status;
@@ -1750,6 +1857,7 @@ document.querySelector("#reset-design").addEventListener("click", () => {
   state.scope = state.graph.root || state.graph.nodes.find((node) => !node.parent)?.id;
   state.treeExpanded = new Set(state.graph.nodes.filter((node) => node.kind === "package").map((node) => node.id));
   state.selected = null;
+  state.rememberedArchitectureSelection = null;
   state.selectedRelation = null;
   invalidateLayout();
   markGraphDesignChanged();

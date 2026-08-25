@@ -82,6 +82,16 @@
         <div class="scope-bar">
           <button id="scope-up" class="scope-up" type="button" aria-label="Go to parent scope" title="Go to parent scope" disabled>&larr;</button>
           <nav id="scope-breadcrumbs" class="scope-breadcrumbs" aria-label="Code scope and Flow trail"></nav>
+          <label class="architecture-layer-control" for="architecture-level"><span>Layer</span>
+            <select id="architecture-level">
+              <option value="native" selected>Native</option>
+              <option value="areas">Areas</option>
+              <option value="modules">Modules</option>
+              <option value="types">Types</option>
+              <option value="members">Members</option>
+            </select>
+            <output id="semantic-detail" aria-label="Semantic detail">Detail</output>
+          </label>
           <div class="font-size-controls" role="group" aria-label="Graph text size" data-font-panel="graph">
             <button type="button" data-font-change="-1" aria-label="Decrease Graph text size" title="Decrease text size">A&minus;</button>
             <button type="button" data-font-reset aria-label="Reset Graph text size" title="Reset text size"><span data-font-value>14</span></button>
@@ -483,6 +493,7 @@
   <script src="/flow-navigation.js" defer></script>
   <script src="/graph-views.js" defer></script>
   <script src="/proposal-contract.js" defer></script>
+  <script src="/semantic-zoom.js" defer></script>
   <script src="/architecture-scenarios.js" defer></script>
   <script src="/app.js" defer></script>
   <script src="/graph-render.js" defer></script>

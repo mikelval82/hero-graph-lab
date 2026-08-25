@@ -184,6 +184,10 @@ body.resizing-panels { cursor: col-resize; -webkit-user-select: none; user-selec
 .scope-up:disabled { color: #7b8781; opacity: .72; cursor: not-allowed; }
 .scope-breadcrumbs { min-width: 80px; flex: 1 1 140px; display: flex; align-items: stretch; overflow-x: auto; background: var(--panel); border: 1px solid var(--button-border); border-radius: 6px; pointer-events: auto; }
 .scope-bar .font-size-controls { pointer-events: auto; }
+.architecture-layer-control { min-width: 0; display: grid; grid-template-columns: auto auto auto; align-items: center; gap: 5px; padding: 0 5px 0 8px; color: var(--muted); background: var(--button-surface); border: 1px solid var(--button-border); border-radius: 6px; font: 700 8px var(--mono); text-transform: uppercase; pointer-events: auto; }
+.architecture-layer-control select { width: auto; min-width: 82px; height: 26px; padding: 2px 20px 2px 7px; color: var(--ink); background: white; border: 0; border-left: 1px solid var(--line); font: 600 9px var(--sans); }
+.architecture-layer-control select:disabled { color: var(--muted); background: var(--surface-muted); cursor: not-allowed; }
+.architecture-layer-control output { min-width: 46px; color: var(--graph-accent); font: 700 8px var(--mono); text-align: center; }
 .scope-crumb { flex: 0 0 auto; padding: 0 10px; color: var(--muted); background: transparent; border: 0; border-right: 1px solid var(--line); font: 9px var(--mono); }
 .scope-crumb.origin-crumb { color: var(--ink); background: var(--accent-soft); border-right-color: var(--graph-accent); font-weight: 700; }
 .scope-crumb.trail-crumb { box-shadow: inset 0 -3px var(--graph-accent); }
@@ -887,6 +891,8 @@ body.projection-focus-mode .canvas-shell > .panel-heading { min-height: 44px; pa
   body.code-collapsed .code-panel { grid-template-rows: 38px; }
   body.code-collapsed .code-panel-heading { min-height: 38px; height: 38px; border-bottom-width: 1px; }
   .graph-control-strip { gap-inline: 7px; padding-inline: 7px; }
+  .architecture-layer-control { flex: 1 1 auto; }
+  .architecture-layer-control select { min-width: 72px; }
   .graph-tool-group { padding-right: 7px; }
   .graph-tool-button, .graph-draft-action { min-width: 46px; padding-inline: 4px; }
   .mission-form-row { grid-template-columns: 1fr; }

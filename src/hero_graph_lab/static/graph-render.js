@@ -395,7 +395,7 @@ function currentPositions(graph) {
   updateGraphViewport(layout.width, layout.height);
   applyGraphScale();
   const positions = layout.positions;
-  if (state.view === "flow") Object.assign(positions, state.positions);
+  if (state.view === "flow" && !architectureLayerActive()) Object.assign(positions, state.positions);
   state.currentLayout = {
     projectionKey,
     positions: structuredClone(positions),
@@ -426,6 +426,14 @@ function relationMidpoint(source, target, offset = 0) {
 
 function relationText(edge) {
   return edge.label || edge.kind.replaceAll("_", " ");
+}
+
+function semanticTextVisibility(detail) {
+  return {
+    kind: detail !== "overview",
+    status: detail === "detail",
+    relations: detail !== "overview",
+  };
 }
 
 function relationDetails(edge) {
@@ -471,6 +479,7 @@ function render() {
   const related = relatedNodeIds(visibleGraph);
   const dimSelection = selectionDimmingActive();
   const edgeLabelOffsets = relationLabelOffsets(visibleGraph.edges);
+  const textVisibility = semanticTextVisibility(globalThis.HeroSemanticZoom.semanticDetail(state.graphZoom));
 
   visibleGraph.edges.forEach((edge) => {
     const source = positions[edge.source]; const target = positions[edge.target];
@@ -492,7 +501,7 @@ function render() {
     hitPath.addEventListener("click", (event) => { event.stopPropagation(); selectRelation(edge); });
     edgeLayer.append(hitPath);
 
-    if (state.view === "structure") return;
+    if (state.view === "structure" || !textVisibility.relations) return;
 
     const midpoint = relationMidpoint(source, target, edgeLabelOffsets.get(edge.id));
     const text = traced ? `${edge.traceDepth} · ${relationText(edge)}` : relationText(edge);
@@ -523,7 +532,9 @@ function render() {
     const label = svgElement("text", { x: 0, y: 4 * scale, "text-anchor": "middle", class: `node-label${dark ? " on-dark" : ""}` }); label.textContent = nodeDisplayLabel(node);
     const statusLabel = svgElement("text", { x: 0, y: height / 2 - 7 * scale, "text-anchor": "middle", class: `node-status${dark ? " on-dark" : ""}` });
     statusLabel.textContent = nodeStatusText(node);
-    group.append(kind, label, statusLabel);
+    if (textVisibility.kind) group.append(kind);
+    group.append(label);
+    if (textVisibility.status) group.append(statusLabel);
     if (traceDepth !== undefined) {
       const badge = svgElement("g", { class: "trace-badge", transform: `translate(${-width / 2 + 2 * scale} ${-height / 2 + 2 * scale})`, "aria-label": `Call depth ${traceDepth}` });
       badge.append(svgElement("circle", { r: 12 * scale }));
@@ -549,4 +560,4 @@ function render() {
   });
 }
 
-if (typeof module !== "undefined" && module.exports) module.exports = { focusColumnPositions, focusLayoutStrategy, graphMinimumSize, projectionColumnSpan };
+if (typeof module !== "undefined" && module.exports) module.exports = { focusColumnPositions, focusLayoutStrategy, graphMinimumSize, projectionColumnSpan, semanticTextVisibility };
