@@ -847,24 +847,17 @@ function desiredDesignState() {
     designIds.set(node.id, node.designId || matching?.id || (node.status === "proposed" ? node.id : `observed:${node.id}`));
   });
   const nodes = candidates.map((node) => {
-    const contract = globalThis.HeroProposalContract.normalizeContractNode(node);
+    const contract = globalThis.HeroProposalContract.contractPayload(node);
     return ({
     id: designIds.get(node.id),
     label: node.label,
     level: visualLevel(node),
-    kind: node.kind,
+    ...contract,
     provenance: node.designProvenance || backendNodes.get(designIds.get(node.id))?.provenance || "HUMAN",
     location: "IN_REPOSITORY",
     intent: statusIntent(node.status),
     parent_id: designIds.get(node.parent) || null,
     locator: locatorForVisualNode(node),
-    description: contract.designDescription,
-    target_path: contract.target_path,
-    qualified_name: contract.qualified_name,
-    signature: contract.signature,
-    docstring: contract.docstring,
-    satisfies: contract.satisfies,
-    acceptance: contract.acceptance,
   });
   });
   const edges = activeEdges.map((edge) => ({

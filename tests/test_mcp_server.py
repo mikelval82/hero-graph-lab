@@ -61,13 +61,25 @@ class McpServerTest(TestCase):
         self.assertEqual(result["server_name"], "hero-graph-lab")
         self.assertIn("GraphSearch", result["tool_names"])
         self.assertIn("ContractGetTask", result["tool_names"])
+        self.assertIn("target_path", result["proposal_schema_fields"])
+        self.assertIn("acceptance", result["proposal_schema_fields"])
         self.assertIn("OrderService", result["content"])
         self.assertFalse(result["is_error"])
         self.assertEqual(result["proposal_op"], "add_node")
         self.assertEqual(result["contract_snapshot"], "snap-protocol")
         self.assertEqual(result["execution_id"], "exec-protocol")
         self.assertEqual(harness.begin_body, {"task_id": "T-1", "actor": "mcp"})
-        self.assertEqual(state.graph_tools.pending_proposals()["items"][0]["action"]["label"], "McpProtocolProbe")
+        proposal = state.graph_tools.pending_proposals()["items"][0]["action"]
+        self.assertEqual(proposal["label"], "McpProtocolProbe")
+        self.assertEqual(proposal["target_path"], "src/order_app/protocol_probe.py")
+        self.assertEqual(proposal["qualified_name"], "McpProtocolProbe")
+        self.assertEqual(proposal["signature"], "(repository: OrderRepository)")
+        self.assertEqual(proposal["docstring"], "Expose the contract through the MCP protocol.")
+        self.assertEqual(proposal["satisfies"], ["PC-A02"])
+        self.assertEqual(
+            proposal["acceptance"],
+            ["The browser receives every structured contract field unchanged."],
+        )
 
     @staticmethod
     async def _exercise_protocol(base_url: str, parent_id: str) -> dict[str, object]:
@@ -80,16 +92,31 @@ class McpServerTest(TestCase):
             async with ClientSession(read_stream, write_stream) as session:
                 initialized = await session.initialize()
                 listed = await session.list_tools()
+                propose_tool = next(tool for tool in listed.tools if tool.name == "ProposeNode")
                 called = await session.call_tool("GraphSearch", {"query": "OrderService"})
                 proposed = await session.call_tool(
                     "ProposeNode",
-                    {"label": "McpProtocolProbe", "kind": "class", "parent_id": parent_id},
+                    {
+                        "label": "McpProtocolProbe",
+                        "kind": "class",
+                        "parent_id": parent_id,
+                        "description": "Coordinate the protocol acceptance scenario.",
+                        "target_path": "src/order_app/protocol_probe.py",
+                        "qualified_name": "McpProtocolProbe",
+                        "signature": "(repository: OrderRepository)",
+                        "docstring": "Expose the contract through the MCP protocol.",
+                        "satisfies": ["PC-A02"],
+                        "acceptance": [
+                            "The browser receives every structured contract field unchanged."
+                        ],
+                    },
                 )
                 contract = await session.call_tool("ContractGetTask", {"task_id": "T-1"})
                 execution = await session.call_tool("ContractBeginExecution", {"task_id": "T-1"})
                 return {
                     "server_name": initialized.serverInfo.name,
                     "tool_names": {tool.name for tool in listed.tools},
+                    "proposal_schema_fields": set(propose_tool.inputSchema["properties"]),
                     "content": "\n".join(
                         item.text for item in called.content if item.type == "text"
                     ),

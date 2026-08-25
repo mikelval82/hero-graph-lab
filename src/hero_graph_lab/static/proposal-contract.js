@@ -46,6 +46,20 @@
     };
   }
 
+  function contractPayload(node = {}) {
+    const normalized = normalizeContractNode(node);
+    return {
+      kind: normalized.kind,
+      description: normalized.designDescription,
+      target_path: normalized.target_path,
+      qualified_name: normalized.qualified_name,
+      signature: normalized.signature,
+      docstring: normalized.docstring,
+      satisfies: [...normalized.satisfies],
+      acceptance: [...normalized.acceptance],
+    };
+  }
+
   function nodeName(node) {
     const qualified = text(node.qualified_name);
     return (qualified ? qualified.split(".").at(-1) : text(node.label)) || "unnamed";
@@ -213,6 +227,7 @@
   }
 
   const api = Object.freeze({
+    contractPayload,
     contractConnections,
     contractIssues,
     interfacePreview,

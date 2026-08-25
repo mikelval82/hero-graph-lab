@@ -2,11 +2,42 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 
 const {
+  contractPayload,
   contractConnections,
   contractIssues,
   interfacePreview,
   normalizeContractNode,
 } = require("../src/hero_graph_lab/static/proposal-contract.js");
+
+test("serializes the exact HARNESS node contract without sharing mutable arrays", () => {
+  const source = {
+    kind: "method",
+    designDescription: "Send a notification.",
+    target_path: "src/telegram/gateway.py",
+    qualified_name: "TelegramGateway.send_notification",
+    signature: "(self, chat_id: str, text: str) -> str",
+    docstring: "Send one notification.",
+    satisfies: ["BR-002"],
+    acceptance: ["Returns the provider id."],
+  };
+
+  const payload = contractPayload(source);
+
+  assert.deepEqual(payload, {
+    kind: "method",
+    description: "Send a notification.",
+    target_path: "src/telegram/gateway.py",
+    qualified_name: "TelegramGateway.send_notification",
+    signature: "(self, chat_id: str, text: str) -> str",
+    docstring: "Send one notification.",
+    satisfies: ["BR-002"],
+    acceptance: ["Returns the provider id."],
+  });
+  source.satisfies.push("BR-003");
+  source.acceptance.push("Retries once.");
+  assert.deepEqual(payload.satisfies, ["BR-002"]);
+  assert.deepEqual(payload.acceptance, ["Returns the provider id."]);
+});
 
 test("normalizes bounded proposal contract fields without guessing missing values", () => {
   const node = normalizeContractNode({
