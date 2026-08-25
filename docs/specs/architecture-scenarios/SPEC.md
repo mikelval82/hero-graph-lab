@@ -1,6 +1,6 @@
 # Architecture Scenarios A/B specification
 
-Status: Approved for direct implementation
+Status: Implemented; rendered browser acceptance pending
 Date: 2026-08-25
 Baseline: `36d5d2a`
 Parent contract: Architecture Workbench `AW-003`
@@ -27,7 +27,7 @@ alternative; it does not approve or implement either scenario.
 Capturing a scenario stores a server-assigned id, name, optional description,
 creation time and an immutable design snapshot. The snapshot contains:
 
-- proposed or modified design nodes with normalized contract fields;
+- proposed, modified or removed design nodes with normalized contract fields;
 - proposed, modified or removed design relationships;
 - minimal descriptors for observed endpoints referenced by those relationships.
 

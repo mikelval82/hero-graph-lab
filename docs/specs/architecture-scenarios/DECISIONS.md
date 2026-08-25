@@ -45,3 +45,13 @@ Date: 2026-08-25
 Applying one alternative requires conflict policy for the current draft and
 HARNESS revision state. Capture and comparison provide independent value without
 introducing that unsafe mutation path prematurely.
+
+## AS-D006 - Removed observed nodes belong to the design overlay
+
+Status: Accepted
+Date: 2026-08-25
+
+The implementation makes explicit that a removed observed node is a design
+change and must be captured. Excluding it would make an alternative appear less
+destructive than it is. This clarifies AS-001 without expanding the snapshot to
+unrelated observed code.
