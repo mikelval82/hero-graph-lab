@@ -1,13 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-const { focusColumnPositions, focusLayoutStrategy, graphMinimumSize, projectionColumnSpan, semanticTextVisibility } = require("../src/hero_graph_lab/static/graph-render.js");
-
-test("semantic detail progressively reveals kind, status, and relationship labels", () => {
-  assert.deepEqual(semanticTextVisibility("overview"), { kind: false, status: false, relations: false });
-  assert.deepEqual(semanticTextVisibility("context"), { kind: true, status: false, relations: true });
-  assert.deepEqual(semanticTextVisibility("detail"), { kind: true, status: true, relations: true });
-});
+const { focusColumnPositions, focusLayoutStrategy, graphMinimumSize, projectionColumnSpan } = require("../src/hero_graph_lab/static/graph-render.js");
 
 test("normal graph layouts preserve their existing minimum dimensions", () => {
   assert.deepEqual(graphMinimumSize({ viewportWidth: 1800, viewportHeight: 900 }), { width: 1000, height: 680 });

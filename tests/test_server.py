@@ -245,8 +245,6 @@ class LabServerTest(TestCase):
                 self.assertIn('id="graph-viewport"', index)
                 self.assertIn('id="zoom-in"', index)
                 self.assertIn('id="zoom-fit"', index)
-                self.assertIn('id="architecture-level"', index)
-                self.assertIn('id="semantic-detail"', index)
                 self.assertIn('id="lock-layout"', index)
                 self.assertEqual(index.count("data-collapse-panel="), 3)
                 self.assertIn('data-collapse-panel="explorer"', index)
@@ -304,7 +302,6 @@ class LabServerTest(TestCase):
                 self.assertIn('src="/mission.js"', index)
                 self.assertIn('src="/flow-navigation.js"', index)
                 self.assertIn('src="/graph-views.js"', index)
-                self.assertIn('src="/semantic-zoom.js"', index)
                 self.assertIn('src="/panel-layout.js"', index)
                 self.assertIn('src="/explore.js"', index)
                 self.assertIn('src="/rich-render.js"', index)
@@ -314,7 +311,6 @@ class LabServerTest(TestCase):
                 self.assertLess(index.index('src="/rich-render.js"'), index.index('src="/mission.js"'))
                 self.assertLess(index.index('src="/flow-navigation.js"'), index.index('src="/graph-views.js"'))
                 self.assertLess(index.index('src="/graph-views.js"'), index.index('src="/app.js"'))
-                self.assertLess(index.index('src="/semantic-zoom.js"'), index.index('src="/app.js"'))
                 self.assertLess(index.index('src="/graph-render.js"'), index.index('src="/panel-layout.js"'))
                 self.assertLess(index.index('src="/panel-layout.js"'), index.index('src="/explore.js"'))
                 self.assertLess(index.index('src="/explore.js"'), index.index('src="/diagrams.js"'))
@@ -355,8 +351,6 @@ class LabServerTest(TestCase):
                     app_script = response.read().decode("utf-8")
                 with urlopen(f"{base_url}/architecture-scenarios.js") as response:
                     scenario_script = response.read().decode("utf-8")
-                with urlopen(f"{base_url}/semantic-zoom.js") as response:
-                    semantic_zoom_script = response.read().decode("utf-8")
                 with urlopen(f"{base_url}/flow-navigation.js") as response:
                     flow_navigation_script = response.read().decode("utf-8")
                 with urlopen(f"{base_url}/graph-views.js") as response:
@@ -388,10 +382,6 @@ class LabServerTest(TestCase):
                 self.assertIn('jsonOptions("POST", { path: projectPath })', mission_script)
                 self.assertIn("function currentExploreContext", explore_script)
                 self.assertIn("function renderPinnedNodes", explore_script)
-                self.assertIn("class SemanticZoomProjector", semantic_zoom_script)
-                self.assertIn("function transitionSelection", semantic_zoom_script)
-                self.assertIn("function setArchitectureLevel", app_script)
-                self.assertIn("semanticTextVisibility", graph_script)
                 self.assertIn("function draftSnapshot", scenario_script)
                 self.assertIn('fetchJson("/api/scenarios"', scenario_script)
                 self.assertIn("renderComparison(result, comparison)", scenario_script)
