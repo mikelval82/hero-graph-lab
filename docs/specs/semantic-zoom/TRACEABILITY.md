@@ -2,13 +2,13 @@
 
 | Requirement | Decisions | Implementation | Evidence | Status |
 |---|---|---|---|---|
-| SZ-001 | SZ-D001, SZ-D002 | selector in `index.html`; level state in `app.js` | projector level test; live four-level matrix | Automated verified; rendered check pending |
-| SZ-002 | SZ-D003, SZ-D004, SZ-D006 | `SemanticZoomProjector.project` | determinism, no-mutation and raw-extraction tests; live graph has zero invalid relation ids | Verified |
-| SZ-003 | SZ-D004 | `transitionSelection` and `setArchitectureLevel` | exact member restore and user-replacement test | Automated verified; rendered check pending |
-| SZ-004 | SZ-D001 | `semanticDetail` and `semanticTextVisibility` | threshold and progressive-text tests | Automated verified; rendered check pending |
-| SZ-005 | SZ-D002, SZ-D005 | tool guards, projection precedence and Native restore | existing projection Restore regressions plus integration source assertions | Automated verified; rendered `G` check pending |
-| SZ-006 | SZ-D001 | compact context-bar control and responsive CSS | live HTML delivery and server assertions | Automated verified; rendered check pending |
-| SZ-007 | SZ-D003 | pure JS module; no server or HARNESS changes | Node import/tests; Python regression suite | Verified |
+| SZ-001 | SZ-D001, SZ-D002, SZ-D007 | selector in `index.html`; level state in `app.js` | usability review rejected global levels | Reverted |
+| SZ-002 | SZ-D003, SZ-D004, SZ-D006, SZ-D007 | `SemanticZoomProjector.project` | deterministic tests and live graph smoke | Reverted |
+| SZ-003 | SZ-D004, SZ-D007 | `transitionSelection` and `setArchitectureLevel` | selection tests | Reverted |
+| SZ-004 | SZ-D001, SZ-D007 | `semanticDetail` and `semanticTextVisibility` | threshold tests | Reverted |
+| SZ-005 | SZ-D002, SZ-D005, SZ-D007 | tool guards and projection precedence | regressions passed but usability was not accepted | Reverted |
+| SZ-006 | SZ-D001, SZ-D007 | context-bar control and responsive CSS | control added visual complexity | Reverted |
+| SZ-007 | SZ-D003, SZ-D007 | pure JS module | implementation removed | Reverted |
 
 ## Baseline evidence - 2026-08-25
 
@@ -30,6 +30,9 @@
 | `47e5f53` | pure deterministic projector and selection/detail tests |
 | `a17a04e` | selector, application state, interaction boundaries and renderer integration |
 | `8c3cb25` | stable identities for relations from the raw extraction graph |
+| `e1ff933` | reverted the extracted-relation identity change |
+| `6df1076` | reverted the selector, application and renderer integration |
+| `9bca594` | removed the now-unused projector and its tests |
 
 No server endpoint, graph schema or HARNESS source file changed.
 
@@ -56,3 +59,19 @@ No server endpoint, graph schema or HARNESS source file changed.
 | SZ-A06 | pure thresholds and renderer visibility tests | Automated passed; rendered pending |
 | SZ-A07 | existing exact `G` Restore tests and app integration assertions | Automated passed; rendered pending |
 | SZ-A08 | proposed/removed fixture coverage and status-preserving groups | Passed |
+
+## Rejection record - 2026-08-25
+
+- User acceptance: rejected because switching levels generated too many nodes
+  and relationships to support comprehension.
+- Engineering review: 424 added runtime lines duplicated much of the existing
+  scoped Flow behavior for insufficient practical value.
+- Process finding: the feature had not received a rendered Playwright check;
+  automated and endpoint evidence did not justify declaring visual completion.
+- Outcome: runtime, integration and feature tests reverted in `e1ff933`,
+  `6df1076` and `9bca594`. The specification remains only for auditability.
+- Post-revert regression: 40 JavaScript tests and 48 Python tests passed; the
+  live index contains Flow and Focus, contains no layer selector, and the
+  removed `/semantic-zoom.js` asset returns HTTP 404.
+- Follow-up constraint: improve existing Flow surgically only after establishing
+  a rendered baseline; do not introduce another global layer selector.

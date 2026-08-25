@@ -3,7 +3,7 @@
 Status: Approved as a graph design contract
 Date: 2026-08-25
 Graph baseline: `56af981`
-Implementation status: Incremental (`AW-003` implemented; `AW-004` specified)
+Implementation status: Incremental (`AW-003` implemented; `AW-004` rejected)
 
 ## Purpose
 
@@ -20,7 +20,7 @@ or claim that the classes already exist.
 | Capability | Proposed module and interface | Observed integration anchors |
 |---|---|---|
 | Architecture scenarios and A/B comparison | `scenarios.py` / `ArchitectureScenarioService.compare` | `mission.js`, `proposal-contract.js` |
-| Architectural layers and semantic zoom | `static/semantic-zoom.js` / `SemanticZoomProjector.project` | `graph-views.js`, `graph-render.js`, `graph-projection.js` |
+| Architectural layers and semantic zoom | Rejected experiment; no active implementation target | `graph-views.js`, `graph-render.js`, `graph-projection.js` |
 | Contract drift and change impact | `impact.py` / `ContractImpactAnalyzer.analyze` | `proposal-contract.js`, `contract_gateway.py` |
 | LLM guided walkthrough | `walkthrough.py` / `GuidedWalkthroughPlanner.plan` | `explore/service.py`, `explore.js` |
 | TypeScript/JavaScript adapter | `typescript_adapter.py` / `TypeScriptGraphAdapter.extract` | `extractor.py`, `server.py` |
@@ -52,9 +52,10 @@ contract differences and affected acceptance criteria.
 
 ### AW-004 - Semantic zoom
 
-The projector derives a graph projection for an explicit architectural level
-while preserving stable source-node identity, selection and restore behavior.
-Rendering remains a browser concern owned by the existing graph projection code.
+Rejected after implementation and usability review. The global architectural
+level projection duplicated existing scoped Flow behavior and generated too
+much visual complexity. Its source implementation was reverted; the historical
+specification remains under `docs/specs/semantic-zoom/`.
 
 ### AW-005 - Contract drift and impact
 
@@ -89,10 +90,10 @@ does not change Python AST behavior.
 ## Implementation order
 
 1. Scenario domain and comparison because it provides the alternative model.
-2. Semantic projection because it provides architectural navigation.
-3. Drift and impact over normalized contracts.
-4. Guided walkthrough over the stable graph/query interfaces.
-5. TypeScript/JavaScript extraction as an independent adapter.
+2. Drift and impact over normalized contracts.
+3. Guided walkthrough over the stable graph/query interfaces.
+4. TypeScript/JavaScript extraction as an independent adapter.
 
-This order records priority. Each capability still requires its own reviewed
-specification before source implementation.
+Semantic projection is removed from the active order after rejection. Each
+remaining capability still requires its own reviewed specification before
+source implementation.

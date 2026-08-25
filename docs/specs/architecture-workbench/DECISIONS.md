@@ -12,7 +12,7 @@ that they change together.
 
 ## AW-D002 - Keep the proposal Python-first
 
-Status: Accepted except `AW-004`; amended by `SZ-D003`
+Status: Accepted for active Workbench proposals; `AW-004` rejected by `SZ-D007`
 Date: 2026-08-25
 
 The proposed domain services use Python interfaces, matching the current server,
@@ -21,10 +21,9 @@ integration anchors. The TypeScript/JavaScript adapter is itself a Python adapte
 that may delegate parsing later; this avoids pretending the current preview is a
 TypeScript declaration renderer.
 
-After auditing the browser-local draft boundary, semantic projection became the
-first justified exception. Its rationale and amended target are recorded in
-`docs/specs/semantic-zoom/DECISIONS.md` rather than silently diverging from this
-design contract.
+Semantic projection was implemented as a browser-side exception and later
+rejected after usability review. Its rationale, evidence and reversal remain in
+`docs/specs/semantic-zoom/` rather than being erased from the design history.
 
 ## AW-D003 - Connect capabilities to exact observed files
 

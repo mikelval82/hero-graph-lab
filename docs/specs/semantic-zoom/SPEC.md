@@ -1,9 +1,21 @@
 # Architectural Layers and Semantic Zoom specification
 
-Status: Approved for direct implementation
+Status: Rejected after usability review
 Date: 2026-08-25
 Baseline: `0e4e2c2`
 Parent contract: Architecture Workbench `AW-004`
+Implementation status: Reverted; retained only as decision history
+
+## Rejection outcome
+
+The global level selector did not make the repository easier to understand. On
+the live project it produced 65 nodes and 111 relations at Modules, 116/224 at
+Types and 366/808 at Members. That duplicated existing scope, inline expansion,
+Flow aggregation and `G` projection behavior while adding another topology
+model. The user rejected the rendered result and the implementation was removed
+through explicit revert commits.
+
+This specification is historical evidence, not an active implementation plan.
 
 ## Problem
 
@@ -12,7 +24,7 @@ cannot deliberately answer “show me only areas”, “show me modules” or �
 types”. Visual zoom scales every node without changing the amount of text, so a
 large fitted graph becomes visually noisy instead of semantically simpler.
 
-## Goal
+## Original goal
 
 Add an explicit architectural abstraction layer and zoom-dependent visual detail
 without changing source identity, the browser-local design draft or the existing

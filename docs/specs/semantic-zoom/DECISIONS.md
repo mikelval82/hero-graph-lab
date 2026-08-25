@@ -1,5 +1,8 @@
 # Architectural Layers and Semantic Zoom decision log
 
+The accepted design decisions below record the implemented experiment. They are
+superseded as an active direction by `SZ-D007`.
+
 ## SZ-D001 - Explicit level selection, automatic visual detail
 
 Status: Accepted
@@ -64,3 +67,15 @@ also accept this real pre-normalized boundary, so it derives a deterministic
 content hash from source, target, kind, status, label and properties whenever an
 id is absent. Identical unowned relations are treated as the same logical
 evidence item. Existing explicit ids always remain authoritative.
+
+## SZ-D007 - Reject the global architectural-level projection
+
+Status: Accepted; supersedes SZ-D001 through SZ-D006 as product direction
+Date: 2026-08-25
+
+The live result increased visual complexity instead of improving repository
+comprehension. Most intended navigation already existed in scoped Flow, inline
+expansion, breadcrumbs, Focus and `G`; the new selector duplicated those
+mechanisms with a second topology model. The implementation is reverted rather
+than extended. Any later improvement must begin from measured problems in the
+existing Flow and remain a small change to that navigation model.
