@@ -95,6 +95,25 @@ test("projection is deterministic and does not mutate graph or option sets", () 
 });
 
 
+test("raw extracted relationships receive stable identities before app normalization", () => {
+  const rawGraph = {
+    ...graph,
+    edges: graph.edges.map(({ id, ...edge }) => edge),
+  };
+  const reversed = {
+    ...rawGraph,
+    nodes: [...rawGraph.nodes].reverse(),
+    edges: [...rawGraph.edges].reverse(),
+  };
+
+  const first = projector.project(rawGraph, { level: "modules", scopeId: "root", view: "flow" });
+  const second = projector.project(reversed, { level: "modules", scopeId: "root", view: "flow" });
+
+  assert.deepEqual(first, second);
+  assert.equal(first.edges.every((edge) => edge.id && edge.memberIds.every(Boolean)), true);
+});
+
+
 test("hierarchy and focus retain their existing relationship semantics", () => {
   const hierarchy = projector.project(graph, { level: "types", scopeId: "root", view: "structure" });
   const focus = projector.project(graph, { level: "areas", scopeId: "root", view: "focus", selectedId: "method-a" });
