@@ -42,5 +42,13 @@
 - Full automated regression: `52` Python tests and `40` JavaScript tests pass.
 - A resolved-root Graph Lab smoke completed in `0.472 s` with `621` nodes and
   `1423` edges; `app.js` and `renderCodePanel` were present with exact ranges.
-- The process currently serving port 8765 predates this implementation and must
-  be restarted before rendered acceptance can exercise the new graph.
+- An isolated HTTP E2E served the TypeScript/TSX fixture on port 8766: its graph
+  contained `24` nodes and `31` edges, including an interface, a TSX component,
+  the expected module dependency and imported call; `/api/source` delivered the
+  referenced TypeScript source.
+- The main Gemini process was restarted on port 8765. Its live graph contains
+  the `app.js` module and `renderCodePanel`; the configured Graph Lab MCP found
+  the same function and read its exact source range.
+- Rendered acceptance remains pending: after the restart, the in-app Browser
+  still rejected its own installed service path as untrusted before navigation.
+  No API or MCP result is counted as visual evidence.
