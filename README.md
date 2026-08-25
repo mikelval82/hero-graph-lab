@@ -124,6 +124,29 @@ method, and relationship proposals. Accepted actions are saved automatically in
 the browser-local design draft and never edit project source files. **Save map**
 is the separate explicit step that synchronizes the draft to HARNESS.
 
+### Connected proposal contracts
+
+A proposal is more than a labelled box. Code-oriented proposal nodes can carry
+the exact intended path, qualified name, callable signature, responsibility,
+docstring, linked requirements, and behavioral acceptance criteria. Selecting a
+proposal opens **Proposal Contract** in the Code workspace. This view renders a
+clearly labelled virtual interface, lists its direct relationships and observed
+implementation anchors, and reports missing contract fields. It never presents
+the preview as repository source or creates a source stub.
+
+Connections to current code are explicit reviewed graph relationships. A
+proposal connected only to the project root remains visibly incomplete because
+root containment explains placement, not integration. The editor and agents may
+leave fields unresolved when evidence is insufficient; Graph Lab preserves the
+draft and reports the omissions instead of inventing code details. Existing
+legacy proposals continue to load and are shown with the same completeness
+diagnostics.
+
+The Add/Edit dialog, Explore chat, and `ProposeNode` MCP tool use the same
+contract vocabulary. Browser storage preserves the enriched local draft across
+reloads. **Save map** sends those fields unchanged to HARNESS, where approval,
+task slicing, execution leases, and verification remain authoritative.
+
 **Implement** is a separate, explicit authorization mode. It is available only
 when HARNESS exposes an approved pending task contract and no Mission or MCP
 executor owns the lease. Chat must read that exact contract, acquire the lease,
@@ -162,6 +185,12 @@ marked read-only; `ProposeNode` and `ProposeRelation` are marked as writes. MCP
 proposals enter an in-memory delivery inbox and the open browser applies them
 to the existing local design draft. They remain `NEW` reviewable elements and
 still require **Save map** for HARNESS synchronization.
+
+`ProposeNode` accepts `target_path`, `qualified_name`, `signature`, `docstring`,
+`description`, `satisfies`, and `acceptance` in addition to its label, kind, and
+optional parent. Paths must be repository-relative. Callers should inspect the
+observed graph first and add an explicit justified relationship to current code;
+unknown contract details should be omitted and will remain visibly incomplete.
 
 When an approved mission is active, Codex can also list and retrieve immutable
 task contracts, acquire the `mcp` execution lease, validate, complete, report a

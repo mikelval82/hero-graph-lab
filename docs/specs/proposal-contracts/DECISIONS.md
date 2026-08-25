@@ -80,3 +80,24 @@ Date: 2026-08-25
 Browser storage remains the mutable local draft. The enriched payload reaches
 HARNESS only through the existing Save map action. HARNESS remains responsible for
 versioning, approval, task contracts, execution leases, and verification.
+
+## PC-D009 - Reveal authored proposals outside transient navigation state
+
+Status: Accepted
+Date: 2026-08-25
+
+Creating, editing, or receiving a proposal shall reveal it even when the current
+Flow journey or graph scope would otherwise filter it out. Graph Lab clears the
+transient Flow journey and, only when necessary, returns the scope to the project
+root before expanding the proposal path. A deliberate design change must not look
+lost merely because it was authored from a narrowed navigation context.
+
+## PC-D010 - Serialize the HARNESS contract through the pure contract module
+
+Status: Accepted
+Date: 2026-08-25
+
+The exact HARNESS-facing contract fields are derived by
+`proposal-contract.js`, alongside normalization and completeness rules. Mission
+layout metadata remains in `mission.js`. This creates a directly testable
+transport boundary without moving mission authority into the browser module.
