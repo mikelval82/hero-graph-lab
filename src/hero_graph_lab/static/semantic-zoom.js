@@ -51,29 +51,21 @@
           .filter((node) => withinScope(node.id) && retained(node))
           .map((node) => [node.id, cloneValue(node)]),
       );
-      const containmentById = new Map();
-      (graph?.edges || [])
+      const containmentEdges = (graph?.edges || [])
         .filter((edge) => (
           edge.kind === "contains"
           && projectedNodes.has(edge.source)
           && projectedNodes.has(edge.target)
         ))
-        .forEach((edge) => {
-          const edgeId = edgeIdentity(edge);
-          if (containmentById.has(edgeId)) return;
-          containmentById.set(edgeId, {
-            ...cloneValue(edge),
-            id: edgeId,
-            aggregate: false,
-            memberIds: [...(edge.memberIds || [edgeId])].filter(Boolean).sort(),
-          });
-        });
-      const containmentEdges = [...containmentById.values()];
+        .map((edge) => ({
+          ...cloneValue(edge),
+          aggregate: false,
+          memberIds: [...(edge.memberIds || [edge.id])].sort(),
+        }));
 
       const relationGroups = new Map();
       (graph?.edges || []).forEach((edge) => {
         if (edge.kind === "contains") return;
-        const edgeId = edgeIdentity(edge);
         const sourceInside = withinScope(edge.source);
         const targetInside = withinScope(edge.target);
         if (!sourceInside && !targetInside) return;
@@ -97,8 +89,8 @@
           originalIds: [],
           mapped: false,
         };
-        group.memberIds.push(...(edge.memberIds || [edgeId]).filter(Boolean));
-        group.originalIds.push(edgeId);
+        group.memberIds.push(...(edge.memberIds || [edge.id]));
+        group.originalIds.push(edge.id);
         group.mapped ||= source.id !== edge.source || target.id !== edge.target;
         relationGroups.set(key, group);
       });
@@ -226,24 +218,6 @@
 
   function stableStringify(value) {
     return JSON.stringify(stableValue(value));
-  }
-
-  function edgeIdentity(edge) {
-    if (edge?.id) return edge.id;
-    const signature = stableStringify({
-      source: edge?.source || "",
-      target: edge?.target || "",
-      kind: edge?.kind || "custom",
-      status: edge?.status || "observed",
-      label: edge?.label || "",
-      properties: edge?.properties || {},
-    });
-    let hash = 14695981039346656037n;
-    for (let index = 0; index < signature.length; index += 1) {
-      hash ^= BigInt(signature.charCodeAt(index));
-      hash = BigInt.asUintN(64, hash * 1099511628211n);
-    }
-    return `observed:${hash.toString(16).padStart(16, "0")}`;
   }
 
   function stableValue(value) {
