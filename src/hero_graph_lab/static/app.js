@@ -1445,10 +1445,20 @@ function parseProperties(text) {
 function revealAgentProposal(nodeId) {
   if (!nodeId || !graphNode(nodeId)) return false;
   expandTreePath(nodeId);
+  if (state.view === "flow" && state.flowJourney.length) {
+    state.flowJourney = [];
+    state.flowEntryCandidate = null;
+  }
+  if (state.view !== "focus" && nodeId !== state.scope && !isDescendantOf(nodeId, state.scope)) {
+    state.scope = state.graph.root || state.graph.nodes.find((node) => !node.parent)?.id;
+    state.flowJourney = [];
+    state.flowEntryCandidate = null;
+  }
   if (state.view !== "focus" && isDescendantOf(nodeId, state.scope)) {
     let node = graphNode(nodeId);
     while (node?.parent && node.id !== state.scope) {
       state.inlineExpanded.add(node.parent);
+      state.hiddenGraphNodes.delete(node.id);
       node = graphNode(node.parent);
     }
   }
@@ -1544,6 +1554,7 @@ function applyAgentGraphProposals(actions) {
     saveDesign();
     markGraphDesignChanged();
     updateTools();
+    renderBreadcrumbs();
     render();
     syncTreeSelection();
     dispatchEvent(new CustomEvent("graph-selection-changed"));
@@ -1773,8 +1784,9 @@ nodeForm.addEventListener("submit", (event) => {
     if (parent) state.graph.edges.push({ id: `containment:${crypto.randomUUID()}`, source: parent, target: node.id, kind: "contains", status: node.status === "proposed" ? "proposed" : "modified", properties: {}, generated: true });
   }
   rebuildGraphIndexes();
+  revealAgentProposal(state.selected);
   invalidateLayout();
-  nodeDialog.close(); saveDesign(); markGraphDesignChanged(); refreshSelection();
+  nodeDialog.close(); saveDesign(); markGraphDesignChanged(); renderBreadcrumbs(); refreshSelection();
 });
 
 const dialog = document.querySelector("#feedback-dialog");
