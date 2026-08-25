@@ -52,3 +52,15 @@ Inline expansion and architectural level projection are two different topology
 controls. Running both at once would create hidden expansion state that is hard
 to understand. Explicit layers remain inspectable and can open `G`, but normal
 expand/collapse/trace interactions resume only in Native.
+
+## SZ-D006 - Stabilize source relationships before browser normalization
+
+Status: Accepted after live-graph validation
+Date: 2026-08-25
+
+The server extraction graph has stable node ids but does not assign relation
+ids; `app.js` normally adds index-based ids during load. The pure projector must
+also accept this real pre-normalized boundary, so it derives a deterministic
+content hash from source, target, kind, status, label and properties whenever an
+id is absent. Identical unowned relations are treated as the same logical
+evidence item. Existing explicit ids always remain authoritative.

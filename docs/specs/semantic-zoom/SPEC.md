@@ -46,6 +46,8 @@ requested level, scope and view. It must:
 - map hidden relation endpoints to their nearest retained ancestor;
 - aggregate equivalent relationships with deterministic ids, counts and
   original `memberIds`;
+- derive a stable content identity when the extracted source relationship has
+  no id yet, as happens before browser normalization;
 - retain status (`observed`, `proposed`, `modified`, `removed`) and relationship
   properties;
 - honour the current scope and hidden-node state;
