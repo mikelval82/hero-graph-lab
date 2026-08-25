@@ -298,6 +298,8 @@ class LabServerTest(TestCase):
                 self.assertIn("function updateExploreBusyState", explore_script)
                 self.assertIn("applyAgentGraphProposals(session.actions", explore_script)
                 self.assertIn("async function pollMcpProposals", explore_script)
+                self.assertIn("function proposalNeedsObservedGraphRefresh", explore_script)
+                self.assertIn("await loadExperiment({ restoreLocalDesign: true })", explore_script)
                 self.assertIn('fetch("/api/mcp/proposals"', explore_script)
                 self.assertIn('fetch("/api/mcp/proposals/ack"', explore_script)
                 self.assertIn("setInterval(pollMcpProposals, 1000)", explore_script)

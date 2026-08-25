@@ -53,6 +53,12 @@ async function exploreRequest(path, options = {}) {
   return payload;
 }
 
+function proposalNeedsObservedGraphRefresh(action) {
+  if (action?.op === "add_node") return Boolean(action.parent_id) && !graphNode(action.parent_id);
+  if (action?.op !== "add_relation") return false;
+  return !graphNode(action.source_id) || !graphNode(action.target_id);
+}
+
 async function pollMcpProposals() {
   if (mcpProposalPollPending || !state.graph || typeof globalThis.applyAgentGraphProposals !== "function") return;
   mcpProposalPollPending = true;
@@ -62,8 +68,18 @@ async function pollMcpProposals() {
     const inbox = await response.json();
     const revisions = [];
     const totals = { nodes: 0, relations: 0, replayed: 0 };
+    let refreshedObservedGraph = false;
     for (const item of inbox.items || []) {
-      const result = globalThis.applyAgentGraphProposals([item.action]);
+      let result = globalThis.applyAgentGraphProposals([item.action]);
+      if (
+        result.rejected
+        && !refreshedObservedGraph
+        && proposalNeedsObservedGraphRefresh(item.action)
+      ) {
+        await loadExperiment({ restoreLocalDesign: true });
+        refreshedObservedGraph = true;
+        result = globalThis.applyAgentGraphProposals([item.action]);
+      }
       if (result.rejected) continue;
       revisions.push(item.revision);
       totals.nodes += result.nodes;
