@@ -147,8 +147,20 @@ class ContractImpactAnalyzerTest(TestCase):
         self.assertEqual(
             result["dependents"][1]["path"],
             [
-                {"source": CONSUMER_ID, "target": PROVIDER_ID, "kind": "depends_on"},
-                {"source": ENTRYPOINT_ID, "target": CONSUMER_ID, "kind": "depends_on"},
+                {
+                    "source": CONSUMER_ID,
+                    "source_label": "consumer.py",
+                    "target": PROVIDER_ID,
+                    "target_label": "provider.py",
+                    "kind": "depends_on",
+                },
+                {
+                    "source": ENTRYPOINT_ID,
+                    "source_label": "entrypoint.py",
+                    "target": CONSUMER_ID,
+                    "target_label": "consumer.py",
+                    "kind": "depends_on",
+                },
             ],
         )
         self.assertNotIn(SIBLING_ID, {item["id"] for item in result["anchors"]})
@@ -200,4 +212,3 @@ if __name__ == "__main__":
     import unittest
 
     unittest.main()
-

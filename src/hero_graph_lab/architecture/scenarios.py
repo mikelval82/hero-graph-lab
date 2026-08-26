@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
+from hero_graph_lab.architecture.impact import contract_snapshot_delta
+
 
 SCENARIO_LIMIT = 50
 NODE_LIMIT = 500
@@ -16,19 +18,6 @@ RELATION_LIMIT = 1_000
 ENDPOINT_LIMIT = 500
 LIST_LIMIT = 50
 DESIGN_STATUSES = {"proposed", "modified", "removed"}
-NODE_CHANGE_FIELDS = (
-    "label",
-    "kind",
-    "parent",
-    "status",
-    "description",
-    "target_path",
-    "qualified_name",
-    "signature",
-    "docstring",
-    "satisfies",
-    "acceptance",
-)
 
 
 class ArchitectureScenarioService:
@@ -243,73 +232,11 @@ def _normalize_edge(value: Any) -> dict[str, Any]:
 
 
 def _compare_scenarios(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
-    left_nodes = {item["id"]: item for item in left["snapshot"]["nodes"]}
-    right_nodes = {item["id"]: item for item in right["snapshot"]["nodes"]}
-    added_node_ids = sorted(right_nodes.keys() - left_nodes.keys())
-    removed_node_ids = sorted(left_nodes.keys() - right_nodes.keys())
-    changed_nodes = []
-    for node_id in sorted(left_nodes.keys() & right_nodes.keys()):
-        changes = {
-            field: {"before": deepcopy(left_nodes[node_id][field]), "after": deepcopy(right_nodes[node_id][field])}
-            for field in NODE_CHANGE_FIELDS
-            if left_nodes[node_id][field] != right_nodes[node_id][field]
-        }
-        if changes:
-            changed_nodes.append(
-                {"id": node_id, "label": right_nodes[node_id]["label"], "changes": changes}
-            )
-
-    left_edges = {_edge_key(item): item for item in left["snapshot"]["edges"]}
-    right_edges = {_edge_key(item): item for item in right["snapshot"]["edges"]}
-    added_edge_keys = sorted(right_edges.keys() - left_edges.keys())
-    removed_edge_keys = sorted(left_edges.keys() - right_edges.keys())
-    changed_relations = []
-    for key in sorted(left_edges.keys() & right_edges.keys()):
-        changes = {
-            field: {
-                "before": deepcopy(left_edges[key][field]),
-                "after": deepcopy(right_edges[key][field]),
-            }
-            for field in ("status", "properties")
-            if left_edges[key][field] != right_edges[key][field]
-        }
-        if changes:
-            changed_relations.append({"key": list(key), "changes": changes})
-
-    left_acceptance = _acceptance_set(left_nodes)
-    right_acceptance = _acceptance_set(right_nodes)
-    acceptance_added = [
-        {"node_id": node_id, "criterion": criterion}
-        for node_id, criterion in sorted(right_acceptance - left_acceptance)
-    ]
-    acceptance_removed = [
-        {"node_id": node_id, "criterion": criterion}
-        for node_id, criterion in sorted(left_acceptance - right_acceptance)
-    ]
-
-    result = {
+    return {
         "left": _scenario_identity(left),
         "right": _scenario_identity(right),
-        "added_nodes": [deepcopy(right_nodes[node_id]) for node_id in added_node_ids],
-        "removed_nodes": [deepcopy(left_nodes[node_id]) for node_id in removed_node_ids],
-        "changed_nodes": changed_nodes,
-        "added_relations": [deepcopy(right_edges[key]) for key in added_edge_keys],
-        "removed_relations": [deepcopy(left_edges[key]) for key in removed_edge_keys],
-        "changed_relations": changed_relations,
-        "acceptance_added": acceptance_added,
-        "acceptance_removed": acceptance_removed,
+        **contract_snapshot_delta(left["snapshot"], right["snapshot"]),
     }
-    result["summary"] = {
-        "added_nodes": len(result["added_nodes"]),
-        "removed_nodes": len(result["removed_nodes"]),
-        "changed_nodes": len(result["changed_nodes"]),
-        "added_relations": len(result["added_relations"]),
-        "removed_relations": len(result["removed_relations"]),
-        "changed_relations": len(result["changed_relations"]),
-        "acceptance_added": len(acceptance_added),
-        "acceptance_removed": len(acceptance_removed),
-    }
-    return result
 
 
 def _scenario_identity(scenario: dict[str, Any]) -> dict[str, str]:
@@ -317,14 +244,6 @@ def _scenario_identity(scenario: dict[str, Any]) -> dict[str, str]:
         "id": scenario["id"],
         "name": scenario["name"],
         "created_at": scenario["created_at"],
-    }
-
-
-def _acceptance_set(nodes: dict[str, dict[str, Any]]) -> set[tuple[str, str]]:
-    return {
-        (node_id, criterion)
-        for node_id, node in nodes.items()
-        for criterion in node["acceptance"]
     }
 
 

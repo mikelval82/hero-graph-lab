@@ -12,7 +12,7 @@ from typing import Any
 from urllib.parse import urlparse
 from uuid import uuid4
 
-from hero_graph_lab.architecture import ArchitectureScenarioService
+from hero_graph_lab.architecture import ArchitectureScenarioService, ContractImpactAnalyzer
 from hero_graph_lab.extractor import extract_project_graph, project_source_files
 from hero_graph_lab.contract_gateway import HarnessContractGateway
 from hero_graph_lab.explore import ExploreAssistantService, create_model_client
@@ -45,6 +45,7 @@ class LabState:
             observations_path.with_name("architecture-scenarios.json"),
             lambda: self.fixture,
         )
+        self.contract_impact = ContractImpactAnalyzer()
         self.harness_host = harness_host
         self.project_selected = project_selected
         self._lock = threading.RLock()
@@ -347,8 +348,15 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
         def _compare_scenarios(self) -> None:
             try:
                 payload = self._read_json(max_bytes=16_000)
+                if not isinstance(payload, dict):
+                    raise ValueError("body must be a JSON object")
+                left = state.scenarios.get(payload.get("left_id"))
+                right = state.scenarios.get(payload.get("right_id"))
                 comparison = state.scenarios.compare(
                     payload.get("left_id"), payload.get("right_id")
+                )
+                comparison["impact"] = state.contract_impact.analyze(
+                    left["snapshot"], right["snapshot"], state.graph()
                 )
             except KeyError as error:
                 self._send_json({"error": str(error)}, HTTPStatus.NOT_FOUND)
