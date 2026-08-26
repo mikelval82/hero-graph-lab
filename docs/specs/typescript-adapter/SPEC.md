@@ -104,6 +104,41 @@ Tree-sitter runtime and language wheels are normal Python dependencies. No npm,
 Node parser process, vendored grammar, server subprocess or frontend bundler is
 introduced. Supported version ranges are bounded in `pyproject.toml`.
 
+### TSA-010 - Root IIFE module scope
+
+A function or arrow-function IIFE used directly as a top-level expression is a
+transparent module wrapper. Declarations directly inside its body are treated
+like root module declarations. The adapter does not recursively promote nested
+functions, callbacks, event handlers or IIFEs inside other callables.
+
+This rule models the established browser-module pattern without flattening
+ordinary lexical scopes or multiplying implementation-detail nodes.
+
+### TSA-011 - Explicit global API surface
+
+The adapter indexes a module API only when source evidence connects all parts:
+
+- an object literal is bound to a local name;
+- its shorthand or `property: identifier` members resolve uniquely to extracted
+  direct module declarations; and
+- that object is assigned to a static property of `globalThis`, the root IIFE
+  parameter, or `module.exports`.
+
+The global namespace and exported members are relation-resolution metadata, not
+new graph node kinds. Computed names, spreads, getters, runtime mutation and
+non-identifier member values are not inferred.
+
+### TSA-012 - Evidence-bounded global module relations
+
+A reference to an indexed global API produces `depends_on` from the consumer
+module to its provider. A member call additionally produces `calls` when the
+member is part of the indexed API and resolves to one callable declaration.
+Both direct access (`globalThis.HeroApi.run()`) and a direct local alias
+(`const api = globalThis.HeroApi`) are supported.
+
+Script order in HTML, similarly named objects and unknown global properties do
+not create relationships. Existing ES/CommonJS resolution remains unchanged.
+
 ## Acceptance scenarios
 
 | ID | Expected result |
@@ -118,13 +153,17 @@ introduced. Supported version ranges are bounded in `pyproject.toml`.
 | TSA-A08 | Reversing script input order yields identical node and relation identities |
 | TSA-A09 | Opening Graph Lab itself exposes symbols beneath `static/*.js` while CSS/HTML remain files |
 | TSA-A10 | Existing Python, server, MCP and JavaScript regression suites remain green |
+| TSA-A11 | Root IIFE modules expose their direct declarations; `normalizeRelation` and `flowGraph` are navigable at exact lines |
+| TSA-A12 | Functions nested inside those declarations and callback expressions remain absent as graph nodes |
+| TSA-A13 | An explicit `globalThis` API alias creates the correct module dependency and exported-member call |
+| TSA-A14 | Unknown globals, unexported members and HTML script order create no inferred dependency or call |
 
 ## Non-goals
 
 - Full TypeScript type checking, `tsconfig` path aliases or project references.
 - Package-manager dependency graphs or nodes for third-party packages.
 - Points-to analysis, virtual dispatch, framework lifecycle or call ordering.
-- Symbols declared only in object literals, closures or generated code.
+- Symbols declared only in object literals, nested closures or generated code.
 - Editing/proposing TypeScript interfaces through the proposal form.
 - Generalizing a language-plugin framework before a second semantic adapter
   exists.

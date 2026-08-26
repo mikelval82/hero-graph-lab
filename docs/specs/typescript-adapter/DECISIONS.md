@@ -80,3 +80,34 @@ The adapter stores project-relative source paths and line ranges only. It does
 not copy source text into graph nodes. `/api/source` remains authoritative for
 the Code panel, and the existing shared file enumeration continues to drive
 cache invalidation.
+
+## TSA-D008 - Unwrap only root IIFEs by one lexical level
+
+Status: Accepted
+Date: 2026-08-26
+
+Graph Lab uses top-level IIFEs as module containers in nine of thirteen runtime
+scripts. Treating their direct body as module scope exposes the intended module
+API, while recursively collecting every nested function would turn callbacks
+and implementation details into graph noise. The normalizer therefore unwraps
+only a directly invoked root function/arrow and preserves every deeper scope.
+
+## TSA-D009 - Resolve global APIs from their authored export object
+
+Status: Accepted
+Date: 2026-08-26
+
+Names such as `HeroFlowNavigation` are meaningful only because source assigns a
+bounded object API to that global property. The adapter records the exact object
+members and their local declaration targets. It does not assume that every
+function in the wrapper is public or that every property access is a module.
+
+## TSA-D010 - Do not convert HTML load order into dependency edges
+
+Status: Accepted
+Date: 2026-08-26
+
+Script order can validate that a global provider is loaded first, but order
+alone does not demonstrate semantic use. `depends_on` requires an explicit
+reference to an indexed global API. This keeps the graph evidence-based and
+avoids a chain of artificial dependencies across every script tag.
