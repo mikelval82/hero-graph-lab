@@ -47,6 +47,12 @@ class _CallScope:
     class_id: str | None = None
 
 
+@dataclass(frozen=True)
+class _GlobalProvider:
+    module: _ParsedModule
+    members: dict[str, str]
+
+
 @dataclass
 class _ParsedModule:
     source: ScriptSource
@@ -60,6 +66,11 @@ class _ParsedModule:
     methods: dict[tuple[str, str], str] = field(default_factory=dict)
     imports: list[_ImportBinding] = field(default_factory=list)
     call_scopes: list[_CallScope] = field(default_factory=list)
+    statements: tuple[SyntaxNode, ...] = ()
+    global_roots: set[str] = field(default_factory=lambda: {"globalThis"})
+    global_providers: dict[str, dict[str, str]] = field(default_factory=dict)
+    global_aliases: dict[str, str] = field(default_factory=dict)
+    global_references: set[str] = field(default_factory=set)
 
     @property
     def module_id(self) -> str:
@@ -77,10 +88,19 @@ class TypeScriptGraphAdapter:
     def extract(self, sources: Iterable[ScriptSource]) -> dict[str, list[dict[str, Any]]]:
         parsed = [self._parse(source) for source in sorted(sources, key=lambda item: item.source)]
         by_path = {module.source.path.resolve(): module for module in parsed}
+        provider_candidates: dict[str, list[_GlobalProvider]] = defaultdict(list)
+        for module in parsed:
+            for namespace, members in module.global_providers.items():
+                provider_candidates[namespace].append(_GlobalProvider(module, members))
+        global_apis = {
+            namespace: providers[0]
+            for namespace, providers in provider_candidates.items()
+            if len(providers) == 1
+        }
         edges: set[tuple[str, str, str]] = set()
         for module in parsed:
             edges.update(module.containment)
-            self._resolve_module(module, by_path, edges)
+            self._resolve_module(module, by_path, global_apis, edges)
         nodes = [node for module in parsed for node in module.nodes.values()]
         return {
             "nodes": sorted(nodes, key=lambda node: node["id"]),
@@ -95,6 +115,7 @@ class TypeScriptGraphAdapter:
         parser = Parser(self._language(source.path))
         tree = parser.parse(content)
         module = _ParsedModule(source=source, content=content, tree=tree)
+        module.statements = self._module_statements(module)
         line_count = max(1, len(content.decode("utf-8", errors="replace").splitlines()))
         self._add_node(
             module,
@@ -109,7 +130,7 @@ class TypeScriptGraphAdapter:
             module.containment.add((source.module_parent, module.module_id, "contains"))
 
         pending_exports: list[tuple[str, str]] = []
-        for statement in tree.root_node.named_children:
+        for statement in module.statements:
             if statement.type == "import_statement":
                 module.imports.append(self._import_statement(module, statement))
                 continue
@@ -135,6 +156,7 @@ class TypeScriptGraphAdapter:
             target = self._unique(module.declarations.get(local_name, set()))
             if target:
                 module.exports[exported_name] = target
+        self._collect_script_bindings(module)
         self._collect_commonjs_imports(module)
         return module
 
@@ -145,6 +167,50 @@ class TypeScriptGraphAdapter:
         if suffix == ".ts":
             return self._typescript
         return self._javascript
+
+    def _module_statements(self, module: _ParsedModule) -> tuple[SyntaxNode, ...]:
+        statements: list[SyntaxNode] = []
+        for statement in module.tree.root_node.named_children:
+            wrapper = self._root_iife(statement)
+            if wrapper is None:
+                statements.append(statement)
+                continue
+            callable_node, call = wrapper
+            body = callable_node.child_by_field_name("body")
+            if body is None or body.type != "statement_block":
+                statements.append(statement)
+                continue
+            statements.extend(body.named_children)
+            parameters = callable_node.child_by_field_name("parameters")
+            arguments = call.child_by_field_name("arguments")
+            if parameters is None or arguments is None:
+                continue
+            parameter_nodes = [child for child in parameters.named_children if child.type == "identifier"]
+            for parameter, argument in zip(parameter_nodes, arguments.named_children):
+                if self._contains_global_object(module, argument):
+                    module.global_roots.add(self._text(module, parameter))
+        return tuple(statements)
+
+    @staticmethod
+    def _root_iife(statement: SyntaxNode) -> tuple[SyntaxNode, SyntaxNode] | None:
+        if statement.type != "expression_statement" or len(statement.named_children) != 1:
+            return None
+        call = statement.named_children[0]
+        if call.type != "call_expression":
+            return None
+        function = call.child_by_field_name("function")
+        while function is not None and function.type == "parenthesized_expression":
+            function = function.named_children[0] if len(function.named_children) == 1 else None
+        if function is None or function.type not in {"arrow_function", "function_expression", "generator_function"}:
+            return None
+        return function, call
+
+    def _contains_global_object(self, module: _ParsedModule, node: SyntaxNode) -> bool:
+        if node.type == "this":
+            return True
+        if node.type == "identifier" and self._text(module, node) == "globalThis":
+            return True
+        return any(self._contains_global_object(module, child) for child in node.named_children)
 
     def _collect_declaration(
         self,
@@ -374,8 +440,162 @@ class TypeScriptGraphAdapter:
             aliases.append((local, self._text(module, alias_node) if alias_node else local))
         return aliases
 
+    def _collect_script_bindings(self, module: _ParsedModule) -> None:
+        object_bindings: dict[str, dict[str, str]] = {}
+        for statement in module.statements:
+            if statement.type not in {"lexical_declaration", "variable_declaration"}:
+                continue
+            for declarator in (child for child in statement.named_children if child.type == "variable_declarator"):
+                name_node = declarator.child_by_field_name("name")
+                value = declarator.child_by_field_name("value")
+                if name_node is None or name_node.type != "identifier" or value is None:
+                    continue
+                members = self._object_member_names(module, value)
+                if members is not None:
+                    object_bindings[self._text(module, name_node)] = members
+
+        for assignment in self._module_assignments(module.statements):
+            left = assignment.child_by_field_name("left")
+            right = assignment.child_by_field_name("right")
+            if left is None or right is None:
+                continue
+            global_path = self._global_access_parts(module, left)
+            members = self._resolved_object_members(module, right, object_bindings)
+            if global_path is not None and len(global_path) == 1:
+                module.global_providers[global_path[0]] = members
+                continue
+            if self._is_module_exports(module, left):
+                module.exports.update(members)
+
+        for statement in module.statements:
+            for node in self._walk(statement):
+                global_path = self._global_access_parts(module, node)
+                if global_path:
+                    module.global_references.add(global_path[0])
+        module.global_aliases = self._global_alias_bindings(module, module.statements)
+
+    def _object_member_names(self, module: _ParsedModule, value: SyntaxNode) -> dict[str, str] | None:
+        object_node = value if value.type == "object" else None
+        if value.type == "call_expression":
+            function = value.child_by_field_name("function")
+            arguments = value.child_by_field_name("arguments")
+            if self._static_member(module, function) == ("Object", "freeze") and arguments is not None:
+                object_node = next((child for child in arguments.named_children if child.type == "object"), None)
+        if object_node is None:
+            return None
+        members: dict[str, str] = {}
+        for child in object_node.named_children:
+            if child.type in {"shorthand_property_identifier", "shorthand_property_identifier_pattern"}:
+                name = self._text(module, child)
+                members[name] = name
+            elif child.type == "pair":
+                key = child.child_by_field_name("key")
+                member_value = child.child_by_field_name("value")
+                if key is None or member_value is None or member_value.type != "identifier":
+                    continue
+                members[self._text(module, key).strip("\"'")] = self._text(module, member_value)
+        return members
+
+    def _resolved_object_members(
+        self,
+        module: _ParsedModule,
+        value: SyntaxNode,
+        object_bindings: dict[str, dict[str, str]],
+    ) -> dict[str, str]:
+        if value.type == "identifier":
+            member_names = object_bindings.get(self._text(module, value), {})
+        else:
+            member_names = self._object_member_names(module, value) or {}
+        resolved: dict[str, str] = {}
+        for public_name, local_name in member_names.items():
+            target = self._unique(module.declarations.get(local_name, set()))
+            if target:
+                resolved[public_name] = target
+        return resolved
+
+    @classmethod
+    def _module_assignments(cls, statements: tuple[SyntaxNode, ...]) -> list[SyntaxNode]:
+        assignments: list[SyntaxNode] = []
+
+        def visit(node: SyntaxNode) -> None:
+            if node.type in _FUNCTION_NODES or node.type in {
+                "class",
+                "class_declaration",
+                "class_expression",
+                "abstract_class_declaration",
+            }:
+                return
+            if node.type == "assignment_expression":
+                assignments.append(node)
+                return
+            for child in node.named_children:
+                visit(child)
+
+        for statement in statements:
+            visit(statement)
+        return assignments
+
+    def _global_access_parts(self, module: _ParsedModule, node: SyntaxNode) -> tuple[str, ...] | None:
+        if node.type != "member_expression":
+            return None
+        object_node = node.child_by_field_name("object")
+        property_node = node.child_by_field_name("property")
+        if object_node is None or property_node is None:
+            return None
+        property_name = self._text(module, property_node)
+        if object_node.type == "identifier" and self._text(module, object_node) in module.global_roots:
+            return (property_name,)
+        prefix = self._global_access_parts(module, object_node)
+        return (*prefix, property_name) if prefix is not None else None
+
+    def _is_module_exports(self, module: _ParsedModule, node: SyntaxNode) -> bool:
+        return self._static_member(module, node) == ("module", "exports")
+
+    def _static_member(self, module: _ParsedModule, node: SyntaxNode | None) -> tuple[str, str] | None:
+        if node is None or node.type != "member_expression":
+            return None
+        object_node = node.child_by_field_name("object")
+        property_node = node.child_by_field_name("property")
+        if object_node is None or object_node.type != "identifier" or property_node is None:
+            return None
+        return self._text(module, object_node), self._text(module, property_node)
+
+    @staticmethod
+    def _walk(node: SyntaxNode) -> Iterable[SyntaxNode]:
+        yield node
+        for child in node.named_children:
+            yield from TypeScriptGraphAdapter._walk(child)
+
+    def _global_alias_bindings(
+        self,
+        module: _ParsedModule,
+        roots: Iterable[SyntaxNode],
+    ) -> dict[str, str]:
+        candidates: dict[str, set[str]] = defaultdict(set)
+
+        def visit(node: SyntaxNode) -> None:
+            if node.type in _FUNCTION_NODES:
+                return
+            if node.type == "variable_declarator":
+                name_node = node.child_by_field_name("name")
+                value = node.child_by_field_name("value")
+                if name_node is not None and name_node.type == "identifier" and value is not None:
+                    alias_path = self._global_access_parts(module, value)
+                    if alias_path is not None and len(alias_path) == 1:
+                        candidates[self._text(module, name_node)].add(alias_path[0])
+            for child in node.named_children:
+                visit(child)
+
+        for root in roots:
+            visit(root)
+        return {
+            local: next(iter(namespaces))
+            for local, namespaces in candidates.items()
+            if len(namespaces) == 1
+        }
+
     def _collect_commonjs_imports(self, module: _ParsedModule) -> None:
-        for statement in module.tree.root_node.named_children:
+        for statement in module.statements:
             if statement.type not in {"lexical_declaration", "variable_declaration"}:
                 continue
             for declarator in (child for child in statement.named_children if child.type == "variable_declarator"):
@@ -405,6 +625,7 @@ class TypeScriptGraphAdapter:
         self,
         module: _ParsedModule,
         by_path: dict[Path, _ParsedModule],
+        global_apis: dict[str, _GlobalProvider],
         edges: set[tuple[str, str, str]],
     ) -> None:
         named_bindings: dict[str, str] = {}
@@ -423,9 +644,32 @@ class TypeScriptGraphAdapter:
                 if target_id:
                     named_bindings[local] = target_id
 
+        module_global_aliases = {
+            local: global_apis[namespace]
+            for local, namespace in module.global_aliases.items()
+            if namespace in global_apis
+        }
+        for namespace in module.global_references:
+            provider = global_apis.get(namespace)
+            if provider and provider.module.module_id != module.module_id:
+                edges.add((module.module_id, provider.module.module_id, "depends_on"))
+
         for scope in module.call_scopes:
+            scope_aliases = {
+                local: global_apis[namespace]
+                for local, namespace in self._global_alias_bindings(module, (scope.body,)).items()
+                if namespace in global_apis
+            }
             for call in self._call_expressions(scope.body):
-                target = self._resolve_call(module, scope, call, named_bindings, namespace_bindings)
+                target = self._resolve_call(
+                    module,
+                    scope,
+                    call,
+                    named_bindings,
+                    namespace_bindings,
+                    {**module_global_aliases, **scope_aliases},
+                    global_apis,
+                )
                 if target and target != scope.source_id:
                     edges.add((scope.source_id, target, "calls"))
 
@@ -436,6 +680,8 @@ class TypeScriptGraphAdapter:
         call: SyntaxNode,
         named_bindings: dict[str, str],
         namespace_bindings: dict[str, _ParsedModule],
+        global_aliases: dict[str, _GlobalProvider],
+        global_apis: dict[str, _GlobalProvider],
     ) -> str | None:
         function = call.child_by_field_name("function")
         if function is None:
@@ -447,6 +693,11 @@ class TypeScriptGraphAdapter:
                 return imported
             local = self._unique(module.declarations.get(name, set()))
             return local if local and self._callable(local) else None
+        global_path = self._global_access_parts(module, function)
+        if global_path is not None and len(global_path) == 2:
+            provider = global_apis.get(global_path[0])
+            target = provider.members.get(global_path[1]) if provider else None
+            return target if target and self._callable(target) else None
         if function.type not in {"member_expression", "subscript_expression"}:
             return None
         object_node = function.child_by_field_name("object")
@@ -457,7 +708,12 @@ class TypeScriptGraphAdapter:
         if object_node.type == "this" and scope.class_id:
             return module.methods.get((scope.class_id, property_name))
         if object_node.type == "identifier":
-            namespace = namespace_bindings.get(self._text(module, object_node))
+            object_name = self._text(module, object_node)
+            global_provider = global_aliases.get(object_name)
+            if global_provider:
+                target = global_provider.members.get(property_name)
+                return target if target and self._callable(target) else None
+            namespace = namespace_bindings.get(object_name)
             if namespace:
                 target = namespace.exports.get(property_name)
                 return target if target and self._callable(target) else None
