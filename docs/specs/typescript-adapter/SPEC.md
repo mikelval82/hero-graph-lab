@@ -116,17 +116,25 @@ ordinary lexical scopes or multiplying implementation-detail nodes.
 
 ### TSA-011 - Explicit global API surface
 
-The adapter indexes a module API only when source evidence connects all parts:
+The adapter indexes a global namespace provider when source assigns either a
+local value or a direct object value to a static property of `globalThis`, the
+root IIFE parameter, or `module.exports`.
 
-- an object literal is bound to a local name;
+It indexes callable members only when source evidence connects all parts:
+
+- an object literal is bound to a local name or assigned directly, optionally
+  through `Object.freeze`;
 - its shorthand or `property: identifier` members resolve uniquely to extracted
   direct module declarations; and
-- that object is assigned to a static property of `globalThis`, the root IIFE
-  parameter, or `module.exports`.
+- that value is assigned to the global namespace or `module.exports`.
 
 The global namespace and exported members are relation-resolution metadata, not
 new graph node kinds. Computed names, spreads, getters, runtime mutation and
 non-identifier member values are not inferred.
+
+An unresolved assigned value can prove which module provides a namespace and
+therefore support `depends_on`, but it cannot support a member-level `calls`
+relation.
 
 ### TSA-012 - Evidence-bounded global module relations
 

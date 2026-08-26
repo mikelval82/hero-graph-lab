@@ -102,6 +102,11 @@ bounded object API to that global property. The adapter records the exact object
 members and their local declaration targets. It does not assume that every
 function in the wrapper is public or that every property access is a module.
 
+Direct object assignments are equivalent evidence. When the assigned local
+value is conditional or otherwise opaque, the assignment still identifies the
+provider module, but the adapter leaves its member map empty and emits no calls
+to guessed members.
+
 ## TSA-D010 - Do not convert HTML load order into dependency edges
 
 Status: Accepted
