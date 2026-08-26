@@ -89,6 +89,8 @@ class LabServerTest(TestCase):
                 self.assertEqual([item["name"] for item in listed["scenarios"]], ["A", "B"])
                 self.assertEqual(retrieved["id"], left["id"])
                 self.assertEqual(comparison["summary"]["changed_nodes"], 1)
+                self.assertEqual(comparison["impact"]["summary"]["changed_contract_nodes"], 1)
+                self.assertEqual(comparison["impact"]["summary"]["unresolved_contract_nodes"], 1)
 
                 with self.assertRaises(HTTPError) as raised:
                     post(

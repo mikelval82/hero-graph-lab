@@ -22,3 +22,12 @@
 - The in-app Browser remains blocked before navigation because its installed
   service path is rejected as untrusted. No rendered baseline is claimed.
 
+## Red evidence - 2026-08-26
+
+- Domain tests fail at import because
+  `hero_graph_lab.architecture.impact.ContractImpactAnalyzer` does not exist.
+- The focused JavaScript suite keeps its two existing snapshot tests green and
+  fails the new presentation contract because `impactLines` is not exported.
+- The fixtures require nearest-module anchoring, exact incoming dependency
+  paths, sibling isolation, stale-anchor reporting, deterministic input order,
+  immutability and explicit truncation.

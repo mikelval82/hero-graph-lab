@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 
 require("../src/hero_graph_lab/static/proposal-contract.js");
-const { draftSnapshot } = require("../src/hero_graph_lab/static/architecture-scenarios.js");
+const { draftSnapshot, impactLines } = require("../src/hero_graph_lab/static/architecture-scenarios.js");
 
 
 test("captures only design nodes, design relations, and referenced observed endpoints", () => {
@@ -80,4 +80,39 @@ test("captures modified and removed observed elements as design changes", () => 
   assert.deepEqual(captured.nodes.map((node) => node.id), ["modified", "removed"]);
   assert.deepEqual(captured.edges.map((edge) => edge.status), ["modified", "removed"]);
   assert.deepEqual(captured.observed_endpoints.map((node) => node.id), ["observed"]);
+});
+
+
+test("formats code anchors, dependent paths, and unresolved contracts", () => {
+  const impact = {
+    anchors: [{
+      id: "module:demo.provider",
+      label: "provider.py",
+      kind: "module",
+      source: "src/demo/provider.py",
+      contract_node_ids: ["proposal:analyze"],
+    }],
+    dependents: [{
+      id: "module:demo.consumer",
+      label: "consumer.py",
+      kind: "module",
+      source: "src/demo/consumer.py",
+      distance: 1,
+      anchor_id: "module:demo.provider",
+      path: [{
+        source: "module:demo.consumer",
+        source_label: "consumer.py",
+        target: "module:demo.provider",
+        target_label: "provider.py",
+        kind: "depends_on",
+      }],
+    }],
+    unresolved: [{ contract_node_id: "proposal:missing", reason: "no_observed_anchor" }],
+  };
+
+  assert.deepEqual(impactLines(impact), {
+    anchors: ["provider.py · module · from proposal:analyze"],
+    dependents: ["consumer.py · 1 hop · consumer.py -depends_on-> provider.py"],
+    unresolved: ["proposal:missing · no observed anchor"],
+  });
 });
