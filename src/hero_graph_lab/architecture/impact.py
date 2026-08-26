@@ -136,6 +136,8 @@ class ContractImpactAnalyzer:
                 continue
             for edge in candidates:
                 dependent_id = edge["source"]
+                if dependent_id in visited:
+                    continue
                 if len(dependents) >= self.max_dependents:
                     truncated = True
                     continue
@@ -366,9 +368,11 @@ def _graph_items(graph: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict
     edges = graph.get("edges")
     if not isinstance(nodes, list) or not isinstance(edges, list):
         raise ValueError("observed graph must contain node and edge arrays")
-    valid_nodes = [node for node in nodes if isinstance(node, dict) and isinstance(node.get("id"), str)]
-    if len(valid_nodes) != len(nodes) or len({node["id"] for node in nodes}) != len(nodes):
-        raise ValueError("observed graph contains invalid or duplicate nodes")
+    valid_nodes = [
+        node for node in nodes if isinstance(node, dict) and isinstance(node.get("id"), str)
+    ]
+    if len(valid_nodes) != len(nodes):
+        raise ValueError("observed graph contains invalid nodes")
     valid_edges = [
         edge
         for edge in edges
@@ -379,7 +383,10 @@ def _graph_items(graph: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict
     ]
     if len(valid_edges) != len(edges):
         raise ValueError("observed graph contains invalid relationships")
-    return sorted(nodes, key=lambda item: item["id"]), sorted(edges, key=_edge_key)
+    canonical_nodes: dict[str, dict[str, Any]] = {}
+    for node in sorted(nodes, key=_node_key):
+        canonical_nodes.setdefault(node["id"], node)
+    return list(canonical_nodes.values()), sorted(edges, key=_edge_key)
 
 
 def _node_view(node: dict[str, Any]) -> dict[str, Any]:
@@ -407,6 +414,17 @@ def _path_edge(
     }
 
 
+def _node_key(node: dict[str, Any]) -> tuple[str, str, int, str, str, str]:
+    return (
+        str(node.get("id", "")),
+        str(node.get("source", "")),
+        node.get("line") if isinstance(node.get("line"), int) else 0,
+        str(node.get("parent", "")),
+        str(node.get("kind", "")),
+        str(node.get("label", "")),
+    )
+
+
 def _acceptance_set(nodes: dict[str, dict[str, Any]]) -> set[tuple[str, str]]:
     return {
         (node_id, criterion)
@@ -426,4 +444,3 @@ def _edge_key(edge: dict[str, Any]) -> tuple[str, str, str, str]:
 
 def _evidence_key(evidence: dict[str, str]) -> tuple[str, ...]:
     return tuple(f"{key}={value}" for key, value in sorted(evidence.items()))
-

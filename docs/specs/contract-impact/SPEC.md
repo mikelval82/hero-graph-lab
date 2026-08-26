@@ -1,6 +1,6 @@
 # Contract Drift and Change Impact specification
 
-Status: Approved for implementation
+Status: Implemented; rendered acceptance pending
 Date: 2026-08-26
 Parent requirement: `AW-005`
 Baseline: `40c6884`
@@ -136,4 +136,3 @@ array of observed graph relationships in `path`.
 - Replacing HARNESS contract reconciliation.
 - Highlighting every affected node in the graph.
 - Persisting impact results, which are derived from the current observed graph.
-

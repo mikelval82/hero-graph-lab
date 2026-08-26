@@ -122,6 +122,7 @@ def observed_graph():  # noqa: ANN201
         ],
         "edges": [
             {"source": CONSUMER_ID, "target": PROVIDER_ID, "kind": "depends_on"},
+            {"source": CONSUMER_ID, "target": PROVIDER_ID, "kind": "uses"},
             {"source": ENTRYPOINT_ID, "target": CONSUMER_ID, "kind": "depends_on"},
             {"source": PROVIDER_ID, "target": "module:demo.outgoing", "kind": "depends_on"},
             {"source": "package:demo", "target": PROVIDER_ID, "kind": "contains"},
@@ -206,6 +207,52 @@ class ContractImpactAnalyzerTest(TestCase):
 
         self.assertEqual([item["id"] for item in result["dependents"]], [CONSUMER_ID])
         self.assertTrue(result["summary"]["truncated"])
+
+    def test_duplicate_observed_ids_use_a_stable_representative(self) -> None:
+        graph = observed_graph()
+        graph["nodes"].append(
+            {
+                "id": PROVIDER_ID,
+                "label": "provider duplicate",
+                "kind": "module",
+                "source": "zz/generated/provider.py",
+            }
+        )
+        candidate = snapshot(signature="(baseline, candidate, graph)")
+
+        first = ContractImpactAnalyzer().analyze(snapshot(), candidate, graph)
+        second = ContractImpactAnalyzer().analyze(
+            snapshot(),
+            candidate,
+            {"nodes": list(reversed(graph["nodes"])), "edges": list(reversed(graph["edges"]))},
+        )
+
+        self.assertEqual(first, second)
+        self.assertEqual(first["anchors"][0]["label"], "provider.py")
+
+    def test_exact_existing_target_path_is_sufficient_anchor_evidence(self) -> None:
+        baseline = snapshot()
+        candidate = snapshot(signature="(baseline, candidate, graph)")
+        for contract in (baseline, candidate):
+            contract["nodes"][3]["target_path"] = "src/demo/provider.py"
+            contract["edges"] = []
+            contract["observed_endpoints"] = []
+
+        result = ContractImpactAnalyzer().analyze(baseline, candidate, observed_graph())
+
+        self.assertEqual([item["id"] for item in result["anchors"]], [PROVIDER_ID])
+        self.assertEqual(result["anchors"][0]["evidence"][0]["kind"], "exact_target_path")
+
+    def test_relation_only_drift_still_resolves_its_contract_anchor(self) -> None:
+        baseline = snapshot()
+        candidate = snapshot()
+        candidate["edges"][0]["status"] = "modified"
+
+        result = ContractImpactAnalyzer().analyze(baseline, candidate, observed_graph())
+
+        self.assertEqual(result["summary"]["changed_contract_nodes"], 0)
+        self.assertEqual(result["summary"]["changed_contract_relations"], 1)
+        self.assertEqual([item["id"] for item in result["anchors"]], [PROVIDER_ID])
 
 
 if __name__ == "__main__":
