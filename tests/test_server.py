@@ -385,6 +385,7 @@ class LabServerTest(TestCase):
                 self.assertIn("function currentExploreContext", explore_script)
                 self.assertIn("function renderPinnedNodes", explore_script)
                 self.assertIn("function draftSnapshot", scenario_script)
+                self.assertIn("function impactLines", scenario_script)
                 self.assertIn('fetchJson("/api/scenarios"', scenario_script)
                 self.assertIn("renderComparison(result, comparison)", scenario_script)
                 self.assertIn("HeroArchitectureScenarios?.install", app_script)

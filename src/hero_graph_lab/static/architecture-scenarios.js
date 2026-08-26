@@ -155,7 +155,7 @@
 
     compareButton.addEventListener("click", async () => {
       compareButton.disabled = true;
-      status.textContent = "Comparing exact contract fields...";
+      status.textContent = "Comparing contract drift and current-code impact...";
       try {
         const comparison = await fetchJson("/api/scenarios/compare", {
           method: "POST",
@@ -225,6 +225,98 @@
       empty.textContent = "These scenarios have no exact contract or relationship differences.";
       container.append(empty);
     }
+    renderImpact(container, comparison.impact);
+  }
+
+  function impactLines(impact = {}) {
+    const anchors = Array.isArray(impact.anchors) ? impact.anchors : [];
+    const dependents = Array.isArray(impact.dependents) ? impact.dependents : [];
+    const unresolved = Array.isArray(impact.unresolved) ? impact.unresolved : [];
+    const reasonLabel = {
+      no_observed_anchor: "no observed anchor",
+      stale_observed_anchor: "stale observed anchor",
+    };
+    return {
+      anchors: anchors.map((item) => {
+        const contracts = Array.isArray(item.contract_node_ids) ? item.contract_node_ids.join(", ") : "unknown contract";
+        return `${item.label || item.id} · ${item.kind || "unknown"} · from ${contracts}`;
+      }),
+      dependents: dependents.map((item) => {
+        const distance = Number(item.distance) || 0;
+        const hops = `${distance} hop${distance === 1 ? "" : "s"}`;
+        const path = (Array.isArray(item.path) ? item.path : []).map((edge) => (
+          `${edge.source_label || edge.source} -${edge.kind}-> ${edge.target_label || edge.target}`
+        )).join(" ; ");
+        return `${item.label || item.id} · ${hops}${path ? ` · ${path}` : ""}`;
+      }),
+      unresolved: unresolved.map((item) => (
+        `${item.contract_node_id} · ${reasonLabel[item.reason] || item.reason || "unresolved"}`
+      )),
+    };
+  }
+
+  function renderImpact(container, impact) {
+    if (!impact?.summary) return;
+    const section = document.createElement("section");
+    section.className = "scenario-impact";
+    const heading = document.createElement("div");
+    heading.className = "scenario-impact-heading";
+    const title = document.createElement("h3");
+    title.textContent = "Change impact";
+    const explanation = document.createElement("p");
+    explanation.textContent = "Current code reached only through authored anchors and incoming dependencies.";
+    heading.append(title, explanation);
+
+    const metrics = document.createElement("div");
+    metrics.className = "scenario-impact-metrics";
+    [
+      ["Code anchors", impact.summary.code_anchors],
+      ["Dependents", impact.summary.dependent_code],
+      ["Unresolved", impact.summary.unresolved_contract_nodes],
+    ].forEach(([label, value]) => {
+      const badge = document.createElement("span");
+      const count = document.createElement("strong");
+      count.textContent = String(value || 0);
+      const caption = document.createElement("small");
+      caption.textContent = label;
+      badge.append(count, caption);
+      metrics.append(badge);
+    });
+    section.append(heading, metrics);
+
+    const lines = impactLines(impact);
+    appendImpactList(section, "Direct code anchors", lines.anchors);
+    appendImpactList(section, "Dependent code to review", lines.dependents);
+    appendImpactList(section, "Needs an explicit anchor", lines.unresolved);
+    if (!lines.anchors.length && !lines.dependents.length && !lines.unresolved.length) {
+      const empty = document.createElement("p");
+      empty.className = "scenario-impact-empty";
+      empty.textContent = "No current-code impact is evidenced by this comparison.";
+      section.append(empty);
+    }
+    if (impact.summary.truncated) {
+      const warning = document.createElement("p");
+      warning.className = "scenario-impact-warning";
+      warning.textContent = "The bounded analysis found more dependent code. Refine the contract anchors before relying on this list.";
+      section.append(warning);
+    }
+    container.append(section);
+  }
+
+  function appendImpactList(container, title, lines) {
+    if (!lines.length) return;
+    const group = document.createElement("div");
+    group.className = "scenario-impact-list";
+    const heading = document.createElement("h4");
+    heading.textContent = `${title} (${lines.length})`;
+    const list = document.createElement("ul");
+    lines.forEach((line) => {
+      const item = document.createElement("li");
+      item.textContent = line;
+      list.append(item);
+    });
+    group.append(heading, list);
+    container.append(group);
   }
 
   function summaryGrid(summary) {
@@ -289,7 +381,7 @@
     return `${item.node_id} · ${item.criterion}`;
   }
 
-  const api = Object.freeze({ draftSnapshot, install, renderComparison });
+  const api = Object.freeze({ draftSnapshot, impactLines, install, renderComparison });
   globalScope.HeroArchitectureScenarios = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof globalThis === "undefined" ? this : globalThis);
