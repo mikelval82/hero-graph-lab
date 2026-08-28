@@ -6,7 +6,7 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest import TestCase
 
-from hero_graph_lab.explore.clients import FakeModelClient, GeminiModelClient
+from hero_graph_lab.explore.clients import DeepSeekModelClient, FakeModelClient, GeminiModelClient
 from hero_graph_lab.explore.models import (
     ModelMessage,
     ModelRequest,
@@ -68,6 +68,67 @@ class ExploreAssistantTest(TestCase):
     def test_system_prompt_bounds_mermaid_to_supported_safe_syntax(self) -> None:
         self.assertIn("syntax compatible with Mermaid 11.6", SYSTEM_PROMPT)
         self.assertIn("do not use HTML labels, click directives, or experimental diagram types", SYSTEM_PROMPT)
+
+    def test_deepseek_translates_chat_tools_and_usage(self) -> None:
+        captured: dict = {}
+
+        def create(**kwargs):  # noqa: ANN003, ANN202
+            captured.update(kwargs)
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content="Inspecting the graph.",
+                            tool_calls=[
+                                SimpleNamespace(
+                                    id="call-1",
+                                    function=SimpleNamespace(
+                                        name="GraphSearch",
+                                        arguments=json.dumps({"query": "OrderService"}),
+                                    ),
+                                )
+                            ],
+                        ),
+                        finish_reason="tool_calls",
+                    )
+                ],
+                usage=SimpleNamespace(prompt_tokens=17, completion_tokens=5),
+            )
+
+        fake_client = SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+        )
+        client = DeepSeekModelClient("deepseek-v4-flash", client=fake_client)
+
+        result = client.complete(
+            ModelRequest(
+                "Explore safely.",
+                (ModelMessage("user", "Find the service"),),
+                (ToolSpec("GraphSearch", "Search nodes", {"type": "object"}),),
+                max_tokens=321,
+            )
+        )
+
+        self.assertEqual(result.text, "Inspecting the graph.")
+        self.assertEqual(result.usage, ModelUsage(17, 5))
+        self.assertEqual(result.tool_calls[0].arguments, {"query": "OrderService"})
+        self.assertEqual(captured["model"], "deepseek-v4-flash")
+        self.assertEqual(captured["max_tokens"], 321)
+        self.assertNotIn("max_completion_tokens", captured)
+        self.assertEqual(captured["tools"][0]["function"]["name"], "GraphSearch")
+
+    def test_when_deepseek_request_fails_expect_runtime_error(self) -> None:
+        def create(**kwargs):  # noqa: ANN003, ANN202
+            del kwargs
+            raise Exception("TLS handshake failed")
+
+        fake_client = SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+        )
+        client = DeepSeekModelClient("deepseek-v4-flash", client=fake_client)
+
+        with self.assertRaisesRegex(RuntimeError, "DeepSeek request failed: TLS handshake failed"):
+            client.complete(ModelRequest("Explore safely.", (), ()))
 
     def test_when_gemini_request_fails_expect_runtime_error(self) -> None:
         def generate_content(**kwargs):  # noqa: ANN003, ANN202

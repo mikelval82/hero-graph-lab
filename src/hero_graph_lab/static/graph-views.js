@@ -187,6 +187,20 @@
     return { nodes: graph.nodes.filter((graphNode) => nodeIds.has(graphNode.id)), edges };
   }
 
+  function highlightedGraph(graph, selectedId) {
+    if (!selectedId || !graph.nodes.some((graphNode) => graphNode.id === selectedId)) return graph;
+    const nodeIds = new Set([selectedId]);
+    graph.edges.forEach((edge) => {
+      if (edge.source !== selectedId && edge.target !== selectedId) return;
+      nodeIds.add(edge.source);
+      nodeIds.add(edge.target);
+    });
+    return {
+      nodes: graph.nodes.filter((graphNode) => nodeIds.has(graphNode.id)),
+      edges: graph.edges.filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target)),
+    };
+  }
+
   function flowActiveNodeId(flowJourney) {
     return flowJourney.at(-1)?.nodeId || null;
   }
@@ -259,6 +273,7 @@
     flowJourneyGraph,
     flowRelationSnapshot,
     focusGraph,
+    highlightedGraph,
     isDescendant,
     outgoingCallTrace,
     structureGraph,

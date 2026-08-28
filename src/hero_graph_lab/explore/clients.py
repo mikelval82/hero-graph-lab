@@ -31,7 +31,8 @@ class FakeModelClient:
         return ModelResponse(
             text=(
                 "Explore Assistant funciona con el proveedor determinista. "
-                "Configura --explore-provider anthropic, openai o gemini para obtener respuestas del modelo."
+                "Configura --explore-provider anthropic, openai, deepseek o gemini "
+                "para obtener respuestas del modelo."
             )
         )
 
@@ -105,21 +106,29 @@ class AnthropicModelClient:
 
 class OpenAIModelClient:
     provider = "openai"
+    max_tokens_parameter = "max_completion_tokens"
 
-    def __init__(self, model: str) -> None:
-        try:
-            from openai import OpenAI  # type: ignore
-        except ImportError as error:
-            raise RuntimeError("Install hero-graph-lab[openai] to use the OpenAI provider.") from error
+    def __init__(self, model: str, *, client: Any | None = None) -> None:
+        if client is None:
+            try:
+                from openai import OpenAI  # type: ignore
+            except ImportError as error:
+                raise RuntimeError("Install hero-graph-lab[openai] to use the OpenAI provider.") from error
+            client = OpenAI()
         self.model = model
-        self._client = OpenAI()
+        self._client = client
 
     def complete(self, request: ModelRequest) -> ModelResponse:
-        response = self._client.chat.completions.create(
-            model=self.model,
-            max_completion_tokens=request.max_tokens,
-            messages=[{"role": "system", "content": request.system_prompt}, *self._messages(request.messages)],
-            tools=[
+        parameters: dict[str, Any] = {
+            "model": self.model,
+            self.max_tokens_parameter: request.max_tokens,
+            "messages": [
+                {"role": "system", "content": request.system_prompt},
+                *self._messages(request.messages),
+            ],
+        }
+        if request.tools:
+            parameters["tools"] = [
                 {
                     "type": "function",
                     "function": {
@@ -129,8 +138,8 @@ class OpenAIModelClient:
                     },
                 }
                 for tool in request.tools
-            ],
-        )
+            ]
+        response = self._client.chat.completions.create(**parameters)
         choice = response.choices[0]
         message = choice.message
         calls = tuple(
@@ -171,6 +180,34 @@ class OpenAIModelClient:
             else:
                 output.append({"role": "user", "content": message.content})
         return output
+
+
+class DeepSeekModelClient(OpenAIModelClient):
+    provider = "deepseek"
+    max_tokens_parameter = "max_tokens"
+
+    def __init__(self, model: str, *, client: Any | None = None) -> None:
+        load_project_env()
+        if client is None:
+            try:
+                from openai import OpenAI  # type: ignore
+            except ImportError as error:
+                raise RuntimeError("Install hero-graph-lab[deepseek] to use DeepSeek.") from error
+            api_key = os.environ.get("DEEPSEEK_API_KEY")
+            if not api_key:
+                raise RuntimeError("DEEPSEEK_API_KEY is required to use the DeepSeek provider.")
+            client = OpenAI(
+                api_key=api_key,
+                base_url=os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+            )
+        self.model = model
+        self._client = client
+
+    def complete(self, request: ModelRequest) -> ModelResponse:
+        try:
+            return super().complete(request)
+        except Exception as error:
+            raise RuntimeError(f"DeepSeek request failed: {error}") from error
 
 
 def load_project_env(project_root: str | Path | None = None) -> None:
@@ -311,6 +348,8 @@ def create_model_client(provider: str, model: str | None = None) -> ModelClient:
         return AnthropicModelClient(model or "claude-sonnet-4-5")
     if normalized == "openai":
         return OpenAIModelClient(model or "gpt-5")
+    if normalized == "deepseek":
+        return DeepSeekModelClient(model or "deepseek-v4-flash")
     if normalized == "gemini":
         return GeminiModelClient(model or "gemini-2.5-flash")
     raise ValueError(f"unsupported explore provider: {provider}")

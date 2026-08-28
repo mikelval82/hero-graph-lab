@@ -530,7 +530,7 @@ def main() -> None:
     parser.add_argument("--harness-python", type=Path)
     parser.add_argument(
         "--explore-provider",
-        choices=("fake", "anthropic", "openai", "gemini"),
+        choices=("fake", "anthropic", "openai", "deepseek", "gemini"),
         default="fake",
     )
     parser.add_argument("--explore-model")

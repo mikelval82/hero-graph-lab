@@ -62,7 +62,8 @@
             <details id="graph-more" class="graph-more-menu">
               <summary aria-label="More graph actions" title="More graph actions"><span aria-hidden="true">&#8230;</span></summary>
               <div class="graph-more-menu-content" role="group" aria-label="More graph actions">
-                <button id="hide-node" class="graph-menu-button" type="button" disabled><b aria-hidden="true">H</b><span>Hide selection</span></button>
+                <button id="hide-node" class="graph-menu-button" type="button" data-command="node.hide" disabled><b aria-hidden="true">H</b><span>Hide selection</span></button>
+                <button id="context-visibility" class="graph-menu-button" type="button" data-command="view.toggle-context" aria-pressed="false" disabled><b aria-hidden="true">C</b><span>Only highlighted</span></button>
                 <button id="lock-layout" class="graph-menu-button" type="button" aria-pressed="false"><b aria-hidden="true">L</b><span>Lock view</span></button>
                 <button id="reset-view" class="graph-menu-button" type="button" disabled><b aria-hidden="true">o</b><span>Reset view</span></button>
                 <button id="shortcut-help" class="graph-menu-button" type="button" data-command="shortcuts.help"><b aria-hidden="true">?</b><span>Shortcuts</span></button>
@@ -99,8 +100,8 @@
             <span class="graph-tool-group-label" id="graph-tools-navigate">Navigate</span>
             <div class="graph-tool-actions">
               <button id="trace-calls" class="graph-tool-button" type="button" data-command="calls.trace" aria-pressed="false" title="Trace calls (T)" disabled><b aria-hidden="true">&#8594;</b><span>Trace calls</span></button>
-              <button id="expand-node" class="graph-tool-button" type="button" data-command="node.expand" title="Expand or follow (E)" disabled><b aria-hidden="true">+</b><span>Expand</span></button>
-              <button id="collapse-node" class="graph-tool-button" type="button" data-command="node.collapse" title="Collapse or go back" disabled><b aria-hidden="true">-</b><span>Collapse</span></button>
+              <button id="expand-node" class="graph-tool-button" type="button" data-command="node.expand" title="Expand or follow (Right arrow)" disabled><b aria-hidden="true">+</b><span>Expand</span></button>
+              <button id="collapse-node" class="graph-tool-button" type="button" data-command="node.collapse" title="Collapse or go back (Left arrow)" disabled><b aria-hidden="true">-</b><span>Collapse</span></button>
             </div>
           </div>
           <div class="graph-tool-group" role="group" aria-labelledby="graph-tools-inspect">
@@ -316,7 +317,7 @@
   <dialog id="shortcut-dialog" class="command-dialog" aria-labelledby="shortcut-title">
     <div class="command-dialog-content">
       <div class="dialog-heading"><div><p class="eyebrow">Graph commands</p><h2 id="shortcut-title">Keyboard shortcuts</h2></div><button id="shortcut-close" class="icon-button" type="button" aria-label="Close">x</button></div>
-      <p>Single-letter shortcuts work only while the graph has focus.</p>
+      <p>Graph shortcuts work only while the graph has focus.</p>
       <ul id="shortcut-list" class="shortcut-list"></ul>
     </div>
   </dialog>

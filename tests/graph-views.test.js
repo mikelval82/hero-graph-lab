@@ -7,6 +7,7 @@ const {
   flowGraph,
   flowJourneyGraph,
   focusGraph,
+  highlightedGraph,
   isDescendant,
   outgoingCallTrace,
   structureGraph,
@@ -92,6 +93,17 @@ test("Focus returns the selected node, call neighbors, and visible removed relat
   assert.equal(focus.edges.length, 2);
   assert.equal(focus.edges.every((edge) => edge.kind === "calls"), true);
   assert.deepEqual(focus.edges.map((edge) => edge.status).sort(), ["observed", "removed"]);
+});
+
+test("highlight-only view retains the selection and its exact visible neighbors", () => {
+  const flow = flowGraph(context());
+  const original = structuredClone(flow);
+  const highlighted = highlightedGraph(flow, "module-a");
+
+  assert.deepEqual(highlighted.nodes.map((node) => node.id), ["module-a", "module-b"]);
+  assert.deepEqual(highlighted.edges.map((edge) => edge.kind), ["calls", "calls"]);
+  assert.deepEqual(flow, original);
+  assert.equal(highlightedGraph(flow, null), flow);
 });
 
 test("call tracing follows outgoing active calls to the requested depth", () => {

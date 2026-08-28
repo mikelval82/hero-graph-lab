@@ -92,19 +92,21 @@ Read, Glob, Grep and graph-query tools and cannot modify project files.
 
 The default deterministic provider verifies the interaction without requiring
 credentials. Start Graph Lab with a model-backed provider using its standard
-SDK environment variable (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or
+SDK environment variable (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, or
 `GOOGLE_API_KEY`/`GEMINI_API_KEY`):
 
 ```powershell
 .\.venv\Scripts\python.exe -m hero_graph_lab --explore-provider anthropic --explore-model claude-sonnet-4-5
 .\.venv\Scripts\python.exe -m hero_graph_lab --explore-provider openai --explore-model gpt-5
+.\.venv\Scripts\python.exe -m hero_graph_lab --explore-provider deepseek --explore-model deepseek-v4-flash
 .\.venv\Scripts\python.exe -m hero_graph_lab --explore-provider gemini --explore-model gemini-2.5-flash
 ```
 
 Install one provider with `.\.venv\Scripts\python.exe -m pip install -e
 ".[anthropic]"`, `.\.venv\Scripts\python.exe -m pip install -e ".[openai]"`,
-or `.\.venv\Scripts\python.exe -m pip install -e ".[gemini]"`; `.[explore]`
-installs all three. On Windows, `run-gemini.cmd` starts Gemini with the local
+`.\.venv\Scripts\python.exe -m pip install -e ".[deepseek]"`, or
+`.\.venv\Scripts\python.exe -m pip install -e ".[gemini]"`; `.[explore]`
+installs all providers. On Windows, `run-gemini.cmd` starts Gemini with the local
 interpreter and accepts additional Graph Lab arguments. Provider adapters only
 translate the common model and tool-call contract, so additional clients can
 be added without changing the assistant service or UI.
@@ -209,7 +211,7 @@ or the selected project changes.
 
 Graph actions are registered once and invoked by toolbar buttons, keyboard
 shortcuts, and the `Ctrl+K` command palette. A command owns its availability,
-so its button and palette state remain synchronized. Single-letter shortcuts
+so its button and palette state remain synchronized. Graph shortcuts
 only run while the graph has focus and are ignored in form fields, editable
 content, and open dialogs.
 
@@ -221,6 +223,10 @@ content, and open dialogs.
 | `T` | Isolate the call trace; press it again to restore the exact previous view |
 | `F` | Open Focus view |
 | `E` | Expand or collapse the selected node |
+| `→` | Expand or follow the selected node |
+| `←` | Collapse the selected node, or step back in an interactive projection |
+| `C` | Toggle between dimmed graph context and only the highlighted neighborhood |
+| `H` | Hide the selected node and its descendants |
 | `P` | Pin or unpin the selected node as Explore context |
 | `A` | Add a proposed child node |
 | `R` | Start a proposed relationship and select its target |

@@ -17,6 +17,7 @@ const state = {
   flowJourney: [],
   flowEntryCandidate: null,
   hiddenGraphNodes: new Set(),
+  onlyHighlighted: false,
   callTrace: null,
   graphProjection: null,
   drag: null,
@@ -384,12 +385,42 @@ function graphViewContext(overrides = {}) {
 }
 
 function navigationGraph() {
-  if (state.callTrace) return callTraceGraph();
-  if (state.graphProjection) return state.graphProjection.graph;
-  if (state.layoutLocked && state.layoutSnapshot) return state.layoutSnapshot.graph;
-  if (state.view === "structure") return structureGraph();
-  if (state.view === "focus") return focusGraph();
-  return flowJourneyGraph();
+  let graph;
+  if (state.callTrace) graph = callTraceGraph();
+  else if (state.graphProjection) graph = state.graphProjection.graph;
+  else if (state.layoutLocked && state.layoutSnapshot) graph = state.layoutSnapshot.graph;
+  else if (state.view === "structure") graph = structureGraph();
+  else if (state.view === "focus") graph = focusGraph();
+  else graph = flowJourneyGraph();
+  return state.onlyHighlighted && contextFilterAvailable()
+    ? graphViews.highlightedGraph(graph, state.selected)
+    : graph;
+}
+
+function contextFilterAvailable() {
+  return Boolean(state.graph && state.selected && state.view === "flow"
+    && !state.callTrace && !state.graphProjection && !state.layoutLocked);
+}
+
+function updateContextVisibilityControl() {
+  const button = document.querySelector("#context-visibility");
+  button.disabled = !contextFilterAvailable();
+  button.setAttribute("aria-pressed", String(state.onlyHighlighted));
+  button.querySelector("span").textContent = state.onlyHighlighted ? "Show context" : "Only highlighted";
+  button.title = state.onlyHighlighted ? "Show dimmed graph context (C)" : "Show only highlighted nodes (C)";
+}
+
+function toggleContextVisibility() {
+  if (!contextFilterAvailable()) return;
+  state.onlyHighlighted = !state.onlyHighlighted;
+  invalidateLayout();
+  updateGraphCount();
+  updateTools();
+  render();
+  fitGraphToView();
+  document.querySelector("#graph-command-status").textContent = state.onlyHighlighted
+    ? "Only the selected node and its highlighted neighbors are visible. Press C to restore context."
+    : "Dimmed graph context restored.";
 }
 
 function graphProjectionKey(graph) {
@@ -689,6 +720,7 @@ function updateTools() {
   document.querySelector("#hide-node").disabled = projectionActive || temporaryFocus || !node || !visibleNodeIds.has(node.id);
   document.querySelector("#reset-view").disabled = projectionActive || !state.inlineExpanded.size && !state.hiddenGraphNodes.size && !Object.keys(state.positions).length;
   document.querySelector("#reset-design").disabled = projectionActive;
+  updateContextVisibilityControl();
   globalThis.HeroCommands?.refresh();
 }
 
@@ -848,6 +880,7 @@ function resetGraphView() {
   state.flowJourney = [];
   state.flowEntryCandidate = null;
   state.hiddenGraphNodes.clear();
+  state.onlyHighlighted = false;
   invalidateLayout();
   state.selected = null;
   state.selectedRelation = null;
@@ -1065,6 +1098,7 @@ async function loadExperiment({ restoreLocalDesign = true } = {}) {
     state.source = await sourceResponse.json();
     state.flowJourney = [];
     state.flowEntryCandidate = null;
+    state.onlyHighlighted = false;
     state.viewStates = { structure: null, flow: null, focus: null };
     state.focusReturnView = "flow";
     state.currentLayout = null;
@@ -1111,7 +1145,6 @@ document.querySelector("#collapse-tree").addEventListener("click", () => {
   state.treeExpanded = new Set([state.graph.root]);
   renderFileTree();
 });
-document.querySelector("#hide-node").addEventListener("click", hideSelectedNode);
 document.querySelector("#lock-layout").addEventListener("click", toggleGraphLayoutLock);
 document.querySelector("#reset-view").addEventListener("click", resetGraphView);
 document.querySelector("#design-mode-toggle").addEventListener("click", (event) => {
@@ -1746,6 +1779,7 @@ document.querySelector("#reset-design").addEventListener("click", () => {
   state.flowJourney = [];
   state.flowEntryCandidate = null;
   state.hiddenGraphNodes.clear();
+  state.onlyHighlighted = false;
   state.callTrace = null;
   state.scope = state.graph.root || state.graph.nodes.find((node) => !node.parent)?.id;
   state.treeExpanded = new Set(state.graph.nodes.filter((node) => node.kind === "package").map((node) => node.id));

@@ -92,8 +92,10 @@
   register({ id: "view.structure", label: "Hierarchy view", description: "Show containment hierarchy", isEnabled: () => !state.graphProjection, execute: () => setGraphView("structure") });
   register({ id: "view.flow", label: "Flow view", description: "Show the navigation flow", isEnabled: () => !state.graphProjection, execute: () => setGraphView("flow") });
   register({ id: "node.toggle-expansion", label: "Follow, expand, or collapse", shortcut: "E", description: "Follow a relationship or toggle children for the selected node", isEnabled: () => !document.querySelector("#expand-node").disabled || !document.querySelector("#collapse-node").disabled, execute: toggleExpansion });
-  register({ id: "node.expand", label: "Follow or expand", description: "Advance Flow or reveal children", isEnabled: () => !document.querySelector("#expand-node").disabled, execute: expandSelectedNode });
-  register({ id: "node.collapse", label: "Collapse", description: "Hide expanded children", isEnabled: () => !document.querySelector("#collapse-node").disabled, execute: collapseSelectedNode });
+  register({ id: "node.expand", label: "Follow or expand", shortcut: "→", description: "Advance Flow or reveal children", isEnabled: () => !document.querySelector("#expand-node").disabled, execute: expandSelectedNode });
+  register({ id: "node.collapse", label: "Collapse", shortcut: "←", description: "Hide expanded children or step back in a projection", isEnabled: () => !document.querySelector("#collapse-node").disabled, execute: collapseSelectedNode });
+  register({ id: "view.toggle-context", label: "Toggle dimmed context", shortcut: "C", description: "Show all context or only the selected node and highlighted neighbors", isEnabled: () => !document.querySelector("#context-visibility").disabled, execute: toggleContextVisibility });
+  register({ id: "node.hide", label: "Hide selection", shortcut: "H", description: "Hide the selected node and its descendants", isEnabled: () => !document.querySelector("#hide-node").disabled, execute: hideSelectedNode });
   register({ id: "selection.pin", label: "Pin context", shortcut: "P", description: "Pin or unpin the selected node in Explore", isEnabled: () => Boolean(selectedNode()), execute: togglePin });
   register({ id: "node.add", label: "Add child proposal", shortcut: "A", description: "Add a proposed child node", isEnabled: () => Boolean(state.graph) && !state.graphProjection, execute: () => openNodeDialog("add") });
   register({ id: "relation.add", label: "Add relationship", shortcut: "R", description: "Choose a target for a relationship proposal", isEnabled: () => Boolean(selectedNode()) && selectedNode().status !== "removed" && !state.graphProjection, execute: beginRelation });
@@ -162,11 +164,11 @@
       return;
     }
     if (!graphHasFocus(event) || event.ctrlKey || event.altKey || event.metaKey) return;
-    const shortcuts = { i: "selection.explain", m: "selection.diagram", g: "selection.project", t: "calls.trace", f: "view.focus", e: "node.toggle-expansion", p: "selection.pin", a: "node.add", r: "relation.add", delete: "selection.delete", escape: "selection.clear", "?": "shortcuts.help" };
+    const shortcuts = { i: "selection.explain", m: "selection.diagram", g: "selection.project", t: "calls.trace", f: "view.focus", e: "node.toggle-expansion", arrowright: "node.expand", arrowleft: "node.collapse", c: "view.toggle-context", h: "node.hide", p: "selection.pin", a: "node.add", r: "relation.add", delete: "selection.delete", escape: "selection.clear", "?": "shortcuts.help" };
     const commandId = shortcuts[event.key.toLocaleLowerCase()];
     if (commandId && execute(commandId)) {
       event.preventDefault();
-      if (commandId === "node.toggle-expansion") focusRenderedGraphNode();
+      if (["node.toggle-expansion", "node.expand", "node.collapse", "view.toggle-context", "node.hide"].includes(commandId)) focusRenderedGraphNode();
     }
   });
   document.querySelector("#command-search").addEventListener("input", renderPalette);
