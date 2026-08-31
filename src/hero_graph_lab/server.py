@@ -30,6 +30,33 @@ ALLOWED_VIEWS = {"flow"}
 MAX_REQUEST_BYTES = 2 * 1024 * 1024
 
 
+def detect_harness_root() -> Path:
+    candidates = [
+        PROJECT_ROOT.parent / "hero-harness",
+        PROJECT_ROOT.parent / "HARNESS",
+        PROJECT_ROOT.parent / "mission-orchestrator",
+        Path.cwd() / "hero-harness",
+        Path.cwd() / "HARNESS",
+    ]
+    for candidate in candidates:
+        if candidate.exists() and (candidate / "src" / "mission_orchestrator").is_dir():
+            return candidate.resolve()
+    return (PROJECT_ROOT.parent / "hero-harness").resolve()
+
+
+def detect_harness_python(harness_root: Path) -> Path | None:
+    candidate_paths = [
+        harness_root / ".venv" / "bin" / "python",
+        harness_root / ".venv" / "bin" / "python3",
+        harness_root / ".venv" / "Scripts" / "python.exe",
+        harness_root / ".venv" / "Scripts" / "python",
+    ]
+    for candidate in candidate_paths:
+        if candidate.is_file():
+            return candidate.absolute()
+    return None
+
+
 class LabState:
     def __init__(
         self,
@@ -526,7 +553,7 @@ def main() -> None:
     parser.add_argument("--fixture", default=DEFAULT_FIXTURE, type=Path)
     parser.add_argument("--state", default=DEFAULT_STATE, type=Path)
     parser.add_argument("--mission-project", type=Path)
-    parser.add_argument("--harness-root", default=DEFAULT_HARNESS_ROOT, type=Path)
+    parser.add_argument("--harness-root", default=detect_harness_root(), type=Path)
     parser.add_argument("--harness-python", type=Path)
     parser.add_argument(
         "--explore-provider",
@@ -537,7 +564,7 @@ def main() -> None:
     args = parser.parse_args()
 
     mission_project = initial_project(args.fixture, args.mission_project)
-    harness_python = args.harness_python
+    harness_python = args.harness_python or detect_harness_python(args.harness_root)
     if harness_python is None:
         candidate = args.harness_root / ".venv" / "Scripts" / "python.exe"
         harness_python = candidate if candidate.is_file() else Path(sys.executable)

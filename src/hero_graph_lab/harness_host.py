@@ -36,7 +36,7 @@ class HarnessWorkerHost:
     ) -> None:
         self.project_dir = project_dir.resolve()
         self.harness_root = harness_root.resolve()
-        self.python_executable = (python_executable or Path(sys.executable)).resolve()
+        self.python_executable = (python_executable or Path(sys.executable)).expanduser()
         self.startup_timeout = startup_timeout
         self._process: subprocess.Popen[str] | None = None
         self._connection: WorkerConnection | None = None
@@ -84,8 +84,12 @@ class HarnessWorkerHost:
                 command.append("--resume")
             environment = os.environ.copy()
             source_root = str(self.harness_root / "src")
+            pythonpath_parts = [
+                source_root,
+                environment.get("PYTHONPATH", ""),
+            ]
             environment["PYTHONPATH"] = os.pathsep.join(
-                item for item in (source_root, environment.get("PYTHONPATH", "")) if item
+                item for item in pythonpath_parts if item
             )
             self._connection = None
             self._logs.clear()
