@@ -767,6 +767,11 @@ function mergeMissionDesign() {
   missionState.design.nodes.forEach((designNode) => {
     let visual = designNode.locator ? visualByLocator.get(designNode.locator) : null;
     visual ||= graph.nodes.find((node) => node.id === designNode.id);
+    if (!visual && designNode.level === "SYSTEM") {
+      // Design contracts often name the repository root semantically, while
+      // the extractor identifies it as package:<directory-name>.
+      visual = graph.nodes.find((node) => node.id === graph.root);
+    }
     if (!visual) {
       visual = {
         id: designNode.id,
@@ -827,6 +832,19 @@ function mergeMissionDesign() {
   state.graph = normalizeGraph(graph);
   rebuildGraphIndexes();
   if (!graphNode(state.scope)) state.scope = graph.root || graph.nodes.find((node) => !node.parent)?.id;
+  // Keep the initial mission view legible, but open the containment path to
+  // every proposed/modified node so agent and human design changes are not
+  // hidden several levels below a collapsed package.
+  state.graph.nodes
+    .filter((node) => ["proposed", "modified"].includes(node.status))
+    .forEach((node) => {
+      let parent = graphNode(node.id)?.parent;
+      while (parent && parent !== state.scope) {
+        state.inlineExpanded.add(parent);
+        state.treeExpanded.add(parent);
+        parent = graphNode(parent)?.parent;
+      }
+    });
   state.selected = null;
   state.selectedRelation = null;
   invalidateLayout();

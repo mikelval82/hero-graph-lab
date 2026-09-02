@@ -651,7 +651,7 @@ function updateGraphCount() {
   const changedNodes = state.graph.nodes.filter((node) => (node.status || "observed") !== "observed").length;
   const changedRelations = state.graph.edges.filter((edge) => (edge.status || "observed") !== "observed" && !edge.generated).length;
   const proposals = changedNodes + changedRelations;
-  document.querySelector("#graph-count").textContent = `${visibleGraph.nodes.length} visible / ${state.graph.nodes.length} total / ${proposals} changes`;
+  document.querySelector("#graph-count").textContent = `${visibleGraph.nodes.length} visible / ${state.graph.nodes.length} indexed / ${proposals} changes`;
 }
 
 function setGraphView(view) {

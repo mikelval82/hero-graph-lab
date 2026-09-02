@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 from collections import deque
 from dataclasses import dataclass
@@ -35,11 +36,13 @@ class HarnessWorkerHost:
         startup_timeout: float = 30.0,
     ) -> None:
         self.project_dir = project_dir.resolve()
+        self._selected_project_dir = self.project_dir
         self.harness_root = harness_root.resolve()
         self.python_executable = (python_executable or Path(sys.executable)).expanduser()
         self.startup_timeout = startup_timeout
         self._process: subprocess.Popen[str] | None = None
         self._connection: WorkerConnection | None = None
+        self._worker_worktree: Path | None = None
         self._logs: deque[str] = deque(maxlen=100)
         self._lock = threading.Lock()
 
@@ -51,6 +54,7 @@ class HarnessWorkerHost:
             if not selected.is_dir():
                 raise HarnessHostError(f"mission project not found: {selected}")
             self.project_dir = selected
+            self._selected_project_dir = selected
             self._connection = None
             return self.status()
 
@@ -67,6 +71,8 @@ class HarnessWorkerHost:
                 return self.status()
             self._validate_configuration()
             self._prepare_git_project()
+            worker_project = self._create_worker_worktree()
+            self.project_dir = worker_project
             command = [
                 str(self.python_executable),
                 "-m",
@@ -121,6 +127,8 @@ class HarnessWorkerHost:
             if not ready.wait(self.startup_timeout) or self._connection is None:
                 detail = failure[0] if failure else "worker startup timed out"
                 self._terminate_process()
+                self._remove_worker_worktree()
+                self.project_dir = self._selected_project_dir
                 raise HarnessHostError(detail)
             return self.status()
 
@@ -128,6 +136,8 @@ class HarnessWorkerHost:
         with self._lock:
             self._terminate_process()
             self._connection = None
+            self._remove_worker_worktree()
+            self.project_dir = self._selected_project_dir
 
     def status(self) -> dict[str, object]:
         running = self._running()
@@ -251,6 +261,35 @@ class HarnessWorkerHost:
                 "-m",
                 "chore: initialize project",
             )
+
+    def _create_worker_worktree(self) -> Path:
+        root = Path(tempfile.mkdtemp(prefix="hero-graph-lab-mission-", dir="/tmp"))
+        root.rmdir()
+        result = subprocess.run(
+            ["git", "worktree", "add", "--detach", str(root), "HEAD"],
+            cwd=self._selected_project_dir,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise HarnessHostError(result.stderr.strip() or "could not create mission worktree")
+        self._worker_worktree = root
+        return root
+
+    def _remove_worker_worktree(self) -> None:
+        worktree = getattr(self, "_worker_worktree", None)
+        if worktree is None:
+            return
+        result = subprocess.run(
+            ["git", "worktree", "remove", "--force", str(worktree)],
+            cwd=self._selected_project_dir,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode == 0:
+            self._worker_worktree = None
 
     def _git(self, *arguments: str, check: bool = True) -> subprocess.CompletedProcess[str]:
         try:
