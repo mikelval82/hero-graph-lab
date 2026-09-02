@@ -1078,7 +1078,17 @@ function restoreDesign(baseGraph) {
 
 function normalizeGraph(graph) {
   const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
-  graph.nodes.forEach((node) => { node.status ||= "observed"; });
+  graph.nodes.forEach((node) => {
+    node.status ||= "observed";
+    // Older agent/local drafts sometimes classified a filename such as
+    // `markdown_adapter.py` as a function because it starts with lowercase.
+    // A source-file label is unambiguously a module, unless it already has a
+    // callable contract that identifies a real function.
+    if (node.kind === "function" && isSourceModuleLabel(node.label, node.target_path)
+      && !node.qualified_name && !node.signature) {
+      node.kind = "module";
+    }
+  });
   graph.edges.forEach((edge, index) => {
     edge.id ||= `observed:${index}:${edge.source}:${edge.kind}:${edge.target}`;
     edge.status ||= "observed";
@@ -1088,6 +1098,11 @@ function normalizeGraph(graph) {
   });
   rebuildGraphIndexes(graph);
   return graph;
+}
+
+function isSourceModuleLabel(label = "", targetPath = "") {
+  const value = `${targetPath || ""} ${label || ""}`.trim();
+  return /(?:^|[\s(])[^\s()]+\.(?:py|pyi|js|jsx|mjs|cjs|ts|tsx|java|go|rs|rb|php|cs|c|h|cc|cpp|hpp)(?:$|[\s)])/i.test(value);
 }
 
 async function loadExperiment({ restoreLocalDesign = true } = {}) {

@@ -754,10 +754,16 @@ function intentStatus(intent) {
   return { KEEP: "observed", CREATE: "proposed", CHANGE: "modified", REMOVE: "removed" }[intent] || "observed";
 }
 
-function visualKind(level, label) {
+function visualKind(level, label, targetPath = "") {
   if (level === "SYSTEM") return "package";
   if (level === "PACKAGE") return "module";
+  if (isSourceModuleLabel(label, targetPath)) return "module";
   return /^[a-z_]/.test(label || "") ? "function" : "class";
+}
+
+function isSourceModuleLabel(label = "", targetPath = "") {
+  const value = `${targetPath || ""} ${label || ""}`.trim();
+  return /(?:^|[\s(])[^\s()]+\.(?:py|pyi|js|jsx|mjs|cjs|ts|tsx|java|go|rs|rb|php|cs|c|h|cc|cpp|hpp)(?:$|[\s)])/i.test(value);
 }
 
 function mergeMissionDesign() {
@@ -799,7 +805,9 @@ function mergeMissionDesign() {
       visual = {
         id: designNode.id,
         label: designNode.label,
-        kind: designNode.kind && designNode.kind !== "unknown" ? designNode.kind : visualKind(designNode.level, designNode.label),
+        kind: designNode.kind && designNode.kind !== "unknown"
+          ? designNode.kind
+          : visualKind(designNode.level, designNode.label, designNode.target_path),
         parent: null,
         line: 0,
         end_line: 0,

@@ -25,6 +25,15 @@
     return text(value, 500).replaceAll("\\", "/").replace(/\/{2,}/g, "/");
   }
 
+  function targetPathFromLocator(locator) {
+    const value = text(locator, 500).replaceAll("\\", "/");
+    if (!value || value.startsWith("agent-proposal:")) return "";
+    const candidate = value.split(":", 1)[0];
+    return /(?:^|\/)[^/]+\.(?:py|pyi|js|jsx|mjs|cjs|ts|tsx|java|go|rs|rb|php|cs|c|h|cc|cpp|hpp)$/i.test(candidate)
+      ? candidate
+      : "";
+  }
+
   function validTargetPath(value) {
     if (!value || value.startsWith("/") || /^[A-Za-z]:/.test(value)) return false;
     return value.split("/").every((part) => part && part !== "." && part !== "..");
@@ -35,7 +44,10 @@
     return {
       ...node,
       label: text(node.label, 120),
-      target_path: targetPath(node.target_path),
+      // Graph locators are evidence-backed repository anchors. Reuse their
+      // file part when an older proposal omitted the explicit implementation
+      // target, while leaving genuinely unresolved targets empty.
+      target_path: targetPath(node.target_path || targetPathFromLocator(node.locator)),
       qualified_name: text(node.qualified_name, 500),
       signature: text(node.signature, 1000),
       docstring: text(node.docstring, 2000),

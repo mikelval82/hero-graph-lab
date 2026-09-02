@@ -71,6 +71,16 @@ test("normalizes bounded proposal contract fields without guessing missing value
   assert.deepEqual(legacy.acceptance, []);
 });
 
+test("derives a repository target path from an evidence-backed locator", () => {
+  const node = normalizeContractNode({
+    kind: "module",
+    label: "markdown_adapter.py",
+    locator: "src/hero_graph_lab/markdown_adapter.py",
+  });
+
+  assert.equal(node.target_path, "src/hero_graph_lab/markdown_adapter.py");
+});
+
 test("renders a Python-like class contract with child method declarations as text", () => {
   const graph = {
     nodes: [
