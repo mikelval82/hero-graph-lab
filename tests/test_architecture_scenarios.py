@@ -73,6 +73,20 @@ def snapshot(*, description: str = "Compare alternatives.", include_walkthrough:
 
 
 class ArchitectureScenarioServiceTest(TestCase):
+    def test_capture_accepts_a_realized_contract_status(self) -> None:
+        with TemporaryDirectory() as directory:
+            project = Path(directory) / "project"
+            project.mkdir()
+            service = ArchitectureScenarioService(Path(directory) / "scenarios.json", lambda: project)
+            realized = snapshot()
+            realized["nodes"][0]["status"] = "accepted"
+            realized["edges"][0]["status"] = "accepted"
+
+            captured = service.capture({"name": "Accepted", "snapshot": realized})
+
+            self.assertEqual(captured["snapshot"]["nodes"][0]["status"], "accepted")
+            self.assertEqual(captured["snapshot"]["edges"][0]["status"], "accepted")
+
     def test_capture_is_immutable_normalized_and_durable(self) -> None:
         with TemporaryDirectory() as directory:
             state_path = Path(directory) / "scenarios.json"

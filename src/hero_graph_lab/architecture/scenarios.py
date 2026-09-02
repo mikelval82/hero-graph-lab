@@ -17,7 +17,7 @@ NODE_LIMIT = 500
 RELATION_LIMIT = 1_000
 ENDPOINT_LIMIT = 500
 LIST_LIMIT = 50
-DESIGN_STATUSES = {"proposed", "modified", "removed"}
+DESIGN_STATUSES = {"proposed", "modified", "removed", "accepted"}
 
 
 class ArchitectureScenarioService:
@@ -175,7 +175,7 @@ def _normalize_node(value: Any) -> dict[str, Any]:
         raise ValueError("each snapshot node must be a JSON object")
     status = _text(value.get("status"), "node status", 20, required=True)
     if status not in DESIGN_STATUSES:
-        raise ValueError("node status must be proposed, modified, or removed")
+        raise ValueError("node status must be proposed, modified, removed, or accepted")
     parent = value.get("parent")
     if parent is not None:
         parent = _text(parent, "node parent", 500, required=True)
@@ -213,7 +213,7 @@ def _normalize_edge(value: Any) -> dict[str, Any]:
         raise ValueError("each snapshot relationship must be a JSON object")
     status = _text(value.get("status"), "relationship status", 20, required=True)
     if status not in DESIGN_STATUSES:
-        raise ValueError("relationship status must be proposed, modified, or removed")
+        raise ValueError("relationship status must be proposed, modified, removed, or accepted")
     source = _text(value.get("source"), "relationship source", 500, required=True)
     target = _text(value.get("target"), "relationship target", 500, required=True)
     if source == target:

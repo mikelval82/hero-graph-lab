@@ -11,6 +11,9 @@ const missionState = {
   documentRevision: 0,
   documentMode: "preview",
   designDirty: false,
+  localDraft: null,
+  localBaseGraph: null,
+  canonicalGraph: null,
   graphReady: false,
   observedRevision: null,
   eventCursor: 0,
@@ -498,7 +501,7 @@ async function refreshMission({ mergeGraph = true } = {}) {
   const observedRevision = Number(snapshot.design?.observed_revision || 0);
   if (missionState.observedRevision === null) {
     missionState.observedRevision = observedRevision;
-  } else if (observedRevision !== missionState.observedRevision && !missionState.designDirty) {
+  } else if (observedRevision !== missionState.observedRevision) {
     await loadExperiment({ restoreLocalDesign: false });
     missionState.observedRevision = observedRevision;
   }
@@ -518,11 +521,13 @@ async function startEventLoop() {
   missionState.eventLoopRunning = true;
   try {
     while (missionState.host?.running) {
-      const payload = await harnessRequest(`/v1/events?after=${missionState.eventCursor}&wait=20`);
+      const payload = await harnessRequest(`/v1/events?after=${missionState.eventCursor}&wait=5`);
       const events = payload.events || [];
       if (events.length) {
         missionState.eventCursor = events.at(-1).event_id;
         recordActivity(events);
+        await refreshMission();
+      } else {
         await refreshMission();
       }
     }
@@ -735,7 +740,8 @@ function visualLevel(node) {
   return "CODE";
 }
 
-function statusIntent(status) {
+function statusIntent(status, item = {}) {
+  if (status === "accepted") return item.designIntent || "KEEP";
   return { observed: "KEEP", proposed: "CREATE", modified: "CHANGE", removed: "REMOVE" }[status || "observed"];
 }
 
@@ -750,7 +756,7 @@ function visualKind(level, label) {
 }
 
 function mergeMissionDesign() {
-  if (!missionState.graphReady || !state.baseGraph || !missionState.design || missionState.designDirty) return;
+  if (!missionState.graphReady || !state.baseGraph || !missionState.design) return;
   const graph = normalizeGraph(structuredClone(state.baseGraph));
   const visualByLocator = new Map();
   graph.nodes.forEach((node) => {
@@ -783,7 +789,9 @@ function mergeMissionDesign() {
     visual.satisfies = [...(designNode.satisfies || [])];
     visual.acceptance = [...(designNode.acceptance || [])];
     visual.resolution = designNode.resolution;
-    visual.status = intentStatus(designNode.intent);
+    visual.designIntent = designNode.intent;
+    visual.realization = missionState.design.realization?.nodes?.[designNode.id] || null;
+    visual.status = visual.realization?.status === "accepted" ? "accepted" : intentStatus(designNode.intent);
     visualByDesignId.set(designNode.id, visual);
   });
   missionState.design.nodes.forEach((designNode) => {
@@ -807,10 +815,16 @@ function mergeMissionDesign() {
       };
       graph.edges.push(edge);
     }
-    edge.status = status;
     edge.designKey = `${designEdge.source}|${designEdge.target}|${designEdge.relation}`;
+    edge.designIntent = designEdge.intent;
+    edge.realization = missionState.design.realization?.edges?.[edge.designKey] || null;
+    edge.status = edge.realization?.status === "accepted" ? "accepted" : status;
   });
-  state.graph = graph;
+  missionState.canonicalGraph = structuredClone(graph);
+  if (missionState.designDirty && missionState.localDraft && missionState.localBaseGraph) {
+    globalThis.HeroMissionGraphState.applyLocalDraft(graph, missionState.localBaseGraph, missionState.localDraft);
+  }
+  state.graph = normalizeGraph(graph);
   rebuildGraphIndexes();
   if (!graphNode(state.scope)) state.scope = graph.root || graph.nodes.find((node) => !node.parent)?.id;
   state.selected = null;
@@ -855,7 +869,7 @@ function desiredDesignState() {
     ...contract,
     provenance: node.designProvenance || backendNodes.get(designIds.get(node.id))?.provenance || "HUMAN",
     location: "IN_REPOSITORY",
-    intent: statusIntent(node.status),
+    intent: statusIntent(node.status, node),
     parent_id: designIds.get(node.parent) || null,
     locator: locatorForVisualNode(node),
   });
@@ -865,7 +879,7 @@ function desiredDesignState() {
     target: designIds.get(edge.target),
     relation: edge.label?.trim() || edge.kind,
     provenance: edge.designProvenance || "HUMAN",
-    intent: statusIntent(edge.status),
+    intent: statusIntent(edge.status, edge),
   })).filter((edge) => edge.source && edge.target);
   return { nodes, edges };
 }
@@ -912,6 +926,8 @@ async function synchronizeDesign() {
   const operations = designOperations();
   if (!operations.length) {
     missionState.designDirty = false;
+    missionState.localDraft = null;
+    missionState.localBaseGraph = null;
     updateDesignSyncState();
     return;
   }
@@ -926,6 +942,8 @@ async function synchronizeDesign() {
     );
     if (result.status !== "APPLIED" && result.status !== "DUPLICATE") throw new Error(result.detail || result.status);
     missionState.designDirty = false;
+    missionState.localDraft = null;
+    missionState.localBaseGraph = null;
     await refreshMission();
     status.textContent = `Saved at revision ${result.design_revision}`;
     updateDesignSyncState();
@@ -1098,6 +1116,10 @@ addEventListener("graph-experiment-ready", () => {
 });
 addEventListener("graph-design-changed", () => {
   if (!missionState.host?.running) return;
+  if (!missionState.designDirty) {
+    missionState.localBaseGraph = structuredClone(missionState.canonicalGraph || state.graph);
+  }
+  missionState.localDraft = structuredClone(state.graph);
   missionState.designDirty = true;
   updateDesignSyncState();
 });

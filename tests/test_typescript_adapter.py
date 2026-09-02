@@ -43,7 +43,7 @@ class TypeScriptGraphAdapterTest(TestCase):
         )
         self.assertEqual(
             nodes["function:hero_graph_lab.static.app.renderCodePanel"]["line"],
-            1383,
+            1389,
         )
         self.assertEqual(
             nodes["function:hero_graph_lab.static.flow-navigation.normalizeRelation"]["line"],

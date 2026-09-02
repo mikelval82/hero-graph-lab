@@ -46,6 +46,7 @@
   --relation-proposed: #7c3aed;
   --relation-modified: #b7791f;
   --relation-removed: var(--danger);
+  --relation-accepted: #15803d;
   --explorer-width: 280px;
   --graph-width: 50%;
   --inspector-width: 260px;
@@ -133,6 +134,7 @@ body.resizing-panels { cursor: col-resize; -webkit-user-select: none; user-selec
 .tree-row.proposed .tree-item-label { color: var(--relation-proposed); }
 .tree-row.modified .tree-item-label { color: var(--relation-modified); }
 .tree-row.removed .tree-item-label { color: var(--relation-removed); text-decoration: line-through; opacity: .65; }
+.tree-row.accepted .tree-item-label { color: var(--relation-accepted); font-weight: 700; }
 .section-heading { display: flex; align-items: baseline; justify-content: space-between; }
 .sync-design:not(:disabled) { color: var(--relation-proposed); font-weight: 700; }
 .status-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 4px; margin-top: 12px; color: var(--muted); font-size: 8px; }
@@ -148,6 +150,7 @@ body.resizing-panels { cursor: col-resize; -webkit-user-select: none; user-selec
 .relation-sample.proposed { border-color: var(--relation-proposed); border-top-style: dashed; }
 .relation-sample.modified { border-color: var(--relation-modified); border-top-width: 4px; }
 .relation-sample.removed { border-color: var(--relation-removed); border-top-style: dotted; opacity: .65; }
+.status-sample.accepted, .relation-sample.accepted { border-color: var(--relation-accepted); }
 .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 8px; margin-top: 28px; color: var(--muted); font-size: 9px; }
 .legend span { display: flex; align-items: center; gap: 7px; }
 .swatch { width: 9px; height: 9px; }
@@ -252,10 +255,12 @@ body.relation-command-active .graph-viewport { box-shadow: inset 0 0 0 3px var(-
 .graph-edge.proposed { stroke: var(--relation-proposed); stroke-width: 4; stroke-dasharray: 6 4; }
 .graph-edge.modified { stroke: var(--relation-modified); stroke-width: 4; }
 .graph-edge.removed { stroke: var(--relation-removed); stroke-width: 4; stroke-dasharray: 2 5; opacity: .55; }
+.graph-edge.accepted { stroke: var(--relation-accepted); stroke-width: 4; }
 #arrow-observed path { fill: var(--relation-observed); }
 #arrow-proposed path { fill: var(--relation-proposed); }
 #arrow-modified path { fill: var(--relation-modified); }
 #arrow-removed path { fill: var(--relation-removed); }
+#arrow-accepted path { fill: var(--relation-accepted); }
 .graph-edge.selected { stroke-width: 6; opacity: 1; filter: drop-shadow(0 0 3px var(--warning)); }
 .graph-edge.traced { stroke: var(--warning); stroke-width: 5; stroke-dasharray: none; opacity: 1; filter: drop-shadow(0 0 2px rgba(192, 139, 22, .4)); }
 .graph-edge.journey { stroke: var(--graph-accent); stroke-width: 4; opacity: 1; }
@@ -274,6 +279,8 @@ body.relation-command-active .graph-viewport { box-shadow: inset 0 0 0 3px var(-
 .edge-label.removed { opacity: .6; text-decoration: line-through; }
 .edge-label.removed rect { fill: var(--danger-soft); stroke: var(--relation-removed); stroke-width: 3; stroke-dasharray: 2 2; }
 .edge-label.removed text { fill: var(--danger); font-weight: 700; }
+.edge-label.accepted rect { fill: #e8f7ed; stroke: var(--relation-accepted); stroke-width: 3; }
+.edge-label.accepted text { fill: var(--relation-accepted); font-weight: 700; }
 .edge-label.selected rect { stroke: var(--warning); stroke-width: 4; }
 .edge-label.journey rect { stroke: var(--graph-accent); stroke-width: 3; }
 #connection-preview { fill: none; stroke: var(--accent); stroke-width: 3; stroke-dasharray: 7 5; pointer-events: none; }
@@ -291,6 +298,7 @@ body.relation-command-active .graph-viewport { box-shadow: inset 0 0 0 3px var(-
 .graph-node.modified .node-shape { stroke: var(--relation-modified); stroke-width: 5; }
 .graph-node.removed { opacity: .48; }
 .graph-node.removed .node-shape { stroke: var(--relation-removed); stroke-width: 5; }
+.graph-node.accepted .node-shape { stroke: var(--relation-accepted); stroke-width: 5; }
 .graph-node.selected .node-shape { stroke: var(--ink); stroke-width: 6; }
 .graph-node.trace-root .node-shape, .graph-node.traced .node-shape { stroke: var(--warning); stroke-width: 6; }
 .trace-badge { pointer-events: none; }
@@ -454,6 +462,7 @@ dialog::backdrop { background: rgba(19, 29, 26, .58); }
 .code-status.proposed { color: white; background: var(--relation-proposed); }
 .code-status.modified { color: white; background: var(--relation-modified); }
 .code-status.removed { color: white; background: var(--relation-removed); }
+.code-status.accepted { color: white; background: var(--relation-accepted); }
 .code-status.document { color: var(--ink); background: var(--function); }
 .editor-command-group { grid-row: 2; display: flex !important; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 5px; }
 .code-search { grid-column: 1 / -1; grid-row: 3; width: 100%; min-height: max(34px, calc(var(--panel-font-size) + 16px)); display: flex; align-items: stretch; overflow: hidden; border: 1px solid #62716a; background: #17221e; }

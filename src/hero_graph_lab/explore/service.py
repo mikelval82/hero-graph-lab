@@ -53,7 +53,7 @@ The approved task contract is authoritative. First read the task contract, then 
 Read and modify only contract-owned paths. Before every patch, use ContractReadFile and pass its exact SHA-256 to ContractApplyPatch.
 Do not use the general Read tool as evidence for a write hash. Do not invent paths, broaden scope, or alter the contract.
 After editing, run ContractRunChecks and ContractValidate. End every implementation turn with exactly one successful terminal action: ContractComplete, ContractReportBlocker, or ContractProposeAmendment.
-If the requested work conflicts with the contract, propose an amendment instead of silently changing the design.
+If the requested work conflicts with the contract, use ContractProposeAmendment instead of silently changing the design. Include one atomic GraphPropose-compatible operations batch whenever the graph itself must change, so HARNESS can project it for review.
 Never claim completion unless ContractComplete succeeded. Graph proposal tools are unavailable in this mode.
 """
 

@@ -1307,7 +1307,7 @@ function renderProposalContract(node) {
   document.querySelector("#code-meta").textContent = `${normalized.target_path || "No target path"} / proposed interface, not source code`;
   const statusElement = document.querySelector("#code-status");
   statusElement.className = `code-status ${normalized.status || "proposed"}`;
-  statusElement.textContent = normalized.status === "modified" ? "EDIT" : "NEW";
+  statusElement.textContent = { proposed: "NEW", modified: "EDIT", accepted: "ACCEPTED" }[normalized.status] || "NEW";
   statusElement.hidden = false;
   setCodeSearchAvailable(false);
 
@@ -1319,11 +1319,15 @@ function renderProposalContract(node) {
   const responsibility = document.createElement("p");
   responsibility.textContent = normalized.designDescription || "No responsibility has been defined yet.";
   const metadata = document.createElement("dl");
-  [
+  const metadataRows = [
     ["Target", normalized.target_path || "Not defined"],
     ["Qualified name", normalized.qualified_name || "Not defined"],
     ["Signature", normalized.signature || "Not defined"],
-  ].forEach(([termText, detailText]) => {
+  ];
+  if (normalized.realization?.status === "accepted") {
+    metadataRows.push(["Accepted", `Task ${normalized.realization.task_id || ""} · ${normalized.realization.commit || "commit unavailable"}`]);
+  }
+  metadataRows.forEach(([termText, detailText]) => {
     const term = document.createElement("dt");
     term.textContent = termText;
     const detail = document.createElement("dd");
@@ -1335,10 +1339,12 @@ function renderProposalContract(node) {
   const interfaceSection = document.createElement("section");
   interfaceSection.className = "proposal-contract-section proposal-interface";
   const interfaceHeading = document.createElement("h3");
-  interfaceHeading.textContent = "Proposed interface";
+  interfaceHeading.textContent = normalized.status === "accepted" ? "Accepted contract" : "Proposed interface";
   const warning = document.createElement("p");
   warning.className = "proposal-preview-warning";
-  warning.textContent = "Virtual contract preview — no repository source has been created.";
+  warning.textContent = normalized.status === "accepted"
+    ? "Accepted contract realization — the linked task passed verification and was recorded in Git."
+    : "Virtual contract preview — no repository source has been created.";
   const preview = document.createElement("pre");
   const code = document.createElement("code");
   code.textContent = contractApi.interfacePreview(normalized, state.graph);
@@ -1351,7 +1357,7 @@ function renderProposalContract(node) {
 
   const connectionValues = connections.direct.map(({ node: endpoint, relation }) => {
     const direction = relation.direction === "outgoing" ? "→" : "←";
-    return `${direction} ${endpoint.label} [${endpoint.status === "proposed" ? "proposed" : "observed"}] · ${relation.label}`;
+    return `${direction} ${endpoint.label} [${endpoint.status === "proposed" ? "proposed" : endpoint.status === "accepted" ? "accepted" : "observed"}] · ${relation.label}`;
   });
   appendContractList(panel, "Direct relationships", connectionValues, "No direct relationship defined.");
   const anchorValues = connections.observedAnchors.map(({ node: anchor, viaNode, relation }) =>
@@ -1393,7 +1399,7 @@ function renderCodePanel(node = graphNode(state.selected)) {
   const status = node.status || "observed";
   const statusElement = document.querySelector("#code-status");
   statusElement.className = `code-status ${status}`;
-  statusElement.textContent = { observed: "CODE", proposed: "NEW", modified: "EDIT", removed: "DELETE" }[status];
+  statusElement.textContent = { observed: "CODE", proposed: "NEW", modified: "EDIT", removed: "DELETE", accepted: "ACCEPTED" }[status];
   document.querySelector("#code-title").textContent = node.label;
   const content = document.querySelector("#code-content");
   const empty = document.querySelector("#code-empty");
@@ -1407,7 +1413,7 @@ function renderCodePanel(node = graphNode(state.selected)) {
   statusElement.hidden = false;
   setCodeSearchAvailable(hasSource);
   if (hasSource) {
-    const qualifier = status === "observed" ? "Current source" : "Current source; design change not applied";
+    const qualifier = status === "observed" ? "Current source" : status === "accepted" ? "Current source; accepted contract realization" : "Current source; design change not applied";
     document.querySelector("#code-meta").textContent = `${node.source} / lines ${node.line}-${node.end_line} / ${qualifier}`;
     const sourceLines = source.content.split("\n");
     for (let lineNumber = node.line; lineNumber <= node.end_line; lineNumber += 1) {
@@ -1681,7 +1687,7 @@ relationForm.addEventListener("submit", (event) => {
       edge.label = label;
       edge.kind = kind;
       edge.properties = properties;
-      if (edge.status === "observed") edge.status = "modified";
+      if (["observed", "accepted"].includes(edge.status)) edge.status = "modified";
     });
   }
   relationDialog.close();
@@ -1813,7 +1819,7 @@ nodeForm.addEventListener("submit", (event) => {
   } else {
     const node = state.graph.nodes.find((candidate) => candidate.id === state.selected);
     Object.assign(node, contract, { label: name, kind, parent });
-    if (node.status === "observed") node.status = "modified";
+    if (["observed", "accepted"].includes(node.status)) node.status = "modified";
     state.graph.edges = state.graph.edges.filter((edge) => !(edge.kind === "contains" && edge.target === node.id));
     if (parent) state.graph.edges.push({ id: `containment:${crypto.randomUUID()}`, source: parent, target: node.id, kind: "contains", status: node.status === "proposed" ? "proposed" : "modified", properties: {}, generated: true });
   }

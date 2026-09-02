@@ -1,5 +1,5 @@
 ((globalScope) => {
-  const DESIGN_STATUSES = new Set(["proposed", "modified", "removed"]);
+  const DESIGN_STATUSES = new Set(["proposed", "modified", "removed", "accepted"]);
 
   function text(value, maximum = 500) {
     return String(value ?? "").trim().slice(0, maximum);
