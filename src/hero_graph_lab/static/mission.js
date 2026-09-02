@@ -479,19 +479,22 @@ async function refreshMission({ mergeGraph = true } = {}) {
     renderHostStatus();
     return;
   }
-  const [capabilities, snapshot, design, transcript, operation, contractIndex] = await Promise.all([
+  const [capabilities, snapshot, design, transcript, operation] = await Promise.all([
     harnessRequest("/v1/capabilities"),
     harnessRequest("/v1/snapshot"),
     harnessRequest("/v1/design"),
     harnessRequest("/v1/messages"),
     harnessRequest("/v1/operation"),
-    harnessRequest("/v1/contracts/tasks").catch(() => ({ tasks: [] })),
   ]);
   missionState.capabilities = capabilities;
   missionState.snapshot = snapshot;
   missionState.design = design;
   missionState.messages = transcript.messages || [];
   missionState.operation = operation.operation;
+  const contractStages = new Set(["ready", "task_preparation", "task_review", "executing", "reconciling", "completed"]);
+  const contractIndex = contractStages.has(snapshot.mission.stage)
+    ? await harnessRequest("/v1/contracts/tasks")
+    : { tasks: [] };
   missionState.contracts = await Promise.all(
     (contractIndex.tasks || []).map((task) =>
       harnessRequest(`/v1/contracts/tasks/${encodeURIComponent(task.id)}`).catch(() => null)
