@@ -82,6 +82,16 @@ test("captures modified and removed observed elements as design changes", () => 
   assert.deepEqual(captured.observed_endpoints.map((node) => node.id), ["observed"]);
 });
 
+test("captures accepted contract realizations without treating them as observed endpoints", () => {
+  const captured = draftSnapshot({
+    nodes: [{ id: "accepted", label: "Notifier", kind: "class", status: "accepted", target_path: "src/notifier.py" }],
+    edges: [],
+  });
+
+  assert.deepEqual(captured.nodes.map((node) => node.status), ["accepted"]);
+  assert.deepEqual(captured.observed_endpoints, []);
+});
+
 
 test("formats code anchors, dependent paths, and unresolved contracts", () => {
   const impact = {

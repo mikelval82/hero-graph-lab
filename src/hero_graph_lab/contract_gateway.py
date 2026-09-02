@@ -72,12 +72,14 @@ CONTRACT_TOOL_SPECS = (
     },
     {
         "name": "ContractProposeAmendment",
-        "description": "Pause execution and request a reviewed contract amendment in HARNESS.",
+        "description": "Pause execution and request a reviewed contract amendment in HARNESS. When the design must change, include one atomic GraphPropose-compatible operations batch so the graph updates before review.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "execution_id": {"type": "string", "minLength": 1},
                 "detail": {"type": "string", "minLength": 1, "maxLength": 4000},
+                "operation_id": {"type": "string", "minLength": 1},
+                "operations": {"type": "array", "items": {"type": "object"}},
             },
             "required": ["execution_id", "detail"],
             "additionalProperties": False,
