@@ -765,6 +765,13 @@ function mergeMissionDesign() {
   graph.nodes.forEach((node) => {
     const locator = locatorForGraphNode(graph, node);
     if (locator) visualByLocator.set(locator, node);
+    if (node.kind === "package") {
+      const packageLocator = globalThis.HeroMissionGraphState.packageMissionLocator(graph, node);
+      if (packageLocator) {
+        visualByLocator.set(packageLocator, node);
+        visualByLocator.set(`${packageLocator}/__init__.py`, node);
+      }
+    }
   });
   const visualByDesignId = new Map();
   missionState.design.nodes.forEach((designNode) => {
@@ -806,6 +813,31 @@ function mergeMissionDesign() {
     const visual = visualByDesignId.get(designNode.id);
     const parent = visualByDesignId.get(designNode.parent_id);
     if (visual && parent) visual.parent = parent.id;
+  });
+  missionState.design.nodes.forEach((designNode) => {
+    if (!designNode.parent_id) return;
+    const visual = visualByDesignId.get(designNode.id);
+    const parent = visualByDesignId.get(designNode.parent_id);
+    if (!visual || !parent) return;
+    const designKey = `contains|${designNode.parent_id}|${designNode.id}`;
+    let containment = graph.edges.find((edge) => edge.designKey === designKey)
+      || graph.edges.find((edge) => edge.kind === "contains" && edge.source === parent.id && edge.target === visual.id);
+    if (!containment) {
+      containment = {
+        id: `design:${designKey}`,
+        source: parent.id,
+        target: visual.id,
+        kind: "contains",
+        label: "contains",
+        properties: {},
+        generated: true,
+      };
+      graph.edges.push(containment);
+    }
+    containment.designKey = designKey;
+    containment.designIntent = designNode.intent;
+    containment.designProvenance = designNode.provenance || "AGENT";
+    containment.status = intentStatus(designNode.intent);
   });
   missionState.design.edges.forEach((designEdge, index) => {
     const source = visualByDesignId.get(designEdge.source);

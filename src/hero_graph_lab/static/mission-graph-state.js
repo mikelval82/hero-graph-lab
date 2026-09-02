@@ -82,6 +82,18 @@ function isSemanticMissionRoot(designNode) {
     && ["SYSTEM", "PACKAGE"].includes(designNode.level);
 }
 
-const api = { applyLocalDraft, isSemanticMissionRoot, normalizeMissionDesignEdge };
+function packageMissionLocator(graph, node) {
+  if (node?.kind !== "package") return null;
+  const labels = [];
+  const byId = new Map((graph.nodes || []).map((candidate) => [candidate.id, candidate]));
+  let current = node;
+  while (current?.kind === "package") {
+    if (current.parent) labels.unshift(current.label);
+    current = byId.get(current.parent);
+  }
+  return labels.length ? labels.join("/") : null;
+}
+
+const api = { applyLocalDraft, isSemanticMissionRoot, normalizeMissionDesignEdge, packageMissionLocator };
 if (typeof module !== "undefined" && module.exports) module.exports = api;
 if (typeof globalThis !== "undefined") globalThis.HeroMissionGraphState = api;

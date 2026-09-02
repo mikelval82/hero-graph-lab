@@ -1,12 +1,22 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-const { applyLocalDraft, isSemanticMissionRoot, normalizeMissionDesignEdge } = require("../src/hero_graph_lab/static/mission-graph-state.js");
+const { applyLocalDraft, isSemanticMissionRoot, normalizeMissionDesignEdge, packageMissionLocator } = require("../src/hero_graph_lab/static/mission-graph-state.js");
 
 test("recognizes semantic package roots used by mission designs", () => {
   assert.equal(isSemanticMissionRoot({ level: "PACKAGE", parent_id: null, locator: null }), true);
   assert.equal(isSemanticMissionRoot({ level: "CODE", parent_id: null, locator: null }), false);
   assert.equal(isSemanticMissionRoot({ level: "PACKAGE", parent_id: "root", locator: null }), false);
+});
+
+test("resolves observed package nodes by repository path", () => {
+  const graph = { nodes: [
+    { id: "root", kind: "package", label: "repo", parent: null },
+    { id: "src", kind: "package", label: "src", parent: "root" },
+    { id: "pkg", kind: "package", label: "hero_graph_lab", parent: "src" },
+  ] };
+  assert.equal(packageMissionLocator(graph, graph.nodes[2]), "src/hero_graph_lab");
+  assert.equal(packageMissionLocator(graph, graph.nodes[0]), null);
 });
 
 test("normalizes mission relations for the visual graph", () => {
