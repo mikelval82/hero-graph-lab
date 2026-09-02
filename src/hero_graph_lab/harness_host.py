@@ -65,6 +65,7 @@ class HarnessWorkerHost:
         branch: str = "",
         mode: str = "full",
         resume: bool = False,
+        no_grill: bool = False,
     ) -> dict[str, object]:
         with self._lock:
             if self._running():
@@ -73,21 +74,13 @@ class HarnessWorkerHost:
             self._prepare_git_project()
             worker_project = self._create_worker_worktree()
             self.project_dir = worker_project
-            command = [
-                str(self.python_executable),
-                "-m",
-                "mission_orchestrator.worker",
-                "--project",
-                str(self.project_dir),
-                "--task",
-                task or "Graph Lab mission",
-                "--mode",
-                mode,
-            ]
-            if branch.strip():
-                command.extend(("--branch", branch.strip()))
-            if resume:
-                command.append("--resume")
+            command = self._worker_command(
+                task=task,
+                branch=branch,
+                mode=mode,
+                resume=resume,
+                no_grill=no_grill,
+            )
             environment = os.environ.copy()
             source_root = str(self.harness_root / "src")
             pythonpath_parts = [
@@ -131,6 +124,34 @@ class HarnessWorkerHost:
                 self.project_dir = self._selected_project_dir
                 raise HarnessHostError(detail)
             return self.status()
+
+    def _worker_command(
+        self,
+        *,
+        task: str,
+        branch: str,
+        mode: str,
+        resume: bool,
+        no_grill: bool,
+    ) -> list[str]:
+        command = [
+            str(self.python_executable),
+            "-m",
+            "mission_orchestrator.worker",
+            "--project",
+            str(self.project_dir),
+            "--task",
+            task or "Graph Lab mission",
+            "--mode",
+            mode,
+        ]
+        if branch.strip():
+            command.extend(("--branch", branch.strip()))
+        if resume:
+            command.append("--resume")
+        if no_grill:
+            command.append("--no-grill")
+        return command
 
     def stop(self) -> None:
         with self._lock:

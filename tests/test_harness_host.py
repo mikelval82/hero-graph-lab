@@ -18,6 +18,20 @@ HARNESS_ROOT = Path(__file__).parents[2] / "HARNESS"
 
 
 class HarnessWorkerHostTest(TestCase):
+    def test_worker_command_can_skip_grill(self) -> None:
+        host = HarnessWorkerHost(project_dir=HARNESS_ROOT, harness_root=HARNESS_ROOT)
+
+        command = host._worker_command(
+            task="A mission",
+            branch="feature/a-mission",
+            mode="full",
+            resume=False,
+            no_grill=True,
+        )
+
+        self.assertIn("--no-grill", command)
+        self.assertNotIn("--resume", command)
+
     def test_worker_connection_reset_is_normalized(self) -> None:
         host = HarnessWorkerHost(project_dir=HARNESS_ROOT, harness_root=HARNESS_ROOT)
         host._process = type("RunningProcess", (), {"poll": lambda self: None})()

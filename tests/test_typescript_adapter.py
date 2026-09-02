@@ -43,7 +43,14 @@ class TypeScriptGraphAdapterTest(TestCase):
         )
         self.assertEqual(
             nodes["function:hero_graph_lab.static.app.renderCodePanel"]["line"],
-            1389,
+            next(
+                line_number
+                for line_number, line in enumerate(
+                    (PROJECT_STATIC / "app.js").read_text(encoding="utf-8").splitlines(),
+                    start=1,
+                )
+                if line.startswith("function renderCodePanel")
+            ),
         )
         self.assertEqual(
             nodes["function:hero_graph_lab.static.flow-navigation.normalizeRelation"]["line"],
@@ -51,7 +58,14 @@ class TypeScriptGraphAdapterTest(TestCase):
         )
         self.assertEqual(
             nodes["function:hero_graph_lab.static.graph-views.flowGraph"]["line"],
-            96,
+            next(
+                line_number
+                for line_number, line in enumerate(
+                    (PROJECT_STATIC / "graph-views.js").read_text(encoding="utf-8").splitlines(),
+                    start=1,
+                )
+                if line.strip().startswith("function flowGraph")
+            ),
         )
         self.assertNotIn(
             "function:hero_graph_lab.static.graph-views.appendChildren",

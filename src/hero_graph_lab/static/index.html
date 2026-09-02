@@ -63,7 +63,6 @@
               <summary aria-label="More graph actions" title="More graph actions"><span aria-hidden="true">&#8230;</span></summary>
               <div class="graph-more-menu-content" role="group" aria-label="More graph actions">
                 <button id="hide-node" class="graph-menu-button" type="button" data-command="node.hide" disabled><b aria-hidden="true">H</b><span>Hide selection</span></button>
-                <button id="context-visibility" class="graph-menu-button" type="button" data-command="view.toggle-context" aria-pressed="false" disabled><b aria-hidden="true">C</b><span>Only highlighted</span></button>
                 <button id="lock-layout" class="graph-menu-button" type="button" aria-pressed="false"><b aria-hidden="true">L</b><span>Lock view</span></button>
                 <button id="reset-view" class="graph-menu-button" type="button" disabled><b aria-hidden="true">o</b><span>Reset view</span></button>
                 <button id="shortcut-help" class="graph-menu-button" type="button" data-command="shortcuts.help"><b aria-hidden="true">?</b><span>Shortcuts</span></button>
@@ -102,6 +101,7 @@
               <button id="trace-calls" class="graph-tool-button" type="button" data-command="calls.trace" aria-pressed="false" title="Trace calls (T)" disabled><b aria-hidden="true">&#8594;</b><span>Trace calls</span></button>
               <button id="expand-node" class="graph-tool-button" type="button" data-command="node.expand" title="Expand or follow (Right arrow)" disabled><b aria-hidden="true">+</b><span>Expand</span></button>
               <button id="collapse-node" class="graph-tool-button" type="button" data-command="node.collapse" title="Collapse or go back (Left arrow)" disabled><b aria-hidden="true">-</b><span>Collapse</span></button>
+              <button id="context-visibility" class="graph-tool-button" type="button" data-command="view.toggle-context" aria-pressed="false" title="Show only active nodes or restore graph context (C)" disabled><b aria-hidden="true">C</b><span>Only active</span></button>
             </div>
           </div>
           <div class="graph-tool-group" role="group" aria-labelledby="graph-tools-inspect">
@@ -474,6 +474,7 @@
       <div class="mission-file-row">
         <label class="file-command" for="mission-file">Load Markdown<input id="mission-file" type="file" accept=".md,text/markdown,text/plain"></label>
         <label class="resume-control"><input id="mission-resume" type="checkbox">Resume existing branch</label>
+        <label class="resume-control"><input id="mission-no-grill" type="checkbox">Skip Grill gate</label>
       </div>
       <p id="mission-form-status" role="status"></p>
       <button class="submit-button" type="submit">Start HARNESS</button>

@@ -464,6 +464,7 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
                     branch=str(payload.get("branch", "")),
                     mode=str(payload.get("mode", "full")),
                     resume=bool(payload.get("resume", False)),
+                    no_grill=bool(payload.get("no_grill", False)),
                 )
                 state.set_fixture(Path(str(status["project_dir"])))
             except (HarnessHostError, ValueError, json.JSONDecodeError) as error:

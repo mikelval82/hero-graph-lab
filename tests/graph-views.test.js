@@ -52,6 +52,7 @@ function context(overrides = {}) {
     selected: null,
     inlineExpanded: new Set(),
     hiddenGraphNodes: new Set(),
+    revealedGraphNodes: new Set(),
     callTrace: null,
     flowJourney: [],
     nodeById,
@@ -73,6 +74,20 @@ test("hierarchy views honor explicit expansion and hidden-node inputs", () => {
   assert.deepEqual(structure.nodes, hierarchy);
   assert.deepEqual(structure.edges.map((edge) => edge.id), ["a-class"]);
   assert.deepEqual([...viewContext.inlineExpanded], ["module-a"]);
+});
+
+test("revealed changes add only their exact containment path", () => {
+  const viewContext = context({ revealedGraphNodes: new Set(["func-a"]) });
+
+  const hierarchy = visibleHierarchyNodes(viewContext);
+
+  assert.deepEqual(
+    hierarchy.map((node) => node.id),
+    ["module-a", "module-b", "module-c", "class-a", "func-a"],
+  );
+  assert.equal(hierarchy.find((node) => node.id === "class-a").context, true);
+  assert.equal(hierarchy.find((node) => node.id === "func-a").context, false);
+  assert.equal(viewContext.inlineExpanded.size, 0);
 });
 
 test("Flow aggregates deep relations at their visible representatives", () => {
@@ -140,6 +155,43 @@ test("journey view retains the directed path and removes unrelated visible nodes
     "aggregate:root:module-b:calls:module-a:removed",
   ]);
   assert.equal(journey.edges.find((edge) => edge.id === relation.id).journey, true);
+});
+
+test("journey context excludes neighbors of historical steps", () => {
+  const denseGraph = structuredClone(graph);
+  denseGraph.edges.push({
+    id: "historical-neighbor",
+    source: "module-a",
+    target: "module-c",
+    kind: "uses",
+    status: "observed",
+  });
+  const nodeById = new Map(denseGraph.nodes.map((node) => [node.id, node]));
+  const childrenByParent = new Map();
+  denseGraph.nodes.forEach((node) => {
+    if (!childrenByParent.has(node.parent)) childrenByParent.set(node.parent, []);
+    childrenByParent.get(node.parent).push(node);
+  });
+  const relation = {
+    id: "aggregate:root:module-a:calls:module-b:observed",
+    source: "module-a",
+    target: "module-b",
+    kind: "calls",
+    memberIds: ["call-ab"],
+  };
+
+  const journey = flowJourneyGraph(context({
+    graph: denseGraph,
+    nodeById,
+    childrenByParent,
+    flowJourney: [
+      { nodeId: "module-a", fromNodeId: null, relation: null, expanded: false },
+      { nodeId: "module-b", fromNodeId: "module-a", relation, expanded: false },
+    ],
+  }));
+
+  assert.deepEqual(journey.nodes.map((node) => node.id), ["module-a", "module-b"]);
+  assert.equal(journey.edges.some((edge) => edge.id === "historical-neighbor"), false);
 });
 
 test("ancestry helpers derive descendants without mutating indexes", () => {

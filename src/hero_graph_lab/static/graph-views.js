@@ -73,14 +73,39 @@
 
   function visibleHierarchyNodes(context, expandedNodes = context.inlineExpanded) {
     const nodes = [];
+    const visibleById = new Map();
+    const append = (graphNode, isContext = false) => {
+      if (!graphNode || context.hiddenGraphNodes.has(graphNode.id)) return false;
+      const visible = visibleById.get(graphNode.id);
+      if (visible) {
+        if (!isContext) visible.context = false;
+        return true;
+      }
+      const appended = { ...graphNode, context: isContext };
+      nodes.push(appended);
+      visibleById.set(graphNode.id, appended);
+      return true;
+    };
     const appendChildren = (parentId) => {
       children(context, parentId).forEach((child) => {
-        if (context.hiddenGraphNodes.has(child.id)) return;
-        nodes.push({ ...child, context: false });
-        if (expandedNodes.has(child.id)) appendChildren(child.id);
+        if (append(child) && expandedNodes.has(child.id)) appendChildren(child.id);
       });
     };
     appendChildren(context.scope);
+    (context.revealedGraphNodes || new Set()).forEach((nodeId) => {
+      const path = [];
+      let current = node(context, nodeId);
+      while (current && current.id !== context.scope) {
+        path.unshift(current);
+        current = node(context, current.parent);
+      }
+      if (current?.id === context.scope) {
+        if (path.some((candidate) => context.hiddenGraphNodes.has(candidate.id))) return;
+        path.forEach((candidate) => append(candidate, candidate.id !== nodeId));
+      } else {
+        append(node(context, nodeId));
+      }
+    });
     return nodes;
   }
 
@@ -231,13 +256,13 @@
     }
     const edgeIds = new Set();
     graph.edges.forEach((edge) => {
-      const touchesJourney = journeyNodeIds.has(edge.source) || journeyNodeIds.has(edge.target);
+      const touchesActive = edge.source === activeNodeId || edge.target === activeNodeId;
       const connectsRetainedNodes = nodeIds.has(edge.source) && nodeIds.has(edge.target);
-      if (touchesJourney) {
+      if (touchesActive) {
         nodeIds.add(edge.source);
         nodeIds.add(edge.target);
         edgeIds.add(edge.id);
-      } else if (edge.kind === "contains" && connectsRetainedNodes) {
+      } else if (connectsRetainedNodes) {
         edgeIds.add(edge.id);
       }
     });

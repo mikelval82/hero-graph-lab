@@ -51,6 +51,7 @@ const taskDocumentOrder = ["contract", "spec", "plan", "decisions", "status", "a
 const actionDefinitions = {
   run_research: { endpoint: "research", label: "Run research" },
   start_grill: { endpoint: "grill", label: "Start grill" },
+  skip_grill: { endpoint: "skip-grill", label: "Continue without Grill" },
   approve_design: { endpoint: "approve-design", label: "Approve design" },
   approve_execution: { endpoint: "approve-execution", label: "Approve execution" },
   request_amendment: { endpoint: "request-amendment", label: "Request amendment" },
@@ -894,19 +895,21 @@ function mergeMissionDesign() {
   state.graph = normalizeGraph(graph);
   rebuildGraphIndexes();
   if (!graphNode(state.scope)) state.scope = graph.root || graph.nodes.find((node) => !node.parent)?.id;
-  // Keep the initial mission view legible, but open the containment path to
-  // every proposed/modified node so agent and human design changes are not
-  // hidden several levels below a collapsed package.
-  state.graph.nodes
-    .filter((node) => ["proposed", "modified"].includes(node.status))
-    .forEach((node) => {
-      let parent = graphNode(node.id)?.parent;
-      while (parent && parent !== state.scope) {
-        state.inlineExpanded.add(parent);
-        state.treeExpanded.add(parent);
-        parent = graphNode(parent)?.parent;
-      }
-    });
+  // Reveal exact change paths in the graph without expanding every sibling in
+  // those packages. The Explorer may still open the parent folders so the
+  // proposed nodes are discoverable there as well.
+  state.revealedGraphNodes = new Set(
+    state.graph.nodes
+      .filter((node) => !["observed", "accepted"].includes(node.status || "observed"))
+      .map((node) => node.id),
+  );
+  state.revealedGraphNodes.forEach((nodeId) => {
+    let parent = graphNode(nodeId)?.parent;
+    while (parent && parent !== state.scope) {
+      state.treeExpanded.add(parent);
+      parent = graphNode(parent)?.parent;
+    }
+  });
   if (state.selected && !graphNode(state.selected)) state.selected = null;
   if (state.selectedRelation && !state.graph.edges.some((edge) => edge.id === state.selectedRelation)) {
     state.selectedRelation = null;
@@ -1142,6 +1145,7 @@ missionForm.addEventListener("submit", async (event) => {
       branch: document.querySelector("#mission-branch").value.trim(),
       mode: document.querySelector("#mission-mode").value,
       resume: document.querySelector("#mission-resume").checked,
+      no_grill: document.querySelector("#mission-no-grill").checked,
     }));
     await refreshMission();
     const idea = document.querySelector("#mission-idea").value;

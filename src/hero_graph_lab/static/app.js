@@ -17,7 +17,9 @@ const state = {
   flowJourney: [],
   flowEntryCandidate: null,
   hiddenGraphNodes: new Set(),
+  revealedGraphNodes: new Set(),
   onlyHighlighted: false,
+  contextVisibilityExplicit: false,
   callTrace: null,
   graphProjection: null,
   drag: null,
@@ -376,6 +378,7 @@ function graphViewContext(overrides = {}) {
     selected: state.selected,
     inlineExpanded: state.inlineExpanded,
     hiddenGraphNodes: state.hiddenGraphNodes,
+    revealedGraphNodes: state.revealedGraphNodes,
     callTrace: state.callTrace,
     flowJourney: state.flowJourney,
     nodeById: state.nodeById,
@@ -406,20 +409,22 @@ function updateContextVisibilityControl() {
   const button = document.querySelector("#context-visibility");
   button.disabled = !contextFilterAvailable();
   button.setAttribute("aria-pressed", String(state.onlyHighlighted));
-  button.querySelector("span").textContent = state.onlyHighlighted ? "Show context" : "Only highlighted";
-  button.title = state.onlyHighlighted ? "Show dimmed graph context (C)" : "Show only highlighted nodes (C)";
+  button.querySelector("span").textContent = state.onlyHighlighted ? "Show context" : "Only active";
+  button.title = state.onlyHighlighted ? "Show dimmed graph context (C)" : "Show only active nodes (C)";
 }
 
 function toggleContextVisibility() {
   if (!contextFilterAvailable()) return;
   state.onlyHighlighted = !state.onlyHighlighted;
+  state.contextVisibilityExplicit = true;
   invalidateLayout();
+  saveDesign();
   updateGraphCount();
   updateTools();
   render();
   fitGraphToView();
   document.querySelector("#graph-command-status").textContent = state.onlyHighlighted
-    ? "Only the selected node and its highlighted neighbors are visible. Press C to restore context."
+    ? "Only active nodes are visible. Press C to restore graph context."
     : "Dimmed graph context restored.";
 }
 
@@ -617,7 +622,10 @@ function setSelection(nodeId) {
   updateGraphCount();
   updateTools();
   syncTreeSelection();
-  if (state.view === "focus" && !state.graphProjection) {
+  const filteredSelectionChanged = state.onlyHighlighted
+    && contextFilterAvailable()
+    && previousNodeId !== nodeId;
+  if ((state.view === "focus" && !state.graphProjection) || filteredSelectionChanged) {
     render();
     focusRenderedGraphNode(nodeId);
   } else updateGraphSelectionStyles();
@@ -808,6 +816,7 @@ function expandSelectedNode() {
   const hasChildren = scopeChildren(node.id).length > 0;
   const expandsNode = hasChildren && !state.inlineExpanded.has(node.id);
   if (state.view === "flow") {
+    if (!state.contextVisibilityExplicit) state.onlyHighlighted = true;
     const candidate = state.flowEntryCandidate?.target === node.id ? state.flowEntryCandidate : null;
     if (!candidate && state.flowJourney.length && flowActiveNodeId() !== node.id && !expandsNode) return;
     if (candidate && !state.flowJourney.some((step) => step.nodeId === candidate.source)) {
@@ -880,7 +889,13 @@ function resetGraphView() {
   state.flowJourney = [];
   state.flowEntryCandidate = null;
   state.hiddenGraphNodes.clear();
+  state.revealedGraphNodes = new Set(
+    state.graph.nodes
+      .filter((node) => !["observed", "accepted"].includes(node.status || "observed"))
+      .map((node) => node.id),
+  );
   state.onlyHighlighted = false;
+  state.contextVisibilityExplicit = false;
   invalidateLayout();
   state.selected = null;
   state.selectedRelation = null;
@@ -997,6 +1012,8 @@ function saveDesign() {
       inlineExpanded: [...state.inlineExpanded],
       flowJourney: state.flowJourney,
       hiddenGraphNodes: [...state.hiddenGraphNodes],
+      onlyHighlighted: state.onlyHighlighted,
+      contextVisibilityExplicit: state.contextVisibilityExplicit,
     }));
   } catch (error) {
     console.warn("Could not save local graph design.", error);
@@ -1068,6 +1085,11 @@ function restoreDesign(baseGraph) {
         ? flowNavigation.normalizeJourney(stored.flowJourney)
         : flowNavigation.migrateLegacyJourney(stored.flowOrigin, stored.flowTrail);
       state.hiddenGraphNodes = new Set(stored.hiddenGraphNodes || []);
+      state.onlyHighlighted = Boolean(stored.onlyHighlighted);
+      state.contextVisibilityExplicit = Boolean(stored.contextVisibilityExplicit);
+      if (state.flowJourney.length && stored.contextVisibilityExplicit === undefined) {
+        state.onlyHighlighted = true;
+      }
       return reconcileStoredDesign(baseGraph, stored.graph);
     }
   } catch (error) {
@@ -1110,16 +1132,25 @@ async function loadExperiment({ restoreLocalDesign = true } = {}) {
     const [graphResponse, sourceResponse] = await Promise.all([fetch("/api/graph"), fetch("/api/source")]);
     if (!graphResponse.ok || !sourceResponse.ok) throw new Error("Request failed");
     const extractedGraph = await graphResponse.json();
+    const sourceChanged = Boolean(state.graph?.source && state.graph.source !== extractedGraph.source);
     state.source = await sourceResponse.json();
     state.flowJourney = [];
     state.flowEntryCandidate = null;
-    state.onlyHighlighted = false;
+    if (sourceChanged) {
+      state.onlyHighlighted = false;
+      state.contextVisibilityExplicit = false;
+    }
     state.viewStates = { structure: null, flow: null, focus: null };
     state.focusReturnView = "flow";
     state.currentLayout = null;
     normalizeGraph(extractedGraph);
     state.baseGraph = structuredClone(extractedGraph);
     state.graph = normalizeGraph(restoreLocalDesign ? restoreDesign(extractedGraph) : extractedGraph);
+    state.revealedGraphNodes = new Set(
+      state.graph.nodes
+        .filter((node) => !["observed", "accepted"].includes(node.status || "observed"))
+        .map((node) => node.id),
+    );
     state.scope = state.graph.root || state.graph.nodes.find((node) => !node.parent)?.id;
     state.treeExpanded = new Set(state.graph.root ? [state.graph.root] : []);
     document.querySelector("#source-name").textContent = state.graph.source;
@@ -1499,6 +1530,7 @@ function parseProperties(text) {
 function revealAgentProposal(nodeId) {
   if (!nodeId || !graphNode(nodeId)) return false;
   expandTreePath(nodeId);
+  state.revealedGraphNodes.add(nodeId);
   if (state.view === "flow" && state.flowJourney.length) {
     state.flowJourney = [];
     state.flowEntryCandidate = null;
@@ -1509,12 +1541,7 @@ function revealAgentProposal(nodeId) {
     state.flowEntryCandidate = null;
   }
   if (state.view !== "focus" && isDescendantOf(nodeId, state.scope)) {
-    let node = graphNode(nodeId);
-    while (node?.parent && node.id !== state.scope) {
-      state.inlineExpanded.add(node.parent);
-      state.hiddenGraphNodes.delete(node.id);
-      node = graphNode(node.parent);
-    }
+    state.hiddenGraphNodes.delete(nodeId);
   }
   return navigationGraph().nodes.some((node) => node.id === nodeId);
 }
@@ -1776,6 +1803,7 @@ function removeOrRestoreSelected() {
       delete state.positions[nodeId];
       state.inlineExpanded.delete(nodeId);
       state.hiddenGraphNodes.delete(nodeId);
+      state.revealedGraphNodes.delete(nodeId);
       state.treeExpanded.delete(nodeId);
     });
     state.selected = null;
@@ -1800,7 +1828,9 @@ document.querySelector("#reset-design").addEventListener("click", () => {
   state.flowJourney = [];
   state.flowEntryCandidate = null;
   state.hiddenGraphNodes.clear();
+  state.revealedGraphNodes.clear();
   state.onlyHighlighted = false;
+  state.contextVisibilityExplicit = false;
   state.callTrace = null;
   state.scope = state.graph.root || state.graph.nodes.find((node) => !node.parent)?.id;
   state.treeExpanded = new Set(state.graph.nodes.filter((node) => node.kind === "package").map((node) => node.id));
