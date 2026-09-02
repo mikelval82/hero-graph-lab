@@ -108,6 +108,14 @@ class LabState:
                 self._graph_fingerprint = fingerprint
             return self._graph_cache
 
+    def set_fixture(self, fixture: Path) -> None:
+        with self._lock:
+            self.fixture = fixture.resolve()
+            self._graph_cache = None
+            self._graph_fixture = None
+            self._graph_fingerprint = None
+            self.graph_tools.reset()
+
     @staticmethod
     def _source_fingerprint(fixture: Path) -> tuple[tuple[str, int, int], ...]:
         root = fixture.parent if fixture.is_file() else fixture
@@ -342,6 +350,7 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
                 return
             if state.harness_host is not None:
                 state.harness_host.stop()
+                state.set_fixture(state.harness_host.project_dir)
             self._send_json({"running": False})
 
         def _send_explore_message(self, session_id: str) -> None:
@@ -456,6 +465,7 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
                     mode=str(payload.get("mode", "full")),
                     resume=bool(payload.get("resume", False)),
                 )
+                state.set_fixture(Path(str(status["project_dir"])))
             except (HarnessHostError, ValueError, json.JSONDecodeError) as error:
                 self._send_json({"error": "harness_start_failed", "detail": str(error)}, HTTPStatus.BAD_GATEWAY)
                 return
