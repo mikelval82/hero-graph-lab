@@ -464,6 +464,7 @@ function renderChat() {
   document.querySelector("#chat-microphone").hidden = true;
   document.querySelector("#chat-speech").hidden = true;
   document.querySelector("#explore-context").hidden = true;
+  document.querySelector("#explore-agent-mode").hidden = true;
   const count = document.querySelector("#chat-count");
   count.textContent = missionState.messages.length;
   count.hidden = !missionState.messages.length;

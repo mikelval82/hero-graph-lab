@@ -257,6 +257,7 @@ function renderExploreChat() {
   document.querySelector("#chat-form button[type='submit']").disabled = !exploreState.sessionId || exploreState.pending;
   document.querySelector("#chat-done").hidden = true;
   document.querySelector("#explore-context").hidden = false;
+  document.querySelector("#explore-agent-mode").hidden = false;
   renderExploreVoiceControls();
   const count = document.querySelector("#chat-count");
   count.textContent = exploreState.messages.length;
