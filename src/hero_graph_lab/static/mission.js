@@ -16,6 +16,7 @@ const missionState = {
   canonicalGraph: null,
   graphReady: false,
   observedRevision: null,
+  mergedDesignFingerprint: null,
   eventCursor: 0,
   eventLoopRunning: false,
   refreshTimer: null,
@@ -476,6 +477,7 @@ async function refreshMission({ mergeGraph = true } = {}) {
     missionState.contracts = [];
     missionState.operation = null;
     missionState.observedRevision = null;
+    missionState.mergedDesignFingerprint = null;
     renderHostStatus();
     return;
   }
@@ -760,6 +762,17 @@ function visualKind(level, label) {
 
 function mergeMissionDesign() {
   if (!missionState.graphReady || !state.baseGraph || !missionState.design) return;
+  const designFingerprint = JSON.stringify({
+    source: state.baseGraph.source || "",
+    root: state.baseGraph.root || "",
+    nodes: state.baseGraph.nodes.length,
+    edges: state.baseGraph.edges.length,
+    designRevision: missionState.design.design_revision || 0,
+    observedRevision: missionState.design.observed_revision || 0,
+    realization: missionState.design.realization || null,
+    dirty: missionState.designDirty,
+  });
+  if (missionState.mergedDesignFingerprint === designFingerprint && state.graph) return;
   const graph = normalizeGraph(structuredClone(state.baseGraph));
   const visualByLocator = new Map();
   graph.nodes.forEach((node) => {
@@ -885,8 +898,11 @@ function mergeMissionDesign() {
         parent = graphNode(parent)?.parent;
       }
     });
-  state.selected = null;
-  state.selectedRelation = null;
+  if (state.selected && !graphNode(state.selected)) state.selected = null;
+  if (state.selectedRelation && !state.graph.edges.some((edge) => edge.id === state.selectedRelation)) {
+    state.selectedRelation = null;
+  }
+  missionState.mergedDesignFingerprint = designFingerprint;
   invalidateLayout();
   renderFileTree();
   renderBreadcrumbs();
@@ -1170,6 +1186,7 @@ document.querySelector("#chat-done").addEventListener("click", async () => {
 
 addEventListener("graph-experiment-ready", () => {
   missionState.graphReady = true;
+  missionState.mergedDesignFingerprint = null;
   mergeMissionDesign();
 });
 addEventListener("graph-design-changed", () => {
