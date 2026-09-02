@@ -76,6 +76,12 @@ function normalizeMissionDesignEdge(designEdge, sourceId, targetId, realization 
   };
 }
 
-const api = { applyLocalDraft, normalizeMissionDesignEdge };
+function isSemanticMissionRoot(designNode) {
+  return !designNode.parent_id
+    && !designNode.locator
+    && ["SYSTEM", "PACKAGE"].includes(designNode.level);
+}
+
+const api = { applyLocalDraft, isSemanticMissionRoot, normalizeMissionDesignEdge };
 if (typeof module !== "undefined" && module.exports) module.exports = api;
 if (typeof globalThis !== "undefined") globalThis.HeroMissionGraphState = api;

@@ -770,7 +770,7 @@ function mergeMissionDesign() {
   missionState.design.nodes.forEach((designNode) => {
     let visual = designNode.locator ? visualByLocator.get(designNode.locator) : null;
     visual ||= graph.nodes.find((node) => node.id === designNode.id);
-    if (!visual && designNode.level === "SYSTEM") {
+    if (!visual && globalThis.HeroMissionGraphState.isSemanticMissionRoot(designNode)) {
       // Design contracts often name the repository root semantically, while
       // the extractor identifies it as package:<directory-name>.
       visual = graph.nodes.find((node) => node.id === graph.root);
