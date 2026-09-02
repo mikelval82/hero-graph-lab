@@ -57,6 +57,25 @@ function applyLocalDraft(graph, baseline, draft) {
   return graph;
 }
 
-const api = { applyLocalDraft };
+function normalizeMissionDesignEdge(designEdge, sourceId, targetId, realization = null, index = 0) {
+  const relation = String(designEdge.relation || "custom").trim() || "custom";
+  return {
+    id: `design:${index}:${designEdge.source}:${designEdge.target}`,
+    source: sourceId,
+    target: targetId,
+    kind: "custom",
+    label: relation,
+    properties: {},
+    designKey: `${designEdge.source}|${designEdge.target}|${designEdge.relation}`,
+    designIntent: designEdge.intent,
+    designProvenance: designEdge.provenance || "AGENT",
+    realization,
+    status: realization?.status === "accepted"
+      ? "accepted"
+      : ({ KEEP: "observed", CREATE: "proposed", CHANGE: "modified", REMOVE: "removed" }[designEdge.intent] || "observed"),
+  };
+}
+
+const api = { applyLocalDraft, normalizeMissionDesignEdge };
 if (typeof module !== "undefined" && module.exports) module.exports = api;
 if (typeof globalThis !== "undefined") globalThis.HeroMissionGraphState = api;

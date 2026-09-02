@@ -808,22 +808,27 @@ function mergeMissionDesign() {
     const source = visualByDesignId.get(designEdge.source);
     const target = visualByDesignId.get(designEdge.target);
     if (!source || !target) return;
-    const status = intentStatus(designEdge.intent);
-    let edge = graph.edges.find((candidate) => candidate.source === source.id && candidate.target === target.id && candidate.kind === designEdge.relation);
+    const designKey = `${designEdge.source}|${designEdge.target}|${designEdge.relation}`;
+    let edge = graph.edges.find((candidate) => candidate.designKey === designKey)
+      || graph.edges.find((candidate) => candidate.source === source.id && candidate.target === target.id && candidate.kind === designEdge.relation);
     if (!edge) {
-      edge = {
-        id: `design:${index}:${designEdge.source}:${designEdge.target}`,
-        source: source.id,
-        target: target.id,
-        kind: designEdge.relation,
-        properties: {},
-      };
+      edge = globalThis.HeroMissionGraphState.normalizeMissionDesignEdge(
+        designEdge,
+        source.id,
+        target.id,
+        missionState.design.realization?.edges?.[designKey] || null,
+        index,
+      );
       graph.edges.push(edge);
     }
-    edge.designKey = `${designEdge.source}|${designEdge.target}|${designEdge.relation}`;
-    edge.designIntent = designEdge.intent;
-    edge.realization = missionState.design.realization?.edges?.[edge.designKey] || null;
-    edge.status = edge.realization?.status === "accepted" ? "accepted" : status;
+    const normalized = globalThis.HeroMissionGraphState.normalizeMissionDesignEdge(
+      designEdge,
+      source.id,
+      target.id,
+      missionState.design.realization?.edges?.[designKey] || null,
+      index,
+    );
+    Object.assign(edge, normalized, { id: edge.id });
   });
   missionState.canonicalGraph = structuredClone(graph);
   if (missionState.designDirty && missionState.localDraft && missionState.localBaseGraph) {

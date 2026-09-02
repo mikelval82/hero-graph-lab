@@ -1,7 +1,20 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-const { applyLocalDraft } = require("../src/hero_graph_lab/static/mission-graph-state.js");
+const { applyLocalDraft, normalizeMissionDesignEdge } = require("../src/hero_graph_lab/static/mission-graph-state.js");
+
+test("normalizes mission relations for the visual graph", () => {
+  const edge = normalizeMissionDesignEdge(
+    { source: "a", target: "b", relation: "dispatches markdown files to", intent: "KEEP", provenance: "AGENT" },
+    "observed:a",
+    "proposal:b",
+  );
+
+  assert.equal(edge.kind, "custom");
+  assert.equal(edge.label, "dispatches markdown files to");
+  assert.equal(edge.status, "observed");
+  assert.equal(edge.designProvenance, "AGENT");
+});
 
 test("keeps remote mission changes while applying only the local draft delta", () => {
   const baseline = {
