@@ -182,6 +182,7 @@ function activityDescription(event) {
     operation_started: () => `${readable(payload.action)} requested`,
     operation_finished: () => `${readable(payload.action)} ${readable(payload.status)}`,
     phase_started: () => `${readable(payload.phase)} started${payload.max_turns ? ` · limit ${payload.max_turns} turns` : ""}`,
+    model_selection: () => `${readable(payload.phase)} model · ${payload.requested_model || "unknown"} · ${readable(payload.tier)}`,
     agent_progress: () => `${readable(payload.phase)} · ${activityMetrics(payload, { includeLimit: true })}`,
     phase_ended: () => payload.outcome === "completed"
       ? `${readable(payload.phase)} completed · ${activityMetrics(payload)} · ${payload.elapsed_seconds ?? "?"}s`

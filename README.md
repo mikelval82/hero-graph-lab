@@ -111,6 +111,13 @@ interpreter and accepts additional Graph Lab arguments. Provider adapters only
 translate the common model and tool-call contract, so additional clients can
 be added without changing the assistant service or UI.
 
+HARNESS can route mission phases across model tiers independently of the
+Explore assistant. With DeepSeek, leave `HARNESS_MODEL` unset to use V4 Flash
+for routine phases and V4 Pro for planning, high-confidence review, large tasks
+and retries. Override the tiers with `HARNESS_MODEL_CHEAP`,
+`HARNESS_MODEL_DEFAULT`, and `HARNESS_MODEL_DEEP`; the Mission activity panel
+shows each selected model.
+
 The **Mic** control dictates into the current Explore question using the
 browser's speech-recognition service. **Read** toggles spoken assistant replies.
 Voice input and output degrade to disabled controls when the browser lacks the
