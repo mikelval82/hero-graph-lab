@@ -57,7 +57,7 @@ const actionDefinitions = {
   request_amendment: { endpoint: "request-amendment", label: "Request amendment" },
   prepare_task: { endpoint: "prepare-task", label: "Prepare next task" },
   approve_task: { endpoint: "execute-task", label: "Approve and execute" },
-  retry: { endpoint: "retry-review", label: "Retry review" },
+  retry: { endpoint: "retry-review", label: "Retry" },
 };
 
 async function jsonRequest(path, options = {}) {
@@ -556,8 +556,11 @@ async function submitMissionAction(action, definition) {
     };
     if (action === "approve_design") body.base_design_revision = missionState.design.design_revision;
     if (action === "approve_task") body.task_id = missionState.snapshot.mission.active_task_id;
+    const retryingPreparation = action === "retry"
+      && /phase=(spec|plan)\b/.test(missionState.snapshot.mission.blocked_reason);
+    const endpoint = retryingPreparation ? "retry-preparation" : definition.endpoint;
     missionState.operation = await harnessRequest(
-      `/v1/actions/${definition.endpoint}`,
+      `/v1/actions/${endpoint}`,
       jsonOptions("POST", body),
     );
     renderMission();
