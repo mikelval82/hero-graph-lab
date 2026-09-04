@@ -1,3 +1,5 @@
+"""Build deterministic project graphs from Python, script, document, and file sources."""
+
 from __future__ import annotations
 
 import ast
@@ -46,6 +48,7 @@ def python_source_files(path: Path) -> list[Path]:
 
 
 def project_source_files(path: Path) -> list[Path]:
+    """Return supported project files in stable traversal order."""
     return _source_files(path, PROJECT_SOURCE_SUFFIXES)
 
 
@@ -218,6 +221,7 @@ def extract_python_graph(path: Path) -> dict[str, Any]:
 
 
 def extract_project_graph(path: Path) -> dict[str, Any]:
+    """Extract a graph whose payload always contains source, root, nodes, and edges."""
     if path.is_file():
         if path.suffix.lower() == ".py":
             graph = PythonGraphExtractor(path).extract()
@@ -248,6 +252,7 @@ def _extract_single_file(path: Path) -> dict[str, Any]:
 
 
 def _extract_python_package(path: Path, *, include_project_files: bool = False) -> dict[str, Any]:
+    """Extract Python package structure and optionally all supported project files."""
     root_name = path.name
     root_id = f"package:{root_name}"
     source_files = project_source_files(path) if include_project_files else python_source_files(path)
