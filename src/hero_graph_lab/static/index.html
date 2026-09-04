@@ -15,11 +15,11 @@
     </div>
     <div class="topbar-actions">
       <button id="project-open" class="quiet-command" type="button">Open project</button>
-      <button id="mission-launch" class="command-button" type="button">Start mission</button>
+      <button id="mission-launch" class="command-button" type="button">Prepare handoff</button>
     </div>
     <div class="mission-presence" aria-live="polite">
       <i id="harness-indicator" aria-hidden="true"></i>
-      <div><strong id="mission-stage-label">Local design</strong><span id="mission-branch-label">HARNESS offline</span></div>
+      <div><strong id="mission-stage-label">Local design</strong><span id="mission-branch-label">External executor ready</span></div>
     </div>
     <div class="topbar-secondary-actions">
       <button id="feedback-toggle" class="quiet-command" type="button">Record finding</button>
@@ -480,6 +480,22 @@
       <button class="submit-button" type="submit">Start HARNESS</button>
     </form>
   </dialog>
+  <dialog id="handoff-dialog" class="command-dialog" aria-labelledby="handoff-dialog-title">
+    <form id="handoff-form" class="command-dialog-content">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">External execution</p><h2 id="handoff-dialog-title">Prepare handoff</h2></div>
+        <button type="button" id="handoff-close" class="icon-button" aria-label="Close">x</button>
+      </div>
+      <p>Graph Lab creates the contract and export package. The selected executor works in its own workspace.</p>
+      <label>Contract title<input id="handoff-title" type="text" required maxlength="120" value="Graph Lab change"></label>
+      <label>Objective<textarea id="handoff-objective" required placeholder="What should the external executor implement?"></textarea></label>
+      <label>Acceptance criteria<textarea id="handoff-criteria" required placeholder="One criterion per line"></textarea></label>
+      <label>Executor<select id="handoff-executor"><option value="manual">Manual / external runtime</option><option value="deepseek-harness">DeepSeek Harness (export only)</option></select></label>
+      <label>Verification commands<textarea id="handoff-commands" placeholder="One command per line"></textarea></label>
+      <p id="handoff-status" role="status"></p>
+      <div class="dialog-actions"><button id="handoff-cancel" type="button">Cancel</button><button class="submit-button" type="submit">Export handoff</button></div>
+    </form>
+  </dialog>
   <script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/lib/marked.umd.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@11.6.0/dist/mermaid.min.js" defer></script>
@@ -492,7 +508,7 @@
   <script src="/panel-layout.js" defer></script>
   <script src="/rich-render.js" defer></script>
   <script src="/mission-graph-state.js" defer></script>
-  <script src="/mission.js" defer></script>
+  <script src="/handoff.js" defer></script>
   <script src="/explore.js" defer></script>
   <script src="/diagrams.js" defer></script>
   <script src="/graph-projection.js" defer></script>

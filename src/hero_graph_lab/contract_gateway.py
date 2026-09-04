@@ -245,3 +245,48 @@ class HarnessContractGateway:
             maximum = properties[key].get("maxLength")
             if maximum is not None and len(value) > maximum:
                 raise ValueError(f"argument is too long: {key}")
+
+
+NEUTRAL_CONTRACT_TOOL_SPECS = (
+    {"name": "CreateIntentContract", "description": "Create a versioned Graph Lab intent contract.", "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}, "title": {"type": "string"}, "objective": {"type": "string"}, "requirements": {"type": "array"}, "acceptance_criteria": {"type": "array"}}, "required": ["title", "objective", "acceptance_criteria"], "additionalProperties": False}, "readOnly": False},
+    {"name": "GetContract", "description": "Read a Graph Lab contract.", "inputSchema": {"type": "object", "properties": {"contract_id": {"type": "string", "minLength": 1}}, "required": ["contract_id"], "additionalProperties": False}, "readOnly": True},
+    {"name": "ValidateContract", "description": "Validate a contract deterministically.", "inputSchema": {"type": "object", "properties": {"contract_id": {"type": "string", "minLength": 1}}, "required": ["contract_id"], "additionalProperties": False}, "readOnly": True},
+    {"name": "GetImpact", "description": "Analyze contract impact against the current graph.", "inputSchema": {"type": "object", "properties": {"contract_id": {"type": "string", "minLength": 1}}, "required": ["contract_id"], "additionalProperties": False}, "readOnly": True},
+    {"name": "ExportHandoff", "description": "Export a safe executor handoff without modifying source.", "inputSchema": {"type": "object", "properties": {"contract_id": {"type": "string", "minLength": 1}, "executor": {"type": "string"}, "instructions": {"type": "string"}, "commands": {"type": "array"}, "required_paths": {"type": "array"}, "required_relationships": {"type": "array"}}, "required": ["contract_id"], "additionalProperties": False}, "readOnly": False},
+    {"name": "RegisterExecution", "description": "Register an external execution by exporting its handoff.", "inputSchema": {"type": "object", "properties": {"contract_id": {"type": "string", "minLength": 1}, "executor": {"type": "string"}}, "required": ["contract_id"], "additionalProperties": False}, "readOnly": False},
+    {"name": "RecordExecutionEvidence", "description": "Record evidence returned by an external executor.", "inputSchema": {"type": "object", "properties": {"execution_id": {"type": "string", "minLength": 1}, "revision": {"type": "string"}, "changed_files": {"type": "array"}, "commands": {"type": "array"}, "notes": {"type": "string"}, "artifacts": {"type": "object"}}, "required": ["execution_id", "revision"], "additionalProperties": False}, "readOnly": False},
+    {"name": "ReconcileContract", "description": "Re-extract and reconcile contract expectations with the graph.", "inputSchema": {"type": "object", "properties": {"contract_id": {"type": "string", "minLength": 1}, "execution_id": {"type": "string", "minLength": 1}}, "required": ["contract_id", "execution_id"], "additionalProperties": False}, "readOnly": False},
+)
+
+
+class ContractGateway:
+    """MCP gateway for Graph Lab contracts, independent of any executor."""
+
+    def __init__(self, state) -> None:  # noqa: ANN001
+        self.state = state
+
+    def tool_specs(self) -> list[dict[str, Any]]:
+        return [{"name": spec["name"], "description": spec["description"], "inputSchema": spec["inputSchema"], "annotations": {"readOnlyHint": spec["readOnly"], "destructiveHint": False, "openWorldHint": False}} for spec in NEUTRAL_CONTRACT_TOOL_SPECS]
+
+    def execute(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        spec = next((item for item in NEUTRAL_CONTRACT_TOOL_SPECS if item["name"] == name), None)
+        if spec is None:
+            raise ValueError(f"unknown contract tool: {name}")
+        if not isinstance(arguments, dict):
+            raise ValueError("arguments must be a JSON object")
+        missing = [key for key in spec["inputSchema"].get("required", []) if key not in arguments]
+        if missing:
+            raise ValueError(f"missing argument: {missing[0]}")
+        if name == "CreateIntentContract":
+            return self.state.create_contract(arguments)
+        if name == "GetContract":
+            return self.state.get_contract(arguments["contract_id"])
+        if name == "ValidateContract":
+            return self.state.validate_contract(arguments["contract_id"])
+        if name == "GetImpact":
+            return {"contract_id": arguments["contract_id"], "graph": self.state.graph()}
+        if name in {"ExportHandoff", "RegisterExecution"}:
+            return self.state.export_handoff(arguments["contract_id"], arguments)
+        if name == "RecordExecutionEvidence":
+            return self.state.record_evidence(arguments["execution_id"], arguments)
+        return self.state.reconcile(arguments["contract_id"], arguments["execution_id"])

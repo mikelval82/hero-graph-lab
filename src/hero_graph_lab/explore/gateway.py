@@ -12,8 +12,9 @@ MCP_INSTRUCTIONS = (
     "Inspect the active Graph Lab project with graph and source tools. "
     "ProposeNode and ProposeRelation only stage reviewable browser-local design actions; "
     "they never edit source files or synchronize HARNESS. Save map remains explicit. "
-    "Contract tools read and advance the active HARNESS mission contract; acquire an execution "
-    "lease before editing with native workspace tools and complete only through verification."
+    "Graph Lab contract tools create and validate versioned intent contracts, export handoffs, "
+    "record external execution evidence, and reconcile the resulting graph. Graph Lab does not "
+    "start or govern an executor loop."
 )
 
 
