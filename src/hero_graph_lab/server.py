@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import subprocess
 import sys
 import threading
-from dataclasses import replace
 from datetime import UTC, datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -16,19 +13,8 @@ from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 from hero_graph_lab.architecture import ArchitectureScenarioService, ContractImpactAnalyzer
-from hero_graph_lab.contracts import (
-    ContractRepository,
-    ContractStatus,
-    ExecutionEvidence,
-    ExecutionRequest,
-    IntentContract,
-    ReconciliationResult,
-    SourceSnapshot,
-    VerificationPolicy,
-    validate_contract,
-    compile_design_contract,
-)
-from hero_graph_lab.contracts.serialization import dumps as contract_dumps, loads as contract_loads
+from hero_graph_lab.application import ContractService, ExecutionService
+from hero_graph_lab.contracts import ContractRepository
 from hero_graph_lab.extractor import extract_project_graph, project_source_files
 from hero_graph_lab.contract_gateway import ContractGateway, HarnessContractGateway
 from hero_graph_lab.explore import ExploreAssistantService, create_model_client
@@ -90,17 +76,14 @@ class LabState:
             lambda: self.fixture,
         )
         self.contract_impact = ContractImpactAnalyzer()
-        self.contract_repository = ContractRepository(self.fixture)
-        self.execution_registry = ExecutionRegistry(self.fixture)
-        self.execution_requests: dict[str, ExecutionRequest] = {}
-        self.execution_executors: dict[str, str] = {}
-        self.execution_evidence: dict[str, list[ExecutionEvidence]] = {}
         self.harness_host = harness_host
         self.project_selected = project_selected
         self._lock = threading.RLock()
         self._graph_cache: dict[str, Any] | None = None
         self._graph_fixture: Path | None = None
         self._graph_fingerprint: tuple[tuple[str, int, int], ...] | None = None
+        self.contracts = ContractService(self.fixture, self.graph)
+        self.executions = ExecutionService(self.fixture, self.contracts, self.graph)
         self.graph_tools = GraphToolGateway(lambda: self.fixture, self.graph)
         self.contract_tools = (
             HarnessContractGateway(harness_host)
@@ -114,29 +97,26 @@ class LabState:
             self.graph,
             tools=self.graph_tools.registry,
             contract_tools=self.chat_contract_tools,
-            execution_scope=self.codex_execution_scope,
-            execution_reporter=self.complete_codex_execution,
+            execution_scope=self.active_execution_scope,
+            execution_reporter=self.complete_agent_execution,
         )
 
+    @property
+    def contract_repository(self) -> ContractRepository:
+        """Compatibility facade for callers that still access the repository."""
+        return self.contracts.repository
+
+    @property
+    def execution_registry(self) -> ExecutionRegistry:
+        """Compatibility facade for callers that still access the registry."""
+        return self.executions.registry
+
+    def active_execution_scope(self) -> dict[str, object]:
+        return self.executions.active_scope()
+
     def codex_execution_scope(self) -> dict[str, object]:
-        active = [
-            contract for contract in self.contract_repository.list()
-            if contract.status in {ContractStatus.HANDED_OFF, ContractStatus.EXECUTING, ContractStatus.VERIFYING}
-        ]
-        if not active:
-            return {}
-        contract = active[-1]
-        targets = contract.metadata.get("targets", []) if isinstance(contract.metadata, dict) else []
-        allowed = {
-            str(item.get("target_path"))
-            for item in targets
-            if isinstance(item, dict) and item.get("target_path")
-        }
-        return {
-            "contract_id": contract.id,
-            "allowed_paths": sorted(allowed),
-            "verification_commands": [],
-        }
+        """Deprecated compatibility alias for the executor-neutral scope."""
+        return self.active_execution_scope()
 
     def graph(self) -> dict[str, Any]:
         with self._lock:
@@ -159,9 +139,8 @@ class LabState:
             self._graph_fixture = None
             self._graph_fingerprint = None
             self.graph_tools.reset()
-            self.contract_repository = ContractRepository(self.fixture)
-            self.execution_registry = ExecutionRegistry(self.fixture)
-            self.execution_executors = {}
+            self.contracts.set_project(self.fixture)
+            self.executions.set_project(self.fixture)
 
     def capabilities(self) -> dict[str, object]:
         return {
@@ -170,220 +149,45 @@ class LabState:
             "agent": {"provider": self.explore.client.provider, "model": self.explore.client.model},
             "contracts": True,
             "handoffs": True,
-            "executors": self.execution_registry.capabilities(),
+            "executors": self.executions.registry.capabilities(),
         }
 
     def list_contracts(self) -> list[dict[str, object]]:
-        return [json.loads(contract_dumps(item)) for item in self.contract_repository.list()]
+        return self.contracts.list()
 
     def create_contract(self, payload: dict[str, Any]) -> dict[str, object]:
-        contract = IntentContract(
-            id=str(payload.get("id") or uuid4()),
-            title=str(payload.get("title", "")),
-            objective=str(payload.get("objective", "")),
-            requirements=list(payload.get("requirements", [])),
-            acceptance_criteria=list(payload.get("acceptance_criteria", [])),
-            metadata=payload.get("metadata", {}) if isinstance(payload.get("metadata", {}), dict) else {},
-        )
-        contract = validate_contract(contract)
-        path = self.contract_repository.save(contract)
-        return json.loads(contract_dumps(contract)) | {"path": str(path)}
+        return self.contracts.create(payload)
 
     def create_contract_from_design(self, payload: dict[str, Any]) -> dict[str, object]:
-        graph = payload.get("graph") if isinstance(payload.get("graph"), dict) else self.graph()
-        contract = compile_design_contract(
-            graph,
-            title=str(payload.get("title", "Graph Lab design")),
-            objective=str(payload.get("objective", "Implement the accepted Graph Lab design")),
-            contract_id=str(payload.get("id")) if payload.get("id") else None,
-            acceptance_criteria=[str(item) for item in payload.get("acceptance_criteria", [])],
-        )
-        path = self.contract_repository.save(contract)
-        return json.loads(contract_dumps(contract)) | {"path": str(path), "compiled_from_design": True}
+        return self.contracts.compile_from_design(payload)
 
     def get_contract(self, contract_id: str) -> dict[str, object]:
-        return json.loads(contract_dumps(self.contract_repository.get(contract_id)))
+        return self.contracts.get(contract_id)
 
     def validate_contract(self, contract_id: str) -> dict[str, object]:
-        contract = validate_contract(self.contract_repository.get(contract_id))
-        self.contract_repository.save(contract)
-        return {"valid": True, "contract": json.loads(contract_dumps(contract))}
+        return self.contracts.validate(contract_id)
 
     def export_handoff(self, contract_id: str, payload: dict[str, Any]) -> dict[str, object]:
-        contract = validate_contract(self.contract_repository.get(contract_id))
-        policy = VerificationPolicy(
-            commands=[str(item) for item in payload.get("commands", [])],
-            required_paths=[str(item) for item in payload.get("required_paths", [])],
-            required_relationships=list(payload.get("required_relationships", [])),
-        )
-        snapshot = self._source_snapshot()
-        handed_off = replace(contract, status=ContractStatus.HANDED_OFF)
-        execution_id = str(payload.get("execution_id") or uuid4())
-        request = ExecutionRequest(handed_off, snapshot, policy, str(payload.get("instructions", "")), execution_id)
-        executor = self.execution_registry.get(str(payload.get("executor", "manual")))
-        receipt = executor.handoff(request)
-        self.contract_repository.save(replace(handed_off, status=receipt.status))
-        self.execution_requests[receipt.execution_id] = request
-        self.execution_executors[receipt.execution_id] = receipt.executor
-        return json.loads(contract_dumps(receipt))
+        return self.executions.export_handoff(contract_id, payload)
 
     def execution_status(self, execution_id: str) -> dict[str, object]:
-        request = self._request_for_execution(execution_id)
-        if request is None:
-            raise KeyError(execution_id)
-        executor_name = self.execution_executors.get(execution_id, "codex-mcp")
-        status = self.execution_registry.get(executor_name).status(execution_id)
-        if executor_name == "deepseek-dsh" and status.get("status") == ContractStatus.VERIFYING:
-            request = self._request_for_execution(execution_id)
-            if request is not None and not self.execution_evidence.get(execution_id):
-                self.record_evidence(
-                    execution_id,
-                    {
-                        "revision": self._git_revision(),
-                        "changed_files": self._changed_since_snapshot(request),
-                        "notes": str(status.get("output", "")),
-                        "artifacts": {"dsh_return_code": status.get("return_code")},
-                    },
-                )
-                status["reconciliation"] = self.reconcile(request.contract.id, execution_id)
-        return status | {"evidence": [json.loads(contract_dumps(item)) for item in self.execution_evidence.get(execution_id, [])]}
+        return self.executions.status(execution_id)
 
     def cancel_execution(self, execution_id: str) -> dict[str, object]:
-        request = self._request_for_execution(execution_id)
-        if request is None:
-            raise KeyError(execution_id)
-        executor_name = self.execution_executors.get(execution_id, "manual")
-        self.execution_registry.get(executor_name).cancel(execution_id)
-        self.contract_repository.save(replace(request.contract, status=ContractStatus.BLOCKED))
-        return self.execution_status(execution_id)
+        return self.executions.cancel(execution_id)
 
     def record_evidence(self, execution_id: str, payload: dict[str, Any]) -> dict[str, object]:
-        request = self._request_for_execution(execution_id)
-        if request is None:
-            raise KeyError(execution_id)
-        evidence = ExecutionEvidence(
-            execution_id,
-            str(payload.get("revision", "")),
-            [str(item) for item in payload.get("changed_files", [])],
-            list(payload.get("commands", [])),
-            str(payload.get("notes", "")),
-            payload.get("artifacts", {}) if isinstance(payload.get("artifacts", {}), dict) else {},
-        )
-        self.execution_evidence.setdefault(execution_id, []).append(evidence)
-        self.contract_repository.save(replace(request.contract, status=ContractStatus.VERIFYING))
-        target = self.fixture / ".graph-lab" / "evidence" / f"{execution_id}.json"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(contract_dumps(self.execution_evidence[execution_id]), encoding="utf-8")
-        return json.loads(contract_dumps(evidence))
+        return self.executions.record_evidence(execution_id, payload)
 
     def reconcile(self, contract_id: str, execution_id: str) -> dict[str, object]:
-        contract = self.contract_repository.get(contract_id)
-        request = self._request_for_execution(execution_id)
-        if request is None:
-            raise KeyError(execution_id)
-        graph = self.graph()
-        actual_paths = {str(node.get("source")) for node in graph.get("nodes", []) if node.get("source")}
-        targets = contract.metadata.get("targets", []) if isinstance(contract.metadata, dict) else []
-        required_paths = set(request.verification_policy.required_paths) | {
-            str(item.get("target_path")) for item in targets
-            if isinstance(item, dict) and item.get("target_path")
-        }
-        materialized = sorted(path for path in required_paths if self._path_is_present(path, actual_paths))
-        missing = sorted(path for path in required_paths if path not in materialized)
-        relationships = {(item.get("source"), item.get("target"), item.get("kind")) for item in graph.get("edges", [])}
-        divergent = [
-            str(item) for item in request.verification_policy.required_relationships
-            if isinstance(item, dict)
-            and (item.get("source"), item.get("target"), item.get("kind")) not in relationships
-        ]
-        changed = self._changed_since_snapshot(request)
-        unexpected = [
-            path for path in changed
-            if not path.startswith(".graph-lab/")
-            and not any(path == allowed or path.startswith(allowed.rstrip("/") + "/") for allowed in required_paths)
-        ]
-        divergent.extend(f"changed outside contract authority: {path}" for path in unexpected)
-        status = ContractStatus.MATERIALIZED if not missing and not divergent else ContractStatus.DIVERGENT
-        accepted = self._committed_paths(request, materialized)
-        metadata = dict(contract.metadata)
-        metadata["realized_paths"] = materialized
-        metadata["accepted_paths"] = accepted
-        result = ReconciliationResult(contract.id, status, materialized, missing, divergent)
-        self.contract_repository.save(replace(contract, status=status, metadata=metadata))
-        return json.loads(contract_dumps(result)) | {"accepted": accepted}
+        return self.executions.reconcile(contract_id, execution_id)
+
+    def complete_agent_execution(self, contract_id: str, notes: str) -> dict[str, Any]:
+        return self.executions.complete_agent_execution(contract_id, notes)
 
     def complete_codex_execution(self, contract_id: str, notes: str) -> dict[str, Any]:
-        candidates = [
-            request for request in self.execution_requests.values()
-            if request.contract.id == contract_id
-        ]
-        if not candidates:
-            raise KeyError(f"no execution handoff for contract: {contract_id}")
-        request = candidates[-1]
-        changed = self._changed_since_snapshot(request)
-        self.record_evidence(
-            request.execution_id,
-            {
-                "revision": self._git_revision(),
-                "changed_files": changed,
-                "notes": notes,
-            },
-        )
-        return self.reconcile(contract_id, request.execution_id)
-
-    @staticmethod
-    def _path_is_present(required: str, actual_paths: set[str]) -> bool:
-        normalized = required.strip().rstrip("/")
-        return normalized in actual_paths or any(path.startswith(normalized + "/") for path in actual_paths)
-
-    def _changed_since_snapshot(self, request: ExecutionRequest) -> list[str]:
-        current = self._source_snapshot().files
-        before = request.source_snapshot.files
-        return sorted(path for path in set(current) | set(before) if current.get(path) != before.get(path))
-
-    def _committed_paths(self, request: ExecutionRequest, materialized: list[str]) -> list[str]:
-        dirty = self._git_dirty_paths()
-        changed = set(self._changed_since_snapshot(request))
-        return sorted(path for path in materialized if path in changed and path not in dirty)
-
-    def _git_revision(self) -> str:
-        result = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.fixture, text=True, capture_output=True, check=False)
-        return result.stdout.strip() if result.returncode == 0 else ""
-
-    def _git_dirty_paths(self) -> set[str]:
-        result = subprocess.run(["git", "status", "--porcelain"], cwd=self.fixture, text=True, capture_output=True, check=False)
-        return {line[3:].strip().split(" -> ")[-1] for line in result.stdout.splitlines() if len(line) > 3} if result.returncode == 0 else set()
-
-    def _source_snapshot(self) -> SourceSnapshot:
-        files: dict[str, dict[str, object]] = {}
-        for path in project_source_files(self.fixture):
-            relative = path.name if self.fixture.is_file() else path.relative_to(self.fixture).as_posix()
-            content = path.read_bytes()
-            files[relative] = {"sha256": hashlib.sha256(content).hexdigest(), "size": len(content)}
-        return SourceSnapshot(self.graph().get("root", ""), self.graph(), files, datetime.now(UTC).isoformat())
-
-    def _request_for_execution(self, execution_id: str) -> ExecutionRequest | None:
-        request = self.execution_requests.get(execution_id)
-        if request is not None:
-            return request
-        handoff = self.fixture / ".graph-lab" / "handoffs" / execution_id
-        try:
-            contract_payload = contract_loads((handoff / "contract.json").read_text(encoding="utf-8"))
-            snapshot_payload = contract_loads((handoff / "source-snapshot.json").read_text(encoding="utf-8"))
-            policy_payload = contract_loads((handoff / "verification-policy.json").read_text(encoding="utf-8"))
-            contract_values = dict(contract_payload)
-            contract_values["status"] = ContractStatus(contract_payload.get("status", "DRAFT"))
-            contract = IntentContract(**contract_values)
-            request = ExecutionRequest(
-                contract,
-                SourceSnapshot(**snapshot_payload),
-                VerificationPolicy(**policy_payload),
-                execution_id=execution_id,
-            )
-        except (FileNotFoundError, OSError, TypeError, ValueError, json.JSONDecodeError):
-            return None
-        self.execution_requests[execution_id] = request
-        return request
+        """Deprecated compatibility alias for the executor-neutral completion path."""
+        return self.complete_agent_execution(contract_id, notes)
 
     @staticmethod
     def _source_fingerprint(fixture: Path) -> tuple[tuple[str, int, int], ...]:
@@ -462,7 +266,8 @@ class LabState:
         project = project_path.resolve()
         if not project.is_dir():
             raise ValueError(f"project folder not found: {project}")
-        self.harness_host.configure_project(project)
+        if self.harness_host is not None:
+            self.harness_host.configure_project(project)
         with self._lock:
             self.fixture = project
             self.project_selected = True
@@ -470,6 +275,8 @@ class LabState:
             self._graph_fixture = None
             self._graph_fingerprint = None
             self.graph_tools.reset()
+            self.contracts.set_project(project)
+            self.executions.set_project(project)
         return self.harness_status()
 
     def harness_status(self) -> dict[str, object]:
