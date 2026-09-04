@@ -7,6 +7,10 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from hero_graph_lab.markdown_adapter import (
+    MarkdownGraphAdapter,
+    MarkdownSource,
+)
 from hero_graph_lab.typescript_adapter import (
     SCRIPT_SOURCE_SUFFIXES,
     ScriptSource,
@@ -37,7 +41,7 @@ EXCLUDED_DIRECTORY_NAMES = frozenset(
     }
 )
 PROJECT_SOURCE_SUFFIXES = frozenset(
-    {".cjs", ".css", ".htm", ".html", ".js", ".jsx", ".mjs", ".py", ".ts", ".tsx"}
+    {".cjs", ".css", ".htm", ".html", ".js", ".jsx", ".md", ".mjs", ".py", ".ts", ".tsx"}
 )
 
 
@@ -220,13 +224,22 @@ def extract_python_graph(path: Path) -> dict[str, Any]:
 def extract_project_graph(path: Path) -> dict[str, Any]:
     if path.is_file():
         if path.suffix.lower() == ".py":
-            return PythonGraphExtractor(path).extract()
+            graph = PythonGraphExtractor(path).extract()
+            graph["root"] = f"module:{path.stem}"
+            return graph
         if path.suffix.lower() in SCRIPT_SOURCE_SUFFIXES:
             module_name = path.name[: -len(path.suffix)]
             graph = TypeScriptGraphAdapter().extract(
                 [ScriptSource(path, module_name, None, path.name)]
             )
             graph.update({"source": path.name, "root": f"module:{module_name}"})
+            return graph
+        if path.suffix.lower() == ".md":
+            module_name = path.name[: -len(path.suffix)]
+            graph = MarkdownGraphAdapter().extract(
+                [MarkdownSource(path, module_name, None, path.name)]
+            )
+            graph.update({"source": path.name, "root": f"document:{module_name}"})
             return graph
         return _extract_single_file(path)
     return _extract_python_package(path, include_project_files=True)
@@ -313,7 +326,11 @@ def _extract_python_package(path: Path, *, include_project_files: bool = False) 
         edges.extend(Edge(**edge) for edge in script_graph["edges"])
 
         for file in source_files:
-            if file.suffix.lower() == ".py" or file.suffix.lower() in SCRIPT_SOURCE_SUFFIXES:
+            if (
+                file.suffix.lower() == ".py"
+                or file.suffix.lower() in SCRIPT_SOURCE_SUFFIXES
+                or file.suffix.lower() == ".md"
+            ):
                 continue
             relative = file.relative_to(path)
             parent_id = add_package_path(relative.parent)
@@ -332,6 +349,34 @@ def _extract_python_package(path: Path, *, include_project_files: bool = False) 
                 )
             )
             edges.append(Edge(parent_id, node_id, "contains"))
+
+        markdown_sources: list[MarkdownSource] = []
+        for file in source_files:
+            if file.suffix.lower() != ".md":
+                continue
+            relative = file.relative_to(path)
+            module_name = ".".join((root_name, *relative.with_suffix("").parts))
+            markdown_sources.append(
+                MarkdownSource(
+                    file,
+                    module_name,
+                    add_package_path(relative.parent),
+                    relative.as_posix(),
+                )
+            )
+
+        phase_a_nodes = [asdict(node) for node in nodes]
+        document_graph = MarkdownGraphAdapter().extract(markdown_sources)
+        nodes.extend(Node(**node) for node in document_graph["nodes"])
+
+        reference_graph = MarkdownGraphAdapter().extract(
+            markdown_sources, observed_nodes=phase_a_nodes
+        )
+        edges.extend(
+            Edge(**edge)
+            for edge in reference_graph["edges"]
+            if edge["kind"] == "references"
+        )
 
     return {
         "source": root_name,
