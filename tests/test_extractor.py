@@ -42,7 +42,7 @@ class PythonGraphExtractorTest(TestCase):
             files = project_source_files(project)
             graph = extract_project_graph(project)
 
-        self.assertEqual(files, [python_file, javascript_file, page, stylesheet])
+        self.assertEqual(files, [project / "README.md", python_file, javascript_file, page, stylesheet])
         nodes = {node["id"]: node for node in graph["nodes"]}
         javascript_node = next(
             node
@@ -61,7 +61,9 @@ class PythonGraphExtractorTest(TestCase):
             {node["kind"] for node in nodes.values() if node["source"] in {"src/web/static/styles.css", "src/web/static/index.html"}},
             {"file"},
         )
-        self.assertNotIn("README.md", {node["source"] for node in nodes.values()})
+        readme_nodes = [node for node in nodes.values() if node["source"] == "README.md"]
+        self.assertEqual(len(readme_nodes), 1)
+        self.assertEqual(readme_nodes[0]["kind"], "document")
 
     def test_ignores_generated_and_virtual_environment_directories(self) -> None:
         with TemporaryDirectory() as directory:
