@@ -411,6 +411,9 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
                     self._send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
                 return
             if path == "/api/harness/status":
+                if state.harness_host is None:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
                 self._send_json(state.harness_status())
                 return
             if path == "/api/explore/status":
@@ -438,6 +441,9 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
                     self._send_json({"error": str(error)}, HTTPStatus.NOT_FOUND)
                 return
             if path.startswith("/api/harness/v1/"):
+                if state.harness_host is None:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
                 self._proxy_harness("GET", parsed)
                 return
             self._serve_static(path)
@@ -488,6 +494,9 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
                     self._send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
                 return
             if parsed.path == "/api/harness/start":
+                if state.harness_host is None:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
                 self._start_harness()
                 return
             if parsed.path == "/api/explore/sessions":
@@ -511,6 +520,9 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
                 self._send_explore_message(session_id)
                 return
             if parsed.path.startswith("/api/harness/v1/"):
+                if state.harness_host is None:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
                 self._proxy_harness("POST", parsed)
                 return
             if parsed.path != "/api/observations":
@@ -529,6 +541,9 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
         def do_PUT(self) -> None:
             parsed = urlparse(self.path)
             if parsed.path.startswith("/api/harness/v1/"):
+                if state.harness_host is None:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
                 self._proxy_harness("PUT", parsed)
                 return
             self.send_error(HTTPStatus.NOT_FOUND)
@@ -547,9 +562,11 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
             if path != "/api/harness":
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
-            if state.harness_host is not None:
-                state.harness_host.stop()
-                state.set_fixture(state.harness_host.project_dir)
+            if state.harness_host is None:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            state.harness_host.stop()
+            state.set_fixture(state.harness_host.project_dir)
             self._send_json({"running": False})
 
         def _send_explore_message(self, session_id: str) -> None:
