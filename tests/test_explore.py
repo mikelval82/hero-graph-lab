@@ -6,7 +6,7 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest import TestCase
 
-from hero_graph_lab.explore.clients import DeepSeekModelClient, FakeModelClient, GeminiModelClient
+from hero_graph_lab.explore.clients import DeepSeekModelClient, DshModelClient, FakeModelClient, GeminiModelClient, create_model_client
 from hero_graph_lab.explore.models import (
     ModelMessage,
     ModelRequest,
@@ -129,6 +129,50 @@ class ExploreAssistantTest(TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "DeepSeek request failed: TLS handshake failed"):
             client.complete(ModelRequest("Explore safely.", (), ()))
+
+    def test_dsh_runs_headless_profile_with_graph_lab_mcp_and_normalizes_output(self) -> None:
+        class FakeDsh:
+            def __init__(self) -> None:
+                self.started: dict = {}
+
+            def available(self) -> bool:
+                return True
+
+            def prepare_graph_lab_profile(self, **kwargs) -> str:  # noqa: ANN003
+                self.profile_options = kwargs
+                return "graph-lab"
+
+            def start(self, execution_id: str, prompt: str, **kwargs) -> object:  # noqa: ANN003
+                self.started = {"execution_id": execution_id, "prompt": prompt, **kwargs}
+                return object()
+
+            def wait(self, execution_id: str) -> dict:
+                return {
+                    "execution_id": execution_id,
+                    "status": "VERIFYING",
+                    "events": [
+                        {"type": "agent_progress", "text": "reasoning"},
+                        {"type": "agent_message_delta", "text": "Respuesta DSH."},
+                    ],
+                }
+
+        with TemporaryDirectory() as directory:
+            fake = FakeDsh()
+            client = DshModelClient(project_root=Path(directory), client=fake)  # type: ignore[arg-type]
+            events: list[dict] = []
+            response = client.complete(ModelRequest("System", (ModelMessage("user", "Hola"),), (), event_callback=events.append))
+
+        self.assertEqual(response.text, "Respuesta DSH.")
+        self.assertEqual(fake.started["profile"], "graph-lab")
+        self.assertIn("mcp__graph_lab__", fake.started["prompt"])
+        self.assertEqual(fake.started["environment_overrides"]["DSH_MODEL"], "deepseek-v4-flash")
+        self.assertTrue(any(event["type"] == "agent_message_delta" for event in events))
+
+    def test_factory_creates_dsh_provider(self) -> None:
+        with TemporaryDirectory() as directory:
+            client = create_model_client("dsh", project_root=Path(directory))
+
+        self.assertEqual(client.provider, "dsh")
 
     def test_when_gemini_request_fails_expect_runtime_error(self) -> None:
         def generate_content(**kwargs):  # noqa: ANN003, ANN202
@@ -322,7 +366,7 @@ class ExploreAssistantTest(TestCase):
         self.assertIn("PROPOSE MODE IS ACTIVE", client.requests[0].system_prompt)
         self.assertIn("MUST use ProposeNode", client.requests[0].system_prompt)
         self.assertIn("browser-local draft", client.requests[0].system_prompt)
-        self.assertIn("Save map", client.requests[0].system_prompt)
+        self.assertIn("executor handoff", client.requests[0].system_prompt)
         self.assertIn("Preserve every graph element kind explicitly requested", client.requests[0].system_prompt)
         self.assertIn("Do not substitute package for module", client.requests[0].system_prompt)
         self.assertIn("structured contract", client.requests[0].system_prompt)

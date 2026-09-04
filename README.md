@@ -1,17 +1,16 @@
 # HERO Graph Lab
 
 HERO Graph Lab is the visual workspace for understanding a codebase, designing
-changes and supervising implementation. It is the companion interface for
-[HERO HARNESS](https://github.com/mikelval82/hero-harness), which owns the
-mission workflow, approved contracts, execution evidence, verification and Git
-transitions.
+changes and preparing verifiable execution handoffs. It owns intent, design,
+versioned contracts, source snapshots, verification policy, evidence and
+reconciliation. Executors such as Codex, Claude Code, CI or
+[HERO HARNESS](https://github.com/mikelval82/hero-harness) consume those
+handoffs externally.
 
-The two applications remain independently usable and process-isolated. Graph
-Lab can explore code and prepare a local design without HARNESS; HARNESS can run
-missions from its own CLI and listeners without Graph Lab. When used together,
-Graph Lab starts a HARNESS worker subprocess and communicates with it only
-through authenticated loopback HTTP/JSON. Graph Lab has no HARNESS imports, and
-worker credentials never reach the browser.
+Graph Lab runs without HERO HARNESS installed and does not start executor
+subprocesses or create executor worktrees. The deprecated HARNESS bridge remains
+available only behind the explicit `--legacy-harness` option while integrations
+migrate to the neutral contract API.
 
 ## Run
 
@@ -30,57 +29,49 @@ not required.
 
 Open <http://127.0.0.1:8765>.
 
-To open a project directly and enable missions:
+To open a project directly:
 
 ```powershell
 .\.venv\Scripts\python.exe -m hero_graph_lab `
-	--mission-project C:\path\to\project `
-	--harness-root C:\path\to\HARNESS `
-	--harness-python C:\path\to\HARNESS\.venv\Scripts\python.exe
+	--mission-project C:\path\to\project
 ```
 
-`--mission-project` is both the initial graph source and the project bound to
-HARNESS. Without it, Graph Lab opens the fixture and requires **Open project**
-before a mission can start. Enter the absolute path of a folder on the machine
-running Graph Lab. Changing projects is only allowed while no worker is running.
+`--mission-project` is the initial graph source. Without it, Graph Lab opens the
+fixture and **Open project** can select an absolute local project folder.
+
+Use **Prepare handoff** to create and validate a contract, then export
+`.graph-lab/handoffs/<execution_id>/`. The package contains `contract.json`,
+`instructions.md`, `verification-policy.json` and `source-snapshot.json`.
 
 An empty selected folder is initialized as a Git repository with an initial
 commit. A non-empty folder that is not already a Git repository is rejected so
 Graph Lab cannot silently adopt existing files.
 
-## How Graph Lab and HARNESS work together
+## Neutral contract execution
 
-Graph Lab owns the interactive experience: it extracts the observed code graph,
-renders source and contracts, keeps reviewable design changes in a browser-local
-draft and gives the user explicit controls for synchronization and execution.
-HARNESS is the authority behind that experience: it stores approved design
-revisions, compiles ChangeSets and WorkPlans, publishes immutable task contracts,
-grants execution leases and decides completion from verifier evidence.
+Graph Lab extracts the observed code graph, renders source and contracts, keeps
+reviewable design changes in a browser-local draft, and exports a versioned
+handoff. The external executor owns its workspace, file changes, commands and
+runtime loop. Graph Lab records returned evidence and reconciles the graph.
 
 ```mermaid
 flowchart LR
     User[User] --> GraphLab[HERO Graph Lab]
     Codex[Codex through MCP] --> GraphLab
     GraphLab --> Draft[Explore and local design draft]
-    Draft -->|Save map| Worker[HARNESS worker]
-    Worker --> Contract[Approved brief, design and task contracts]
-    Contract --> Mission[Mission executor]
-    Contract --> Chat[Chat Implement]
-    Contract --> MCP[Codex MCP execution]
-    Mission --> Verify[Verification and reconciliation]
-    Chat --> Verify
-    MCP --> Verify
+    Draft --> Contract[Versioned Graph Lab contract]
+    Contract --> Handoff[Filesystem or MCP handoff]
+    Handoff --> Executor[External executor]
+    Executor --> Evidence[Execution evidence]
+    Evidence --> Verify[Re-extract and reconcile]
     Verify --> Project[Project source and Git]
     Project --> GraphLab
 ```
 
-The integration has one direction of authority. **Save map** sends the reviewed
-design draft to HARNESS; it does not make Graph Lab another contract store.
-Mission, Chat and MCP may take turns implementing an approved task, but HARNESS
-permits only one active execution lease for the mission. After implementation,
-HARNESS runs the common verifier and reconciliation; Graph Lab then refreshes
-the observed source graph and shows whether each contract is proposed,
-divergent or materialized.
+The neutral HTTP API exposes `/api/capabilities`, `/api/contracts`,
+`/api/executions` and reconciliation endpoints. Handoffs never modify source
+files and the built-in DeepSeek Harness adapter is export-only until a real
+external CLI/API integration is configured.
 
 ## Explore Assistant
 
@@ -153,23 +144,18 @@ diagnostics.
 
 The Add/Edit dialog, Explore chat, and `ProposeNode` MCP tool use the same
 contract vocabulary. Browser storage preserves the enriched local draft across
-reloads. **Save map** sends those fields unchanged to HARNESS, where approval,
-task slicing, execution leases, and verification remain authoritative.
+reloads. **Prepare handoff** stores a versioned contract and exports it for the
+selected external executor.
 
-**Implement** is a separate, explicit authorization mode. It is available only
-when HARNESS exposes an approved pending task contract and no Mission or MCP
-executor owns the lease. Chat must read that exact contract, acquire the lease,
-touch only contract-owned paths through hash-guarded patches, run the checks
-selected by HARNESS and finish by completing the task, reporting a blocker or
-requesting an amendment. Natural-language wording alone never enables source
-writes.
+Graph Lab never enables source writes from natural-language chat. External
+executors receive the handoff, work in their own workspace, and return evidence
+through `/api/executions/{id}/evidence`.
 
 ## Codex MCP tools
 
-Graph Lab can expose the same source, graph-query, proposal and active-contract
-control planes as an MCP STDIO server for local Codex clients. The browser
-Explore chat remains on its existing REST session API; both adapters use the
-same Graph Lab project, while HARNESS remains the authority for contract state.
+Graph Lab exposes source, graph-query, proposal, contract, handoff, evidence and
+reconciliation tools through the MCP STDIO server. The browser Explore chat
+remains on its existing REST session API; both adapters use the same project.
 
 Install the optional SDK dependency:
 
@@ -201,13 +187,9 @@ optional parent. Paths must be repository-relative. Callers should inspect the
 observed graph first and add an explicit justified relationship to current code;
 unknown contract details should be omitted and will remain visibly incomplete.
 
-When an approved mission is active, Codex can also list and retrieve immutable
-task contracts, acquire the `mcp` execution lease, validate, complete, report a
-blocker or request an amendment. Codex continues to edit and test with its
-native contained workspace tools; MCP supplies the pinned contract and records
-lifecycle evidence rather than exposing a second filesystem or unrestricted
-shell. Contract state is stored only by HARNESS and survives Graph Lab or MCP
-client restarts according to the worker mission state.
+MCP contract tools create and validate intent contracts, export handoffs, record
+external evidence and reconcile the resulting graph. They never expose an
+unrestricted shell or start an executor loop.
 
 The bridge accepts loopback HTTP URLs only. If Graph Lab is stopped, tool calls
 fail explicitly instead of extracting a different or stale project. Pending

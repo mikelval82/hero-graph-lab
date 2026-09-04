@@ -22,6 +22,7 @@ class GraphToolGatewayTest(TestCase):
         self.assertEqual(
             {tool["name"] for tool in tools},
             {
+                "GraphSnapshot",
                 "Read",
                 "Glob",
                 "Grep",
@@ -119,13 +120,13 @@ class GraphToolGatewayTest(TestCase):
         with self.assertRaisesRegex(ValueError, "target_path must be repository-relative"):
             self.gateway.execute(
                 "ProposeNode",
-                {"label": "Escape", "kind": "module", "target_path": "../escape.py"},
+                {"label": "Escape", "kind": "module", "parent_id": self.graph["nodes"][0]["id"], "target_path": "../escape.py"},
             )
 
         self.assertEqual(self.gateway.pending_proposals(), {"revision": 0, "items": []})
 
     def test_reset_discards_project_scoped_proposal_state(self) -> None:
-        self.gateway.execute("ProposeNode", {"label": "Draft", "kind": "module"})
+        self.gateway.execute("ProposeNode", {"label": "Draft", "kind": "module", "parent_id": self.graph["nodes"][0]["id"]})
 
         self.gateway.reset()
 

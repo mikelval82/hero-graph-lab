@@ -1,24 +1,41 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import subprocess
 import sys
 import threading
+from dataclasses import replace
 from datetime import UTC, datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 from hero_graph_lab.architecture import ArchitectureScenarioService, ContractImpactAnalyzer
+from hero_graph_lab.contracts import (
+    ContractRepository,
+    ContractStatus,
+    ExecutionEvidence,
+    ExecutionRequest,
+    IntentContract,
+    ReconciliationResult,
+    SourceSnapshot,
+    VerificationPolicy,
+    validate_contract,
+    compile_design_contract,
+)
+from hero_graph_lab.contracts.serialization import dumps as contract_dumps, loads as contract_loads
 from hero_graph_lab.extractor import extract_project_graph, project_source_files
-from hero_graph_lab.contract_gateway import HarnessContractGateway
+from hero_graph_lab.contract_gateway import ContractGateway, HarnessContractGateway
 from hero_graph_lab.explore import ExploreAssistantService, create_model_client
 from hero_graph_lab.explore.gateway import MCP_INSTRUCTIONS, GraphToolGateway
 from hero_graph_lab.explore.models import ModelClient
 from hero_graph_lab.harness_host import HarnessHostError, HarnessWorkerHost
+from hero_graph_lab.execution import ExecutionRegistry
 
 
 PROJECT_ROOT = Path(__file__).parents[2]
@@ -73,6 +90,11 @@ class LabState:
             lambda: self.fixture,
         )
         self.contract_impact = ContractImpactAnalyzer()
+        self.contract_repository = ContractRepository(self.fixture)
+        self.execution_registry = ExecutionRegistry(self.fixture)
+        self.execution_requests: dict[str, ExecutionRequest] = {}
+        self.execution_executors: dict[str, str] = {}
+        self.execution_evidence: dict[str, list[ExecutionEvidence]] = {}
         self.harness_host = harness_host
         self.project_selected = project_selected
         self._lock = threading.RLock()
@@ -80,19 +102,41 @@ class LabState:
         self._graph_fixture: Path | None = None
         self._graph_fingerprint: tuple[tuple[str, int, int], ...] | None = None
         self.graph_tools = GraphToolGateway(lambda: self.fixture, self.graph)
-        self.contract_tools = HarnessContractGateway(harness_host)
-        self.chat_contract_tools = HarnessContractGateway(
-            harness_host,
-            actor="chat",
-            include_chat_tools=True,
+        self.contract_tools = (
+            HarnessContractGateway(harness_host)
+            if harness_host is not None
+            else ContractGateway(self)
         )
+        self.chat_contract_tools = self.contract_tools
         self.explore = ExploreAssistantService(
-            explore_client or create_model_client("fake"),
+            explore_client or create_model_client("fake", project_root=self.fixture),
             lambda: self.fixture,
             self.graph,
             tools=self.graph_tools.registry,
             contract_tools=self.chat_contract_tools,
+            execution_scope=self.codex_execution_scope,
+            execution_reporter=self.complete_codex_execution,
         )
+
+    def codex_execution_scope(self) -> dict[str, object]:
+        active = [
+            contract for contract in self.contract_repository.list()
+            if contract.status in {ContractStatus.HANDED_OFF, ContractStatus.EXECUTING, ContractStatus.VERIFYING}
+        ]
+        if not active:
+            return {}
+        contract = active[-1]
+        targets = contract.metadata.get("targets", []) if isinstance(contract.metadata, dict) else []
+        allowed = {
+            str(item.get("target_path"))
+            for item in targets
+            if isinstance(item, dict) and item.get("target_path")
+        }
+        return {
+            "contract_id": contract.id,
+            "allowed_paths": sorted(allowed),
+            "verification_commands": [],
+        }
 
     def graph(self) -> dict[str, Any]:
         with self._lock:
@@ -115,6 +159,231 @@ class LabState:
             self._graph_fixture = None
             self._graph_fingerprint = None
             self.graph_tools.reset()
+            self.contract_repository = ContractRepository(self.fixture)
+            self.execution_registry = ExecutionRegistry(self.fixture)
+            self.execution_executors = {}
+
+    def capabilities(self) -> dict[str, object]:
+        return {
+            "executor_required": False,
+            "legacy_harness": self.harness_host is not None,
+            "agent": {"provider": self.explore.client.provider, "model": self.explore.client.model},
+            "contracts": True,
+            "handoffs": True,
+            "executors": self.execution_registry.capabilities(),
+        }
+
+    def list_contracts(self) -> list[dict[str, object]]:
+        return [json.loads(contract_dumps(item)) for item in self.contract_repository.list()]
+
+    def create_contract(self, payload: dict[str, Any]) -> dict[str, object]:
+        contract = IntentContract(
+            id=str(payload.get("id") or uuid4()),
+            title=str(payload.get("title", "")),
+            objective=str(payload.get("objective", "")),
+            requirements=list(payload.get("requirements", [])),
+            acceptance_criteria=list(payload.get("acceptance_criteria", [])),
+            metadata=payload.get("metadata", {}) if isinstance(payload.get("metadata", {}), dict) else {},
+        )
+        contract = validate_contract(contract)
+        path = self.contract_repository.save(contract)
+        return json.loads(contract_dumps(contract)) | {"path": str(path)}
+
+    def create_contract_from_design(self, payload: dict[str, Any]) -> dict[str, object]:
+        graph = payload.get("graph") if isinstance(payload.get("graph"), dict) else self.graph()
+        contract = compile_design_contract(
+            graph,
+            title=str(payload.get("title", "Graph Lab design")),
+            objective=str(payload.get("objective", "Implement the accepted Graph Lab design")),
+            contract_id=str(payload.get("id")) if payload.get("id") else None,
+            acceptance_criteria=[str(item) for item in payload.get("acceptance_criteria", [])],
+        )
+        path = self.contract_repository.save(contract)
+        return json.loads(contract_dumps(contract)) | {"path": str(path), "compiled_from_design": True}
+
+    def get_contract(self, contract_id: str) -> dict[str, object]:
+        return json.loads(contract_dumps(self.contract_repository.get(contract_id)))
+
+    def validate_contract(self, contract_id: str) -> dict[str, object]:
+        contract = validate_contract(self.contract_repository.get(contract_id))
+        self.contract_repository.save(contract)
+        return {"valid": True, "contract": json.loads(contract_dumps(contract))}
+
+    def export_handoff(self, contract_id: str, payload: dict[str, Any]) -> dict[str, object]:
+        contract = validate_contract(self.contract_repository.get(contract_id))
+        policy = VerificationPolicy(
+            commands=[str(item) for item in payload.get("commands", [])],
+            required_paths=[str(item) for item in payload.get("required_paths", [])],
+            required_relationships=list(payload.get("required_relationships", [])),
+        )
+        snapshot = self._source_snapshot()
+        handed_off = replace(contract, status=ContractStatus.HANDED_OFF)
+        execution_id = str(payload.get("execution_id") or uuid4())
+        request = ExecutionRequest(handed_off, snapshot, policy, str(payload.get("instructions", "")), execution_id)
+        executor = self.execution_registry.get(str(payload.get("executor", "manual")))
+        receipt = executor.handoff(request)
+        self.contract_repository.save(replace(handed_off, status=receipt.status))
+        self.execution_requests[receipt.execution_id] = request
+        self.execution_executors[receipt.execution_id] = receipt.executor
+        return json.loads(contract_dumps(receipt))
+
+    def execution_status(self, execution_id: str) -> dict[str, object]:
+        request = self._request_for_execution(execution_id)
+        if request is None:
+            raise KeyError(execution_id)
+        executor_name = self.execution_executors.get(execution_id, "codex-mcp")
+        status = self.execution_registry.get(executor_name).status(execution_id)
+        if executor_name == "deepseek-dsh" and status.get("status") == ContractStatus.VERIFYING:
+            request = self._request_for_execution(execution_id)
+            if request is not None and not self.execution_evidence.get(execution_id):
+                self.record_evidence(
+                    execution_id,
+                    {
+                        "revision": self._git_revision(),
+                        "changed_files": self._changed_since_snapshot(request),
+                        "notes": str(status.get("output", "")),
+                        "artifacts": {"dsh_return_code": status.get("return_code")},
+                    },
+                )
+                status["reconciliation"] = self.reconcile(request.contract.id, execution_id)
+        return status | {"evidence": [json.loads(contract_dumps(item)) for item in self.execution_evidence.get(execution_id, [])]}
+
+    def cancel_execution(self, execution_id: str) -> dict[str, object]:
+        request = self._request_for_execution(execution_id)
+        if request is None:
+            raise KeyError(execution_id)
+        executor_name = self.execution_executors.get(execution_id, "manual")
+        self.execution_registry.get(executor_name).cancel(execution_id)
+        self.contract_repository.save(replace(request.contract, status=ContractStatus.BLOCKED))
+        return self.execution_status(execution_id)
+
+    def record_evidence(self, execution_id: str, payload: dict[str, Any]) -> dict[str, object]:
+        request = self._request_for_execution(execution_id)
+        if request is None:
+            raise KeyError(execution_id)
+        evidence = ExecutionEvidence(
+            execution_id,
+            str(payload.get("revision", "")),
+            [str(item) for item in payload.get("changed_files", [])],
+            list(payload.get("commands", [])),
+            str(payload.get("notes", "")),
+            payload.get("artifacts", {}) if isinstance(payload.get("artifacts", {}), dict) else {},
+        )
+        self.execution_evidence.setdefault(execution_id, []).append(evidence)
+        self.contract_repository.save(replace(request.contract, status=ContractStatus.VERIFYING))
+        target = self.fixture / ".graph-lab" / "evidence" / f"{execution_id}.json"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(contract_dumps(self.execution_evidence[execution_id]), encoding="utf-8")
+        return json.loads(contract_dumps(evidence))
+
+    def reconcile(self, contract_id: str, execution_id: str) -> dict[str, object]:
+        contract = self.contract_repository.get(contract_id)
+        request = self._request_for_execution(execution_id)
+        if request is None:
+            raise KeyError(execution_id)
+        graph = self.graph()
+        actual_paths = {str(node.get("source")) for node in graph.get("nodes", []) if node.get("source")}
+        targets = contract.metadata.get("targets", []) if isinstance(contract.metadata, dict) else []
+        required_paths = set(request.verification_policy.required_paths) | {
+            str(item.get("target_path")) for item in targets
+            if isinstance(item, dict) and item.get("target_path")
+        }
+        materialized = sorted(path for path in required_paths if self._path_is_present(path, actual_paths))
+        missing = sorted(path for path in required_paths if path not in materialized)
+        relationships = {(item.get("source"), item.get("target"), item.get("kind")) for item in graph.get("edges", [])}
+        divergent = [
+            str(item) for item in request.verification_policy.required_relationships
+            if isinstance(item, dict)
+            and (item.get("source"), item.get("target"), item.get("kind")) not in relationships
+        ]
+        changed = self._changed_since_snapshot(request)
+        unexpected = [
+            path for path in changed
+            if not path.startswith(".graph-lab/")
+            and not any(path == allowed or path.startswith(allowed.rstrip("/") + "/") for allowed in required_paths)
+        ]
+        divergent.extend(f"changed outside contract authority: {path}" for path in unexpected)
+        status = ContractStatus.MATERIALIZED if not missing and not divergent else ContractStatus.DIVERGENT
+        accepted = self._committed_paths(request, materialized)
+        metadata = dict(contract.metadata)
+        metadata["realized_paths"] = materialized
+        metadata["accepted_paths"] = accepted
+        result = ReconciliationResult(contract.id, status, materialized, missing, divergent)
+        self.contract_repository.save(replace(contract, status=status, metadata=metadata))
+        return json.loads(contract_dumps(result)) | {"accepted": accepted}
+
+    def complete_codex_execution(self, contract_id: str, notes: str) -> dict[str, Any]:
+        candidates = [
+            request for request in self.execution_requests.values()
+            if request.contract.id == contract_id
+        ]
+        if not candidates:
+            raise KeyError(f"no execution handoff for contract: {contract_id}")
+        request = candidates[-1]
+        changed = self._changed_since_snapshot(request)
+        self.record_evidence(
+            request.execution_id,
+            {
+                "revision": self._git_revision(),
+                "changed_files": changed,
+                "notes": notes,
+            },
+        )
+        return self.reconcile(contract_id, request.execution_id)
+
+    @staticmethod
+    def _path_is_present(required: str, actual_paths: set[str]) -> bool:
+        normalized = required.strip().rstrip("/")
+        return normalized in actual_paths or any(path.startswith(normalized + "/") for path in actual_paths)
+
+    def _changed_since_snapshot(self, request: ExecutionRequest) -> list[str]:
+        current = self._source_snapshot().files
+        before = request.source_snapshot.files
+        return sorted(path for path in set(current) | set(before) if current.get(path) != before.get(path))
+
+    def _committed_paths(self, request: ExecutionRequest, materialized: list[str]) -> list[str]:
+        dirty = self._git_dirty_paths()
+        changed = set(self._changed_since_snapshot(request))
+        return sorted(path for path in materialized if path in changed and path not in dirty)
+
+    def _git_revision(self) -> str:
+        result = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.fixture, text=True, capture_output=True, check=False)
+        return result.stdout.strip() if result.returncode == 0 else ""
+
+    def _git_dirty_paths(self) -> set[str]:
+        result = subprocess.run(["git", "status", "--porcelain"], cwd=self.fixture, text=True, capture_output=True, check=False)
+        return {line[3:].strip().split(" -> ")[-1] for line in result.stdout.splitlines() if len(line) > 3} if result.returncode == 0 else set()
+
+    def _source_snapshot(self) -> SourceSnapshot:
+        files: dict[str, dict[str, object]] = {}
+        for path in project_source_files(self.fixture):
+            relative = path.name if self.fixture.is_file() else path.relative_to(self.fixture).as_posix()
+            content = path.read_bytes()
+            files[relative] = {"sha256": hashlib.sha256(content).hexdigest(), "size": len(content)}
+        return SourceSnapshot(self.graph().get("root", ""), self.graph(), files, datetime.now(UTC).isoformat())
+
+    def _request_for_execution(self, execution_id: str) -> ExecutionRequest | None:
+        request = self.execution_requests.get(execution_id)
+        if request is not None:
+            return request
+        handoff = self.fixture / ".graph-lab" / "handoffs" / execution_id
+        try:
+            contract_payload = contract_loads((handoff / "contract.json").read_text(encoding="utf-8"))
+            snapshot_payload = contract_loads((handoff / "source-snapshot.json").read_text(encoding="utf-8"))
+            policy_payload = contract_loads((handoff / "verification-policy.json").read_text(encoding="utf-8"))
+            contract_values = dict(contract_payload)
+            contract_values["status"] = ContractStatus(contract_payload.get("status", "DRAFT"))
+            contract = IntentContract(**contract_values)
+            request = ExecutionRequest(
+                contract,
+                SourceSnapshot(**snapshot_payload),
+                VerificationPolicy(**policy_payload),
+                execution_id=execution_id,
+            )
+        except (FileNotFoundError, OSError, TypeError, ValueError, json.JSONDecodeError):
+            return None
+        self.execution_requests[execution_id] = request
+        return request
 
     @staticmethod
     def _source_fingerprint(fixture: Path) -> tuple[tuple[str, int, int], ...]:
@@ -188,8 +457,6 @@ class LabState:
         return observation
 
     def select_project(self, project_path: Path) -> dict[str, object]:
-        if self.harness_host is None:
-            raise HarnessHostError("harness is not configured")
         if not project_path.is_absolute():
             raise ValueError("project path must be absolute")
         project = project_path.resolve()
@@ -233,6 +500,25 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
             if path == "/api/graph":
                 self._send_json(state.graph())
                 return
+            if path == "/api/capabilities":
+                self._send_json(state.capabilities())
+                return
+            if path == "/api/contracts":
+                self._send_json({"contracts": state.list_contracts()})
+                return
+            contract_id = self._contract_id(path)
+            if contract_id:
+                if contract_id.startswith("execution:"):
+                    try:
+                        self._send_json(state.execution_status(contract_id.removeprefix("execution:")))
+                    except KeyError:
+                        self._send_json({"error": "execution_not_found"}, HTTPStatus.NOT_FOUND)
+                    return
+                try:
+                    self._send_json(state.get_contract(contract_id))
+                except (KeyError, FileNotFoundError):
+                    self._send_json({"error": "contract_not_found"}, HTTPStatus.NOT_FOUND)
+                return
             if path == "/api/source":
                 self._send_json(state.source())
                 return
@@ -252,6 +538,9 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
                     self._send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
                 return
             if path == "/api/harness/status":
+                if state.harness_host is None:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
                 self._send_json(state.harness_status())
                 return
             if path == "/api/explore/status":
@@ -271,6 +560,10 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
             if path == "/api/mcp/proposals":
                 self._send_json(state.graph_tools.pending_proposals())
                 return
+            events_session_id = self._explore_events_session_id(parsed.path)
+            if events_session_id:
+                self._send_explore_events(events_session_id, parse_qs(parsed.query))
+                return
             session_id = self._explore_session_id(path)
             if session_id:
                 try:
@@ -279,6 +572,9 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
                     self._send_json({"error": str(error)}, HTTPStatus.NOT_FOUND)
                 return
             if path.startswith("/api/harness/v1/"):
+                if state.harness_host is None:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
                 self._proxy_harness("GET", parsed)
                 return
             self._serve_static(path)
@@ -288,7 +584,56 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
             if parsed.path == "/api/project/select":
                 self._select_project()
                 return
+            if parsed.path == "/api/contracts":
+                try:
+                    self._send_json(state.create_contract(self._read_json()), HTTPStatus.CREATED)
+                except (ValueError, json.JSONDecodeError) as error:
+                    self._send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+                return
+            if parsed.path == "/api/contracts/from-design":
+                try:
+                    self._send_json(state.create_contract_from_design(self._read_json()), HTTPStatus.CREATED)
+                except (ValueError, json.JSONDecodeError) as error:
+                    self._send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+                return
+            contract_action = self._contract_action(parsed.path)
+            if contract_action:
+                contract_id, action = contract_action
+                try:
+                    payload = self._read_json()
+                    if action == "validate":
+                        result = state.validate_contract(contract_id)
+                    elif action == "handoff":
+                        result = state.export_handoff(contract_id, payload)
+                    elif action == "reconcile":
+                        result = state.reconcile(contract_id, str(payload.get("execution_id", contract_id)))
+                    else:
+                        raise ValueError("unknown contract action")
+                except KeyError:
+                    self._send_json({"error": "contract_not_found"}, HTTPStatus.NOT_FOUND)
+                    return
+                except (ValueError, json.JSONDecodeError) as error:
+                    self._send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+                    return
+                self._send_json(result)
+                return
+            execution_action = self._execution_action(parsed.path)
+            if execution_action:
+                execution_id, action = execution_action
+                if action != "evidence":
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
+                try:
+                    self._send_json(state.record_evidence(execution_id, self._read_json()), HTTPStatus.CREATED)
+                except KeyError:
+                    self._send_json({"error": "execution_not_found"}, HTTPStatus.NOT_FOUND)
+                except (ValueError, json.JSONDecodeError) as error:
+                    self._send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+                return
             if parsed.path == "/api/harness/start":
+                if state.harness_host is None:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
                 self._start_harness()
                 return
             if parsed.path == "/api/explore/sessions":
@@ -307,11 +652,17 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
             if parsed.path == "/api/mcp/proposals/ack":
                 self._acknowledge_mcp_proposals()
                 return
+            if parsed.path == "/api/mcp/design":
+                self._sync_mcp_design()
+                return
             session_id = self._explore_message_session_id(parsed.path)
             if session_id:
                 self._send_explore_message(session_id)
                 return
             if parsed.path.startswith("/api/harness/v1/"):
+                if state.harness_host is None:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
                 self._proxy_harness("POST", parsed)
                 return
             if parsed.path != "/api/observations":
@@ -330,6 +681,9 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
         def do_PUT(self) -> None:
             parsed = urlparse(self.path)
             if parsed.path.startswith("/api/harness/v1/"):
+                if state.harness_host is None:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
                 self._proxy_harness("PUT", parsed)
                 return
             self.send_error(HTTPStatus.NOT_FOUND)
@@ -345,18 +699,27 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
                     return
                 self._send_json({"deleted": True})
                 return
+            execution_id = self._execution_id(path)
+            if execution_id:
+                try:
+                    self._send_json(state.cancel_execution(execution_id))
+                except KeyError:
+                    self._send_json({"error": "execution_not_found"}, HTTPStatus.NOT_FOUND)
+                return
             if path != "/api/harness":
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
-            if state.harness_host is not None:
-                state.harness_host.stop()
-                state.set_fixture(state.harness_host.project_dir)
+            if state.harness_host is None:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            state.harness_host.stop()
+            state.set_fixture(state.harness_host.project_dir)
             self._send_json({"running": False})
 
         def _send_explore_message(self, session_id: str) -> None:
             try:
                 payload = self._read_json(max_bytes=128_000)
-                response = state.explore.send_message(
+                response = state.explore.start_message(
                     session_id,
                     str(payload.get("message", "")),
                     payload.get("context") if isinstance(payload.get("context"), dict) else {},
@@ -371,6 +734,33 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
                 self._send_json({"error": str(error)}, HTTPStatus.BAD_GATEWAY)
                 return
             self._send_json(response)
+
+        def _send_explore_events(self, session_id: str, query: dict[str, list[str]]) -> None:
+            try:
+                after = int((query.get("after") or ["0"])[0])
+            except ValueError:
+                self._send_json({"error": "invalid event cursor"}, HTTPStatus.BAD_REQUEST)
+                return
+            try:
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+                self.send_header("Cache-Control", "no-cache, no-store")
+                self.send_header("Connection", "keep-alive")
+                self.end_headers()
+                while True:
+                    events = state.explore.events_since(session_id, after, timeout=20.0)
+                    finished = False
+                    for event in events:
+                        self.wfile.write(f"id: {event['id']}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n".encode("utf-8"))
+                        self.wfile.flush()
+                        after = int(event["id"])
+                        finished = finished or event["type"] in {"agent_completed", "agent_failed"}
+                    if finished:
+                        return
+                    self.wfile.write(b": keepalive\n\n")
+                    self.wfile.flush()
+            except (KeyError, BrokenPipeError, ConnectionResetError):
+                return
 
         def _capture_scenario(self) -> None:
             try:
@@ -408,7 +798,14 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
                 arguments = payload.get("arguments", {})
                 if not isinstance(arguments, dict):
                     raise ValueError("arguments must be a JSON object")
-                gateway = state.contract_tools if tool_name.startswith("Contract") else state.graph_tools
+                contract_tool_names = {
+                    spec["name"] for spec in state.contract_tools.tool_specs()
+                }
+                gateway = (
+                    state.contract_tools
+                    if tool_name in contract_tool_names
+                    else state.graph_tools
+                )
                 result = gateway.execute(tool_name, arguments)
             except (OSError, ValueError, json.JSONDecodeError) as error:
                 self._send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
@@ -427,6 +824,45 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
                 return
             self._send_json(result)
 
+        def _sync_mcp_design(self) -> None:
+            try:
+                payload = self._read_json(max_bytes=128_000)
+                state.graph_tools.set_design_overlay(
+                    payload.get("nodes", []), payload.get("edges", [])
+                )
+            except (ValueError, json.JSONDecodeError) as error:
+                self._send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+                return
+            self._send_json({"ok": True})
+
+        @staticmethod
+        def _contract_id(path: str) -> str | None:
+            segments = path.strip("/").split("/")
+            if len(segments) == 3 and segments[:2] == ["api", "contracts"]:
+                return segments[2]
+            if len(segments) == 3 and segments[:2] == ["api", "executions"]:
+                return f"execution:{segments[2]}"
+            return None
+
+        @staticmethod
+        def _contract_action(path: str) -> tuple[str, str] | None:
+            segments = path.strip("/").split("/")
+            if len(segments) == 4 and segments[:2] == ["api", "contracts"]:
+                return segments[2], segments[3]
+            return None
+
+        @staticmethod
+        def _execution_action(path: str) -> tuple[str, str] | None:
+            segments = path.strip("/").split("/")
+            if len(segments) == 4 and segments[:2] == ["api", "executions"]:
+                return segments[2], segments[3]
+            return None
+
+        @staticmethod
+        def _execution_id(path: str) -> str | None:
+            segments = path.strip("/").split("/")
+            return segments[2] if len(segments) == 3 and segments[:2] == ["api", "executions"] else None
+
         @staticmethod
         def _mcp_tool_name(path: str) -> str | None:
             segments = path.strip("/").split("/")
@@ -436,6 +872,11 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
         def _explore_session_id(path: str) -> str | None:
             segments = path.strip("/").split("/")
             return segments[3] if len(segments) == 4 and segments[:3] == ["api", "explore", "sessions"] else None
+
+        @staticmethod
+        def _explore_events_session_id(path: str) -> str | None:
+            segments = path.strip("/").split("/")
+            return segments[3] if len(segments) == 5 and segments[:3] == ["api", "explore", "sessions"] and segments[4] == "events" else None
 
         @staticmethod
         def _explore_message_session_id(path: str) -> str | None:
@@ -564,32 +1005,31 @@ def main() -> None:
     parser.add_argument("--fixture", default=DEFAULT_FIXTURE, type=Path)
     parser.add_argument("--state", default=DEFAULT_STATE, type=Path)
     parser.add_argument("--mission-project", type=Path)
-    parser.add_argument("--harness-root", default=detect_harness_root(), type=Path)
-    parser.add_argument("--harness-python", type=Path)
+    parser.add_argument("--legacy-harness", action="store_true", help="Enable the deprecated HARNESS bridge")
     parser.add_argument(
         "--explore-provider",
-        choices=("fake", "anthropic", "openai", "deepseek", "gemini"),
-        default="fake",
+        choices=("codex", "dsh", "fake", "anthropic", "openai", "deepseek", "gemini"),
+        default="codex",
     )
     parser.add_argument("--explore-model")
     args = parser.parse_args()
 
     mission_project = initial_project(args.fixture, args.mission_project)
-    harness_python = args.harness_python or detect_harness_python(args.harness_root)
-    if harness_python is None:
-        candidate = args.harness_root / ".venv" / "Scripts" / "python.exe"
-        harness_python = candidate if candidate.is_file() else Path(sys.executable)
-    harness_host = HarnessWorkerHost(
-        project_dir=mission_project,
-        harness_root=args.harness_root,
-        python_executable=harness_python,
-    )
+    harness_host = None
+    if args.legacy_harness:
+        harness_root = detect_harness_root()
+        harness_python = detect_harness_python(harness_root) or Path(sys.executable)
+        harness_host = HarnessWorkerHost(
+            project_dir=mission_project,
+            harness_root=harness_root,
+            python_executable=harness_python,
+        )
     state = LabState(
         mission_project,
         args.state,
         harness_host,
         project_selected=args.mission_project is not None,
-        explore_client=create_model_client(args.explore_provider, args.explore_model),
+        explore_client=create_model_client(args.explore_provider, args.explore_model, project_root=mission_project),
     )
     server = ThreadingHTTPServer((args.host, args.port), make_handler(state))
     print(f"HERO graph lab: http://{args.host}:{args.port}")
@@ -598,6 +1038,9 @@ def main() -> None:
     except KeyboardInterrupt:
         pass
     finally:
+        if harness_host is None:
+            server.server_close()
+            return
         harness_host.stop()
         server.server_close()
 

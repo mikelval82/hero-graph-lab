@@ -1,10 +1,15 @@
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 
+from hero_graph_lab.explore.tools import ExploreToolRegistry, GraphIndex, ToolEnvironment
+
 from hero_graph_lab.extractor import (
+    Edge,
     extract_project_graph,
     extract_python_graph,
+    merge_markdown_containment_edges,
     project_source_files,
     python_source_files,
 )
@@ -14,6 +19,78 @@ FIXTURE = Path(__file__).parents[1] / "fixtures" / "order_service.py"
 
 
 class PythonGraphExtractorTest(TestCase):
+    def test_markdown_containment_integration(self) -> None:
+        with TemporaryDirectory() as directory:
+            project = Path(directory) / "project"
+            project.mkdir()
+            (project / "service.py").write_text(
+                "class Service:\n    pass\n",
+                encoding="utf-8",
+            )
+            (project / "README.md").write_text(
+                "# Project\n\nSee `Service` for details.\n",
+                encoding="utf-8",
+            )
+
+            graph = extract_project_graph(project)
+
+        nodes = {node["id"]: node for node in graph["nodes"]}
+        document_id = "document:project.README"
+        service_id = "class:project.service.Service"
+        self.assertIn(document_id, nodes)
+        self.assertIn(service_id, nodes)
+        self.assertIn(
+            {"source": "package:project", "target": document_id, "kind": "contains"},
+            graph["edges"],
+        )
+        self.assertIn(
+            {"source": document_id, "target": service_id, "kind": "references"},
+            graph["edges"],
+        )
+
+        environment = ToolEnvironment(project.resolve(), GraphIndex(graph))
+        registry = ExploreToolRegistry()
+        neighbors = json.loads(
+            registry.execute(
+                "GraphNeighbors",
+                {"node_id": "package:project", "direction": "outgoing", "relation": "contains"},
+                environment,
+            )
+        )
+        scope = json.loads(
+            registry.execute("GraphScope", {"node_id": "package:project", "depth": 1}, environment)
+        )
+
+        self.assertIn(document_id, {node["id"] for node in neighbors["neighbors"]})
+        self.assertIn(document_id, {node["id"] for node in scope["nodes"]})
+
+    def test_merge_markdown_containment_edges_deduplicates_preserves_order_and_excludes_references(self) -> None:
+        existing = [
+            Edge("package:project", "document:existing", "contains"),
+            Edge("document:existing", "function:run", "references"),
+        ]
+        document_edges = [
+            {"source": "package:project", "target": "document:existing", "kind": "contains"},
+            {"source": "package:project", "target": "document:first", "kind": "contains"},
+            {"source": "document:first", "target": "function:run", "kind": "references"},
+            {"source": "package:project", "target": "document:second", "kind": "contains"},
+            {"source": "package:project", "target": "document:first", "kind": "contains"},
+        ]
+
+        result = existing
+        merge_markdown_containment_edges(document_edges, result)
+
+        self.assertIs(result, existing)
+        self.assertEqual(
+            result,
+            [
+                Edge("package:project", "document:existing", "contains"),
+                Edge("document:existing", "function:run", "references"),
+                Edge("package:project", "document:first", "contains"),
+                Edge("package:project", "document:second", "contains"),
+            ],
+        )
+
     def test_single_python_project_graph_always_exposes_module_root(self) -> None:
         with TemporaryDirectory() as directory:
             path = Path(directory) / "service.py"

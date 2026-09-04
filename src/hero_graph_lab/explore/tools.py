@@ -278,19 +278,35 @@ def _propose_node(arguments: dict[str, Any], environment: ToolEnvironment) -> di
     if kind not in PROPOSAL_NODE_KINDS:
         raise ValueError(f"unsupported node kind: {kind}")
     parent_id = arguments.get("parent_id")
+    if kind != "package" and not parent_id:
+        raise ValueError("parent_id is required for non-package proposals")
     if parent_id is not None:
         parent_id = str(parent_id)
         if not environment.has_node(parent_id):
             raise ValueError(f"unknown parent node: {parent_id}")
+    label = _required_text(arguments, "label", 80)
+    target_path = _target_path(arguments)
+    qualified_name = _optional_text(arguments, "qualified_name", 500)
+    for existing in environment.graph.nodes.values():
+        if existing.get("status") == "removed" or existing.get("kind") != kind:
+            continue
+        same_target = target_path and existing.get("target_path") == target_path
+        same_identity = (
+            existing.get("label") == label
+            and (existing.get("parent") or None) == parent_id
+            and (existing.get("qualified_name") or "") == qualified_name
+        )
+        if same_target or same_identity:
+            return {"op": "already_exists", "node_id": existing["id"], "message": "equivalent proposal already exists"}
     action = {
         "op": "add_node",
         "node_id": f"agent-proposal:{uuid4()}",
-        "label": _required_text(arguments, "label", 80),
+        "label": label,
         "kind": kind,
         "parent_id": parent_id,
         "description": _optional_text(arguments, "description", 2000),
-        "target_path": _target_path(arguments),
-        "qualified_name": _optional_text(arguments, "qualified_name", 500),
+        "target_path": target_path,
+        "qualified_name": qualified_name,
         "signature": _optional_text(arguments, "signature", 1000),
         "docstring": _optional_text(arguments, "docstring", 2000),
         "satisfies": _text_list(arguments, "satisfies"),
@@ -313,6 +329,14 @@ def _propose_relation(arguments: dict[str, Any], environment: ToolEnvironment) -
     kind = str(arguments["kind"])
     if kind not in PROPOSAL_RELATION_KINDS:
         raise ValueError(f"unsupported relationship kind: {kind}")
+    if any(
+        edge.get("status") != "removed"
+        and edge.get("source") == source_id
+        and edge.get("target") == target_id
+        and edge.get("kind") == kind
+        for edge in environment.graph.edges
+    ):
+        return {"op": "already_exists", "source_id": source_id, "target_id": target_id, "kind": kind, "message": "equivalent relationship already exists"}
     properties = arguments.get("properties", {})
     if not isinstance(properties, dict):
         raise ValueError("properties must be an object")
@@ -339,6 +363,6 @@ def _default_tools() -> list[ExploreTool]:
         ExploreTool(ToolSpec("GraphNeighbors", "Get incoming/outgoing neighboring nodes and relationships.", _schema({"node_id": {"type": "string"}, "direction": {"type": "string", "enum": ["incoming", "outgoing", "both"]}, "relation": {"type": "string"}}, ["node_id"])), _graph_neighbors),
         ExploreTool(ToolSpec("GraphPath", "Find the shortest undirected path between two graph nodes.", _schema({"source_id": {"type": "string"}, "target_id": {"type": "string"}, "relation": {"type": "string"}}, ["source_id", "target_id"])), _graph_path),
         ExploreTool(ToolSpec("GraphScope", "Return a containment subtree from a graph node.", _schema({"node_id": {"type": "string"}, "depth": {"type": "integer"}}, ["node_id"])), _graph_scope),
-        ExploreTool(ToolSpec("ProposeNode", "Emit a reviewable structured node contract for the browser-local design draft. Include justified interface, behavior, and target metadata; this tool does not edit source files or synchronize the map to HARNESS.", _schema({"label": {"type": "string"}, "kind": {"type": "string", "enum": sorted(PROPOSAL_NODE_KINDS)}, "parent_id": {"type": "string"}, "description": {"type": "string"}, "target_path": {"type": "string"}, "qualified_name": {"type": "string"}, "signature": {"type": "string"}, "docstring": {"type": "string"}, "satisfies": {"type": "array", "items": {"type": "string"}}, "acceptance": {"type": "array", "items": {"type": "string"}}}, ["label", "kind"])), _propose_node),
-        ExploreTool(ToolSpec("ProposeRelation", "Emit a reviewable relationship proposal for the browser-local design draft. This tool does not edit source files or synchronize the map to HARNESS.", _schema({"source_id": {"type": "string"}, "target_id": {"type": "string"}, "kind": {"type": "string", "enum": sorted(PROPOSAL_RELATION_KINDS)}, "label": {"type": "string"}, "properties": {"type": "object"}}, ["source_id", "target_id", "kind"])), _propose_relation),
+        ExploreTool(ToolSpec("ProposeNode", "Emit a reviewable structured node contract for the browser-local design draft. Include justified interface, behavior, and target metadata; this tool does not edit source files or the workspace.", _schema({"label": {"type": "string"}, "kind": {"type": "string", "enum": sorted(PROPOSAL_NODE_KINDS)}, "parent_id": {"type": "string"}, "description": {"type": "string"}, "target_path": {"type": "string"}, "qualified_name": {"type": "string"}, "signature": {"type": "string"}, "docstring": {"type": "string"}, "satisfies": {"type": "array", "items": {"type": "string"}}, "acceptance": {"type": "array", "items": {"type": "string"}}}, ["label", "kind"])), _propose_node),
+        ExploreTool(ToolSpec("ProposeRelation", "Emit a reviewable relationship proposal for the browser-local design draft. This tool does not edit source files or the workspace.", _schema({"source_id": {"type": "string"}, "target_id": {"type": "string"}, "kind": {"type": "string", "enum": sorted(PROPOSAL_RELATION_KINDS)}, "label": {"type": "string"}, "properties": {"type": "object"}}, ["source_id", "target_id", "kind"])), _propose_relation),
     ]

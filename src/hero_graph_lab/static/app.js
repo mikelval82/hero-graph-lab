@@ -40,6 +40,7 @@ const state = {
   nodeById: new Map(),
   childrenByParent: new Map(),
 };
+globalThis.heroGraphLabState = state;
 const graphElement = document.querySelector("#graph");
 const edgeLayer = document.querySelector("#edges");
 const edgeLabelLayer = document.querySelector("#edge-labels");
@@ -1353,7 +1354,7 @@ function renderProposalContract(node) {
   document.querySelector("#code-meta").textContent = `${normalized.target_path || "No target path"} / proposed interface, not source code`;
   const statusElement = document.querySelector("#code-status");
   statusElement.className = `code-status ${normalized.status || "proposed"}`;
-  statusElement.textContent = { proposed: "NEW", modified: "EDIT", accepted: "ACCEPTED" }[normalized.status] || "NEW";
+  statusElement.textContent = { proposed: "NEW", modified: "EDIT", materialized: "DONE", accepted: "ACCEPTED" }[normalized.status] || "NEW";
   statusElement.hidden = false;
   setCodeSearchAvailable(false);
 
@@ -1445,7 +1446,7 @@ function renderCodePanel(node = graphNode(state.selected)) {
   const status = node.status || "observed";
   const statusElement = document.querySelector("#code-status");
   statusElement.className = `code-status ${status}`;
-  statusElement.textContent = { observed: "CODE", proposed: "NEW", modified: "EDIT", removed: "DELETE", accepted: "ACCEPTED" }[status];
+  statusElement.textContent = { observed: "CODE", proposed: "NEW", modified: "EDIT", removed: "DELETE", materialized: "DONE", accepted: "ACCEPTED" }[status];
   document.querySelector("#code-title").textContent = node.label;
   const content = document.querySelector("#code-content");
   const empty = document.querySelector("#code-empty");

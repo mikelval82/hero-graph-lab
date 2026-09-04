@@ -2,9 +2,15 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
+import sys
 from collections import deque
 from pathlib import Path
 from typing import Any, Iterable
+from uuid import uuid4
+
+from hero_graph_lab.execution.dsh_client import DshClient
 
 from hero_graph_lab.explore.models import (
     ModelClient,
@@ -34,6 +40,267 @@ class FakeModelClient:
                 "Configura --explore-provider anthropic, openai, deepseek o gemini "
                 "para obtener respuestas del modelo."
             )
+        )
+
+
+class CodexModelClient:
+    """Use the installed Codex CLI as the single Graph Lab chat agent."""
+
+    provider = "codex"
+
+    def __init__(self, model: str = "codex", *, project_root: Path | None = None, command: str | None = None) -> None:
+        self.model = model
+        self.project_root = (project_root or Path.cwd()).resolve()
+        self.command = command or shutil.which("codex") or "codex"
+
+    def complete(self, request: ModelRequest) -> ModelResponse:
+        prompt = self._prompt(request)
+        before = self._git_status()
+        try:
+            process = subprocess.Popen(
+                [self.command, "exec", "--json", "--sandbox", "workspace-write", "--cd", str(self.project_root), "--skip-git-repo-check", "-"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                # Merge stderr so a verbose CLI/MCP diagnostic cannot fill a
+                # second pipe while we are consuming the JSON event stream.
+                stderr=subprocess.STDOUT,
+                text=True,
+                cwd=self.project_root,
+            )
+            assert process.stdin is not None
+            process.stdin.write(prompt)
+            process.stdin.close()
+            lines: list[str] = []
+            assert process.stdout is not None
+            for line in process.stdout:
+                lines.append(line)
+                self._emit_codex_event(request, line)
+            returncode = process.wait(timeout=600)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise RuntimeError(f"Codex execution failed: {error}") from error
+        output = "".join(lines)
+        if returncode != 0:
+            detail = output.strip()
+            raise RuntimeError(f"Codex execution failed ({returncode}): {detail[-2_000:]}")
+        # Graph Lab writes its own contract/handoff/evidence artifacts while
+        # preparing an execution. Those files are orchestration output, not
+        # source changes performed by Codex, so they must not trip the
+        # contract-owned-path guard.
+        violations = sorted(
+            path
+            for path in self._git_status() - before - set(request.allowed_paths)
+            if not path.startswith(".graph-lab/")
+        )
+        if violations:
+            raise RuntimeError(
+                "Codex modified paths outside the approved contract: "
+                + ", ".join(violations)
+                + ". Request a contract amendment before continuing."
+            )
+        text = self._extract_text(output)
+        if not text:
+            raise RuntimeError("Codex returned no assistant response")
+        return ModelResponse(text=text)
+
+    @staticmethod
+    def _emit_codex_event(request: ModelRequest, line: str) -> None:
+        if request.event_callback is None:
+            return
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            return
+        if not isinstance(event, dict):
+            return
+        event_type = str(event.get("type", "codex_event"))
+        item = event.get("item") if isinstance(event.get("item"), dict) else {}
+        normalized: dict[str, Any] = {"source": "codex", "type": event_type}
+        if item.get("type") in {"agent_message", "assistant_message"}:
+            normalized["type"] = "agent_message_delta"
+            normalized["text"] = item.get("text") or item.get("content") or ""
+        elif item.get("type") in {
+            "tool_call",
+            "tool_use",
+            "command_execution",
+            "mcp_tool_call",
+            "mcp_tool_use",
+        }:
+            normalized["type"] = "tool_activity"
+            normalized["tool"] = (
+                item.get("name")
+                or item.get("tool_name")
+                or item.get("command")
+                or item.get("server_tool")
+                or "tool"
+            )
+        elif event_type in {"thread.started", "turn.started", "item.started"}:
+            normalized["type"] = "agent_progress"
+            normalized["message"] = {
+                "thread.started": "Codex ha iniciado la sesión",
+                "turn.started": "Codex está razonando",
+                "item.started": "Codex está preparando la respuesta",
+            }.get(event_type, "Codex está trabajando")
+        normalized["raw"] = event
+        request.event_callback(normalized)
+
+    def _prompt(self, request: ModelRequest) -> str:
+        history = []
+        for message in request.messages:
+            if message.role == "tool":
+                continue
+            history.append(f"{message.role.upper()}:\n{message.content}")
+        return (
+            f"{request.system_prompt}\n\n"
+            "You are the active Codex agent for HERO Graph Lab. Use the configured "
+            "hero_graph_lab MCP server when graph evidence or proposals are needed. "
+            "Respect the requested read, propose or implement mode.\n\n"
+            + (f"ACTIVE CONTRACT: {request.contract_id}\n" if request.contract_id else "")
+            + ("APPROVED WRITE PATHS:\n" + "\n".join(f"- {path}" for path in request.allowed_paths) + "\n" if request.allowed_paths else "")
+            + ("VERIFICATION COMMANDS:\n" + "\n".join(f"- {command}" for command in request.verification_commands) + "\n" if request.verification_commands else "")
+            + "\n\n".join(history)
+        )
+
+    def _git_status(self) -> set[str]:
+        result = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=all"],
+            cwd=self.project_root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            return set()
+        paths = set()
+        for line in result.stdout.splitlines():
+            if len(line) > 3:
+                paths.add(line[3:].strip().split(" -> ")[-1])
+        return paths
+
+    @staticmethod
+    def _extract_text(output: str) -> str:
+        texts: list[str] = []
+        for line in output.splitlines():
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            item = event.get("item") if isinstance(event, dict) else None
+            if isinstance(item, dict) and item.get("type") in {"agent_message", "assistant_message"}:
+                value = item.get("text") or item.get("content")
+                if isinstance(value, str):
+                    texts.append(value)
+            elif isinstance(event, dict) and event.get("type") in {"message", "assistant_message"}:
+                value = event.get("text") or event.get("content")
+                if isinstance(value, str):
+                    texts.append(value)
+        return "\n\n".join(texts).strip()
+
+
+class DshModelClient:
+    """Use the official DeepSeek Harness CLI as the Graph Lab chat agent."""
+
+    provider = "dsh"
+
+    def __init__(
+        self,
+        model: str = "deepseek-v4-flash",
+        *,
+        project_root: Path | None = None,
+        graph_lab_url: str = "http://127.0.0.1:8765",
+        client: DshClient | None = None,
+    ) -> None:
+        self.model = model
+        self.project_root = (project_root or Path.cwd()).resolve()
+        self.graph_lab_url = graph_lab_url
+        self.client = client or DshClient(self.project_root)
+
+    def complete(self, request: ModelRequest) -> ModelResponse:
+        if not self.client.available():
+            raise RuntimeError(self.client.configuration_error() or "DeepSeek DSH is unavailable")
+        profile = self.client.prepare_graph_lab_profile(
+            python_executable=sys.executable,
+            graph_lab_url=self.graph_lab_url,
+        )
+        before = CodexModelClient._git_status(self)
+        execution_id = f"chat-{uuid4()}"
+        prompt = self._prompt(request)
+        if request.event_callback is not None:
+            request.event_callback({"source": "dsh", "type": "agent_progress", "message": "DeepSeek DSH está trabajando"})
+        try:
+            self.client.start(
+                execution_id,
+                prompt,
+                profile=profile,
+                environment_overrides={
+                    "DSH_MODEL": self.model,
+                    "HERO_GRAPH_LAB_PYTHON": sys.executable,
+                    "HERO_GRAPH_LAB_URL": self.graph_lab_url,
+                },
+            )
+            status = self.client.wait(execution_id)
+        except (OSError, TimeoutError) as error:
+            raise RuntimeError(f"DeepSeek DSH execution failed: {error}") from error
+        self._emit_events(request, status)
+        if status.get("status") != "VERIFYING":
+            detail = "\n".join(
+                value
+                for value in (str(status.get("detail", "")), str(status.get("output", "")))
+                if value.strip()
+            )
+            raise RuntimeError(f"DeepSeek DSH execution failed: {detail[-2_000:]}")
+        violations = sorted(
+            path
+            for path in CodexModelClient._git_status(self) - before - set(request.allowed_paths)
+            if not path.startswith(".graph-lab/")
+        )
+        if violations:
+            raise RuntimeError(
+                "DeepSeek DSH modified paths outside the approved contract: "
+                + ", ".join(violations)
+                + ". Request a contract amendment before continuing."
+            )
+        text = "\n".join(
+            str(event.get("text", ""))
+            for event in status.get("events", [])
+            if isinstance(event, dict) and event.get("type") == "agent_message_delta"
+        ).strip()
+        if not text:
+            raise RuntimeError("DeepSeek DSH returned no assistant response")
+        return ModelResponse(text=text)
+
+    @staticmethod
+    def _emit_events(request: ModelRequest, status: dict[str, object]) -> None:
+        if request.event_callback is None:
+            return
+        for event in status.get("events", []):
+            if not isinstance(event, dict):
+                continue
+            event_type = str(event.get("type", "agent_progress"))
+            text = str(event.get("text", ""))
+            request.event_callback(
+                {
+                    "source": "dsh",
+                    "type": event_type,
+                    "text": text if event_type == "agent_message_delta" else "",
+                    "message": text if event_type != "agent_message_delta" else "",
+                }
+            )
+
+    def _prompt(self, request: ModelRequest) -> str:
+        history = []
+        for message in request.messages:
+            if message.role != "tool":
+                history.append(f"{message.role.upper()}:\n{message.content}")
+        return (
+            f"{request.system_prompt}\n\n"
+            "You are the active DeepSeek Harness agent for HERO Graph Lab. The official "
+            "DSH profile exposes Graph Lab tools through MCP under the mcp__graph_lab__ "
+            "namespace. Use those MCP tools for graph evidence, proposals, contract compilation, "
+            "validation and handoff. Respect the requested read, propose or implement mode.\n\n"
+            + (f"ACTIVE CONTRACT: {request.contract_id}\n" if request.contract_id else "")
+            + ("APPROVED WRITE PATHS:\n" + "\n".join(f"- {path}" for path in request.allowed_paths) + "\n" if request.allowed_paths else "")
+            + ("VERIFICATION COMMANDS:\n" + "\n".join(f"- {command}" for command in request.verification_commands) + "\n" if request.verification_commands else "")
+            + "\n".join(history)
         )
 
 
@@ -339,11 +606,15 @@ class GeminiModelClient:
         return output
 
 
-def create_model_client(provider: str, model: str | None = None) -> ModelClient:
+def create_model_client(provider: str, model: str | None = None, *, project_root: Path | None = None) -> ModelClient:
     load_project_env()
     normalized = provider.strip().lower()
     if normalized == "fake":
         return FakeModelClient()
+    if normalized == "codex":
+        return CodexModelClient(model or "codex", project_root=project_root)
+    if normalized == "dsh":
+        return DshModelClient(model or os.environ.get("HERO_GRAPH_LAB_DSH_MODEL", "deepseek-v4-flash"), project_root=project_root)
     if normalized == "anthropic":
         return AnthropicModelClient(model or "claude-sonnet-4-5")
     if normalized == "openai":
