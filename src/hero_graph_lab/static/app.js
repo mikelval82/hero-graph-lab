@@ -40,6 +40,7 @@ const state = {
   nodeById: new Map(),
   childrenByParent: new Map(),
 };
+globalThis.heroGraphLabState = state;
 const graphElement = document.querySelector("#graph");
 const edgeLayer = document.querySelector("#edges");
 const edgeLabelLayer = document.querySelector("#edge-labels");

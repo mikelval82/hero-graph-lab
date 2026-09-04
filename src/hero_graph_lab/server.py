@@ -25,6 +25,7 @@ from hero_graph_lab.contracts import (
     SourceSnapshot,
     VerificationPolicy,
     validate_contract,
+    compile_design_contract,
 )
 from hero_graph_lab.contracts.serialization import dumps as contract_dumps, loads as contract_loads
 from hero_graph_lab.extractor import extract_project_graph, project_source_files
@@ -161,6 +162,18 @@ class LabState:
         contract = validate_contract(contract)
         path = self.contract_repository.save(contract)
         return json.loads(contract_dumps(contract)) | {"path": str(path)}
+
+    def create_contract_from_design(self, payload: dict[str, Any]) -> dict[str, object]:
+        graph = payload.get("graph") if isinstance(payload.get("graph"), dict) else self.graph()
+        contract = compile_design_contract(
+            graph,
+            title=str(payload.get("title", "Graph Lab design")),
+            objective=str(payload.get("objective", "Implement the accepted Graph Lab design")),
+            contract_id=str(payload.get("id")) if payload.get("id") else None,
+            acceptance_criteria=[str(item) for item in payload.get("acceptance_criteria", [])],
+        )
+        path = self.contract_repository.save(contract)
+        return json.loads(contract_dumps(contract)) | {"path": str(path), "compiled_from_design": True}
 
     def get_contract(self, contract_id: str) -> dict[str, object]:
         return json.loads(contract_dumps(self.contract_repository.get(contract_id)))
@@ -456,6 +469,12 @@ def make_handler(state: LabState) -> type[BaseHTTPRequestHandler]:
             if parsed.path == "/api/contracts":
                 try:
                     self._send_json(state.create_contract(self._read_json()), HTTPStatus.CREATED)
+                except (ValueError, json.JSONDecodeError) as error:
+                    self._send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+                return
+            if parsed.path == "/api/contracts/from-design":
+                try:
+                    self._send_json(state.create_contract_from_design(self._read_json()), HTTPStatus.CREATED)
                 except (ValueError, json.JSONDecodeError) as error:
                     self._send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
                 return

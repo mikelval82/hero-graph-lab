@@ -14,6 +14,7 @@ from hero_graph_lab.contracts import (
     SourceSnapshot,
     VerificationPolicy,
     validate_contract,
+    compile_design_contract,
 )
 from hero_graph_lab.contracts.validation import ContractValidationError
 from hero_graph_lab.execution.adapters import DeepSeekHarnessAdapter, ManualHandoffAdapter
@@ -26,6 +27,26 @@ def request(contract_id: str = "contract-1") -> ExecutionRequest:
 
 
 class ContractsExecutionTest(TestCase):
+    def test_compiles_accepted_design_into_targets_and_relationships(self) -> None:
+        graph = {
+            "design_revision": 4,
+            "nodes": [
+                {"id": "package:src", "kind": "package", "label": "src", "status": "observed", "source": "src"},
+                {"id": "proposal:adapter", "kind": "module", "label": "adapter.py", "status": "accepted", "target_path": "src/adapter.py", "acceptance": ["extracts references"], "description": "Extract references."},
+            ],
+            "edges": [{"source": "package:src", "target": "proposal:adapter", "kind": "contains", "status": "accepted"}],
+        }
+
+        contract = compile_design_contract(graph, title="Adapter", objective="Implement adapter")
+
+        self.assertEqual(contract.metadata["targets"][0]["target_path"], "src/adapter.py")
+        self.assertEqual(contract.metadata["relationships"][0]["kind"], "contains")
+        self.assertEqual(contract.metadata["design_revision"], "4")
+
+    def test_design_compiler_rejects_incomplete_proposals(self) -> None:
+        with self.assertRaises(ContractValidationError):
+            compile_design_contract({"nodes": [{"id": "proposal:x", "kind": "module", "status": "proposed", "label": "x"}]}, title="X", objective="O")
+
     def test_validation_and_repository_round_trip(self) -> None:
         with TemporaryDirectory() as directory:
             repository = ContractRepository(Path(directory))

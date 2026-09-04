@@ -248,6 +248,7 @@ class HarnessContractGateway:
 
 
 NEUTRAL_CONTRACT_TOOL_SPECS = (
+    {"name": "CompileContractFromDesign", "description": "Compile accepted graph proposals into a deterministic contract.", "inputSchema": {"type": "object", "properties": {"title": {"type": "string"}, "objective": {"type": "string"}, "graph": {"type": "object"}}, "required": ["title", "objective", "graph"], "additionalProperties": False}, "readOnly": False},
     {"name": "CreateIntentContract", "description": "Create a versioned Graph Lab intent contract.", "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}, "title": {"type": "string"}, "objective": {"type": "string"}, "requirements": {"type": "array"}, "acceptance_criteria": {"type": "array"}}, "required": ["title", "objective", "acceptance_criteria"], "additionalProperties": False}, "readOnly": False},
     {"name": "GetContract", "description": "Read a Graph Lab contract.", "inputSchema": {"type": "object", "properties": {"contract_id": {"type": "string", "minLength": 1}}, "required": ["contract_id"], "additionalProperties": False}, "readOnly": True},
     {"name": "ValidateContract", "description": "Validate a contract deterministically.", "inputSchema": {"type": "object", "properties": {"contract_id": {"type": "string", "minLength": 1}}, "required": ["contract_id"], "additionalProperties": False}, "readOnly": True},
@@ -279,6 +280,8 @@ class ContractGateway:
             raise ValueError(f"missing argument: {missing[0]}")
         if name == "CreateIntentContract":
             return self.state.create_contract(arguments)
+        if name == "CompileContractFromDesign":
+            return self.state.create_contract_from_design(arguments)
         if name == "GetContract":
             return self.state.get_contract(arguments["contract_id"])
         if name == "ValidateContract":

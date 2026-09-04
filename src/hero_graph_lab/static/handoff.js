@@ -24,13 +24,15 @@ handoffForm.addEventListener("submit", async (event) => {
   submit.disabled = true;
   handoffStatus.textContent = "Creating contract";
   try {
-    const contract = await handoffJson("/api/contracts", {
+    const designGraph = structuredClone(globalThis.heroGraphLabState?.graph || {});
+    const contract = await handoffJson("/api/contracts/from-design", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title: document.querySelector("#handoff-title").value.trim(),
         objective: document.querySelector("#handoff-objective").value.trim(),
         acceptance_criteria: criteria,
+        graph: designGraph,
       }),
     });
     const receipt = await handoffJson(`/api/contracts/${encodeURIComponent(contract.id)}/handoff`, {
