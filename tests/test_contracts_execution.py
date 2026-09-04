@@ -132,7 +132,17 @@ class ContractsExecutionTest(TestCase):
 
             try:
                 capabilities = call("/api/capabilities")
-                created = call("/api/contracts", {"id": "api-contract", "title": "API", "objective": "Test API", "acceptance_criteria": ["works"]})
+                created = call("/api/contracts/from-design", {
+                    "id": "api-contract",
+                    "title": "API",
+                    "objective": "Test API",
+                    "acceptance_criteria": ["works"],
+                    "graph": {
+                        "design_revision": 1,
+                        "nodes": [{"id": "proposal:api", "kind": "module", "label": "api.py", "status": "accepted", "target_path": "api.py", "acceptance": ["works"]}],
+                        "edges": [],
+                    },
+                })
                 handoff = call("/api/contracts/api-contract/handoff", {"executor": "manual"})
                 status = call(f"/api/executions/{handoff['execution_id']}")
             finally:
@@ -141,6 +151,7 @@ class ContractsExecutionTest(TestCase):
 
         self.assertFalse(capabilities["executor_required"])
         self.assertEqual(created["id"], "api-contract")
+        self.assertTrue(created["compiled_from_design"])
         self.assertEqual(handoff["status"], "HANDED_OFF")
         self.assertEqual(status["executor"], "manual")
 
