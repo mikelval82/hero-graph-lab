@@ -89,7 +89,7 @@ function nodeStatusText(node) {
   const childCount = scopeChildren(node.id).length;
   if (node.context) return "CONTEXT";
   if (childCount) return `OPEN / ${childCount}`;
-  return { observed: "CODE", proposed: "NEW", modified: "EDIT", removed: "DELETE", accepted: "ACCEPTED" }[node.status || "observed"];
+  return { observed: "CODE", proposed: "NEW", modified: "EDIT", removed: "DELETE", materialized: "DONE", accepted: "ACCEPTED" }[node.status || "observed"];
 }
 
 function graphNodeMetrics(node) {
@@ -364,7 +364,7 @@ function curve(source, target, sourceNode, targetNode) {
 }
 
 function edgeMarker(status) {
-  return `url(#arrow-${["proposed", "modified", "removed", "accepted"].includes(status) ? status : "observed"})`;
+  return `url(#arrow-${["proposed", "modified", "removed", "materialized", "accepted"].includes(status) ? status : "observed"})`;
 }
 
 function currentPositions(graph) {

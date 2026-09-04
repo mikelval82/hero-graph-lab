@@ -15,11 +15,10 @@
     </div>
     <div class="topbar-actions">
       <button id="project-open" class="quiet-command" type="button">Open project</button>
-      <button id="mission-launch" class="command-button" type="button">Prepare handoff</button>
     </div>
     <div class="mission-presence" aria-live="polite">
       <i id="harness-indicator" aria-hidden="true"></i>
-      <div><strong id="mission-stage-label">Local design</strong><span id="mission-branch-label">External executor ready</span></div>
+      <div><strong id="mission-stage-label">Codex agent</strong><span id="mission-branch-label">Chat and implementation</span></div>
     </div>
     <div class="topbar-secondary-actions">
       <button id="feedback-toggle" class="quiet-command" type="button">Record finding</button>
@@ -124,7 +123,6 @@
           <div class="graph-tool-group graph-draft-tools" role="group" aria-labelledby="graph-tools-draft">
             <span class="graph-tool-group-label" id="graph-tools-draft">Draft <span id="design-sync-status" class="sync-status" role="status">Local draft</span></span>
             <div class="graph-tool-actions">
-              <button id="sync-design" class="graph-draft-action sync-design" type="button" disabled>Save map</button>
               <button id="open-scenarios" class="graph-draft-action" type="button">Scenarios</button>
               <button id="reset-design" class="graph-draft-action destructive" type="button" title="Discard all proposals">Discard draft</button>
             </div>
@@ -138,6 +136,7 @@
               <marker id="arrow-modified" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z"></path></marker>
               <marker id="arrow-removed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z"></path></marker>
               <marker id="arrow-accepted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z"></path></marker>
+              <marker id="arrow-materialized" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z"></path></marker>
             </defs>
             <g id="edges"></g>
             <path id="connection-preview" hidden></path>
@@ -206,8 +205,7 @@
 
     <aside id="inspector" class="inspector" aria-live="polite">
       <div class="inspector-tabs" role="tablist" aria-label="Inspector views">
-        <button type="button" role="tab" aria-selected="false" data-inspector-tab="mission">Mission</button>
-        <button type="button" role="tab" aria-selected="true" data-inspector-tab="chat">Chat <span id="chat-count" hidden>0</span></button>
+        <button type="button" role="tab" aria-selected="true" data-inspector-tab="chat">Codex <span id="chat-count" hidden>0</span></button>
         <button class="icon-command panel-collapse" type="button" data-collapse-panel="inspector" title="Collapse Inspector" aria-label="Collapse Inspector" aria-expanded="true"><span aria-hidden="true">&rsaquo;</span></button>
       </div>
       <div class="inspector-font-toolbar">
@@ -220,53 +218,46 @@
       </div>
       <section id="mission-panel" class="inspector-panel mission-panel" role="tabpanel" hidden>
         <header class="mission-heading">
-          <div><p class="eyebrow">Mission state</p><h2 id="mission-stage">Offline</h2></div>
-          <button id="mission-stop" class="icon-button" type="button" aria-label="Stop HARNESS worker" title="Stop HARNESS worker" hidden>x</button>
+          <div><p class="eyebrow">Execution state</p><h2 id="mission-stage">Ready</h2></div>
+          <button id="mission-stop" class="icon-button" type="button" aria-label="Cancel external execution" title="Cancel external execution" hidden>x</button>
         </header>
-        <p id="mission-summary" class="mission-summary">Start a mission to bind this workspace to HARNESS.</p>
+        <p id="mission-summary" class="mission-summary">Prepare a contract and hand it off to an external executor.</p>
         <div id="mission-operation" class="mission-operation" hidden></div>
         <section id="mission-activity-section" class="mission-activity-section" aria-labelledby="mission-activity-title" hidden>
           <header><p class="eyebrow" id="mission-activity-title">Live activity</p><span id="mission-activity-state"></span></header>
           <ol id="mission-activity" class="mission-activity" aria-live="polite"></ol>
         </section>
         <section class="mission-section" aria-labelledby="mission-actions-title">
-          <p class="eyebrow" id="mission-actions-title">Available gates</p>
+          <p class="eyebrow" id="mission-actions-title">Available executors</p>
           <div id="mission-actions" class="mission-actions"></div>
         </section>
         <section class="mission-section" aria-labelledby="mission-documents-title">
-          <p class="eyebrow" id="mission-documents-title">Documents</p>
+          <p class="eyebrow" id="mission-documents-title">Handoff package</p>
           <div id="mission-documents" class="mission-list"></div>
         </section>
         <section class="mission-section" aria-labelledby="mission-tasks-title">
-          <p class="eyebrow" id="mission-tasks-title">Workplan</p>
+          <p class="eyebrow" id="mission-tasks-title">Execution activity</p>
           <div id="mission-tasks" class="task-list"></div>
         </section>
         <section id="mission-contract-section" class="mission-section" aria-labelledby="mission-contract-title" hidden>
-          <p class="eyebrow" id="mission-contract-title">Approved contract</p>
+          <p class="eyebrow" id="mission-contract-title">Active contract</p>
           <div id="mission-contracts" class="contract-list"></div>
         </section>
       </section>
       <section id="chat-panel" class="inspector-panel chat-panel" role="tabpanel">
         <header>
-          <div class="chat-mode-switch" role="group" aria-label="Assistant mode">
-            <button type="button" data-chat-mode="explore" aria-pressed="true">Explore</button>
-            <button type="button" data-chat-mode="mission" aria-pressed="false">Mission</button>
-          </div>
+          <strong class="chat-agent-name">Codex</strong>
           <span id="chat-phase">Starting</span>
         </header>
         <div id="explore-context" class="explore-context">
           <span id="explore-context-label">No graph selection</span>
-          <button id="explore-pin" type="button" data-command="selection.pin" disabled>Pin</button>
-          <button id="explore-clear-pins" type="button" disabled>Clear</button>
+          <button id="explore-pin" type="button" data-command="selection.pin" disabled hidden>Pin</button>
+          <button id="explore-clear-pins" type="button" disabled hidden>Clear</button>
           <ul id="explore-pins" class="explore-pins" aria-label="Pinned graph nodes" hidden></ul>
         </div>
-        <div id="explore-agent-mode" class="explore-agent-mode" role="group" aria-label="Explore agent access">
-          <span>Agent access</span>
-          <button type="button" data-explore-agent-mode="read" aria-pressed="true">Read</button>
-          <button type="button" data-explore-agent-mode="propose" aria-pressed="false">Propose</button>
-          <button type="button" data-explore-agent-mode="implement" aria-pressed="false">Implement</button>
+        <div id="chat-messages" class="chat-messages" aria-live="polite">
+          <p id="chat-status" role="status"></p>
         </div>
-        <div id="chat-messages" class="chat-messages" aria-live="polite"></div>
         <form id="chat-form" class="chat-form">
           <label id="chat-input-label" for="chat-input">Ask about this code</label>
           <textarea id="chat-input" rows="3" placeholder="Ask about the selected code or graph"></textarea>
@@ -276,7 +267,6 @@
             <button id="chat-done" type="button" disabled hidden>Finish</button>
             <button class="submit-button" type="submit" disabled>Send</button>
           </div>
-          <p id="chat-status" role="status"></p>
         </form>
       </section>
     </aside>
@@ -490,7 +480,7 @@
       <label>Contract title<input id="handoff-title" type="text" required maxlength="120" value="Graph Lab change"></label>
       <label>Objective<textarea id="handoff-objective" required placeholder="What should the external executor implement?"></textarea></label>
       <label>Acceptance criteria<textarea id="handoff-criteria" required placeholder="One criterion per line"></textarea></label>
-      <label>Executor<select id="handoff-executor"><option value="manual">Manual / external runtime</option><option value="deepseek-harness">DeepSeek Harness (export only)</option></select></label>
+      <label>Executor<input id="handoff-executor" type="text" value="Codex (MCP)" readonly></label>
       <label>Verification commands<textarea id="handoff-commands" placeholder="One command per line"></textarea></label>
       <p id="handoff-status" role="status"></p>
       <div class="dialog-actions"><button id="handoff-cancel" type="button">Cancel</button><button class="submit-button" type="submit">Export handoff</button></div>
@@ -508,7 +498,7 @@
   <script src="/panel-layout.js" defer></script>
   <script src="/rich-render.js" defer></script>
   <script src="/mission-graph-state.js" defer></script>
-  <script src="/handoff.js" defer></script>
+  <script src="/execution.js" defer></script>
   <script src="/explore.js" defer></script>
   <script src="/diagrams.js" defer></script>
   <script src="/graph-projection.js" defer></script>

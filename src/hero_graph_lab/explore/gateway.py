@@ -11,7 +11,8 @@ MAX_PROPOSAL_ACTIONS = 500
 MCP_INSTRUCTIONS = (
     "Inspect the active Graph Lab project with graph and source tools. "
     "ProposeNode and ProposeRelation only stage reviewable browser-local design actions; "
-    "they never edit source files or synchronize HARNESS. Save map remains explicit. "
+    "they never edit source files. Source changes require an explicit Codex handoff. "
+    "GraphSnapshot returns the complete current design for contract compilation. "
     "Graph Lab contract tools create and validate versioned intent contracts, export handoffs, "
     "record external execution evidence, and reconcile the resulting graph. Graph Lab does not "
     "start or govern an executor loop."
@@ -102,12 +103,17 @@ class GraphToolGateway:
         self.registry = registry or ExploreToolRegistry()
         self._history: list[dict[str, Any]] = []
         self._pending: list[dict[str, Any]] = []
+        self._design_overlay: dict[str, list[dict[str, Any]]] = {"nodes": [], "edges": []}
         self._revision = 0
         self._lock = threading.RLock()
 
     def tool_specs(self) -> list[dict[str, Any]]:
-        return [
-            {
+        return [{
+                "name": "GraphSnapshot",
+                "description": "Return the complete current graph, including the accepted design overlay, for contract compilation.",
+                "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+                "annotations": {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
+            }] + [{
                 "name": spec.name,
                 "description": spec.description,
                 "inputSchema": spec.input_schema,
@@ -124,6 +130,10 @@ class GraphToolGateway:
         if not isinstance(arguments, dict):
             raise ValueError("arguments must be a JSON object")
         with self._lock:
+            if name == "GraphSnapshot":
+                graph = _graph_with_actions(self.graph_provider(), self._history)
+                self._merge_design_overlay(graph)
+                return {"content": graph, "actions": []}
             if len(self._history) >= MAX_PROPOSAL_ACTIONS and name.startswith("Propose"):
                 raise ValueError("the MCP proposal limit has been reached; restart Graph Lab or select a project")
             graph = GraphIndex(_graph_with_actions(self.graph_provider(), self._history))
@@ -142,6 +152,30 @@ class GraphToolGateway:
                 self._history.append(stored)
                 self._pending.append({"revision": self._revision, "action": stored})
             return {"content": content, "actions": [dict(action) for action in actions]}
+
+    def set_design_overlay(self, nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) -> None:
+        """Store the browser draft so a separate MCP process can snapshot it."""
+        if not isinstance(nodes, list) or not isinstance(edges, list):
+            raise ValueError("design overlay nodes and edges must be arrays")
+        with self._lock:
+            self._design_overlay = {
+                "nodes": [dict(node) for node in nodes if isinstance(node, dict)],
+                "edges": [dict(edge) for edge in edges if isinstance(edge, dict)],
+            }
+
+    def _merge_design_overlay(self, graph: dict[str, Any]) -> None:
+        known_nodes = {str(node.get("id")) for node in graph["nodes"]}
+        known_edges = {str(edge.get("id")) for edge in graph["edges"]}
+        for node in self._design_overlay["nodes"]:
+            node_id = str(node.get("id", ""))
+            if node_id and node_id not in known_nodes:
+                graph["nodes"].append({**node, "status": node.get("status", "proposed")})
+                known_nodes.add(node_id)
+        for edge in self._design_overlay["edges"]:
+            edge_id = str(edge.get("id", ""))
+            if edge_id and edge_id not in known_edges:
+                graph["edges"].append({**edge, "status": edge.get("status", "proposed")})
+                known_edges.add(edge_id)
 
     def pending_proposals(self) -> dict[str, Any]:
         with self._lock:
@@ -165,4 +199,5 @@ class GraphToolGateway:
         with self._lock:
             self._history.clear()
             self._pending.clear()
+            self._design_overlay = {"nodes": [], "edges": []}
             self._revision = 0

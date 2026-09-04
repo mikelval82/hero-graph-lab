@@ -15,7 +15,7 @@ class ManualHandoffAdapter:
         self.project_root = project_root.resolve()
 
     def capabilities(self) -> dict[str, object]:
-        return {"handoff": True, "execution": False, "modifies_project": False}
+        return {"label": "Manual / external runtime", "handoff": True, "execution": False, "modifies_project": False, "integration": "filesystem", "evidence": True}
 
     def handoff(self, request: ExecutionRequest) -> ExecutionReceipt:
         execution_id = request.execution_id or request.contract.id

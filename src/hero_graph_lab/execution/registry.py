@@ -4,14 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .adapters import DeepSeekHarnessAdapter, ManualHandoffAdapter
+from .adapters import CodexMcpAdapter, DeepSeekHarnessAdapter, ManualHandoffAdapter
 
 
 class ExecutionRegistry:
     def __init__(self, project_root: Path) -> None:
         self.adapters = {
+            "codex-mcp": CodexMcpAdapter(project_root),
+            "deepseek-dsh": DeepSeekHarnessAdapter(project_root),
             "manual": ManualHandoffAdapter(project_root),
-            "deepseek-harness": DeepSeekHarnessAdapter(project_root),
         }
 
     def capabilities(self) -> dict[str, dict[str, object]]:

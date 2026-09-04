@@ -9,8 +9,20 @@ const exploreState = {
   listening: false,
   speakResponses: false,
   voiceInputBase: "",
-  agentMode: "read",
+  agentMode: "auto",
+  streamingText: "",
+  eventCursor: 0,
 };
+
+let exploreSessionPromise = null;
+
+function activateInspectorTab(name) {
+  if (name !== "chat") return;
+  document.querySelector("#chat-panel")?.removeAttribute("hidden");
+  document.querySelectorAll("[data-inspector-tab]").forEach((tab) => {
+    tab.setAttribute("aria-selected", String(tab.dataset.inspectorTab === "chat"));
+  });
+}
 
 let mcpProposalPollPending = false;
 let mcpProposalPollTimer = null;
@@ -194,7 +206,7 @@ function appendExploreMessage(container, message) {
   const heading = document.createElement("div");
   heading.className = "chat-message-heading";
   const header = document.createElement("span");
-  header.textContent = message.role === "user" ? "YOU / EXPLORE" : `${exploreState.provider.toUpperCase()} / ${exploreState.model}`;
+  header.textContent = message.role === "user" ? "YOU" : "CODEX";
   heading.append(header);
   if (message.role !== "user") heading.append(globalThis.createChatCopyButton(message.content));
   const body = document.createElement(message.role === "user" ? "p" : "div");
@@ -240,8 +252,8 @@ function latestAssistantMessage() {
 }
 
 function renderExploreChat() {
-  if (document.body.dataset.chatMode !== "explore") return;
   const messages = document.querySelector("#chat-messages");
+  const liveStatus = document.querySelector("#chat-status");
   messages.replaceChildren();
   exploreState.messages.forEach((message) => appendExploreMessage(messages, message));
   if (!exploreState.messages.length) {
@@ -250,23 +262,23 @@ function renderExploreChat() {
     empty.textContent = "Select code or graph nodes, then ask how they work or relate.";
     messages.append(empty);
   }
+  if (exploreState.streamingText) {
+    appendExploreMessage(messages, { role: "assistant", content: exploreState.streamingText });
+  }
+  if (liveStatus) messages.append(liveStatus);
   messages.scrollTop = messages.scrollHeight;
   document.querySelector("#chat-phase").textContent = exploreState.provider
-    ? `${exploreState.provider} / ${exploreState.model}`
+    ? `${exploreState.provider === "codex" ? "Codex" : exploreState.provider} / ${exploreState.model}`
     : "Unavailable";
-  const labels = {
-    read: ["Ask about this code", "Ask about the selected code or graph"],
-    propose: ["Ask or propose graph changes", "Describe nodes or relationships to propose"],
-    implement: ["Implement an approved task contract", "Describe the approved task to implement"],
-  };
-  const [inputLabel, placeholder] = labels[exploreState.agentMode] || labels.read;
-  document.querySelector("#chat-input-label").textContent = inputLabel;
-  document.querySelector("#chat-input").placeholder = placeholder;
-  document.querySelector("#chat-input").disabled = !exploreState.sessionId || exploreState.pending;
-  document.querySelector("#chat-form button[type='submit']").disabled = !exploreState.sessionId || exploreState.pending;
+  document.querySelector("#chat-input-label").textContent = "Ask Codex";
+  document.querySelector("#chat-input").placeholder = "Ask about the code, propose a design, or request implementation";
+  // Session creation is lazy as well as eager: the user must be able to
+  // submit even if the initial background request is still starting/fails.
+  // submitExplorePrompt() creates the session before posting the message.
+  document.querySelector("#chat-input").disabled = exploreState.pending;
+  document.querySelector("#chat-form button[type='submit']").disabled = exploreState.pending;
   document.querySelector("#chat-done").hidden = true;
   document.querySelector("#explore-context").hidden = false;
-  document.querySelector("#explore-agent-mode").hidden = false;
   renderExploreVoiceControls();
   const count = document.querySelector("#chat-count");
   count.textContent = exploreState.messages.length;
@@ -284,27 +296,34 @@ function setChatMode(mode) {
   else renderChat();
 }
 
-async function startExploreSession() {
-  if (exploreState.starting || exploreState.sessionId) return;
+function startExploreSession() {
+  if (exploreState.sessionId) return Promise.resolve(exploreState.sessionId);
+  if (exploreSessionPromise) return exploreSessionPromise;
   exploreState.starting = true;
   updateExploreBusyState();
   if (document.body.dataset.chatMode === "explore") {
     document.querySelector("#chat-phase").textContent = "Connecting";
   }
-  try {
-    const session = await exploreRequest("/sessions", { method: "POST", headers: { "Content-Length": "0" } });
-    exploreState.sessionId = session.id;
-    exploreState.provider = session.provider;
-    exploreState.model = session.model;
-    exploreState.messages = session.messages || [];
-  } catch (error) {
-    document.querySelector("#chat-status").textContent = error.message;
-  } finally {
-    exploreState.starting = false;
-    updateExploreBusyState();
-  }
-  renderExploreChat();
-  dispatchEvent(new CustomEvent("explore-state-changed"));
+  exploreSessionPromise = (async () => {
+    try {
+      const session = await exploreRequest("/sessions", { method: "POST", headers: { "Content-Length": "0" } });
+      exploreState.sessionId = session.id;
+      exploreState.eventCursor = 0;
+      exploreState.provider = session.provider;
+      exploreState.model = session.model;
+      exploreState.messages = session.messages || [];
+    } catch (error) {
+      document.querySelector("#chat-status").textContent = error.message;
+    } finally {
+      exploreState.starting = false;
+      updateExploreBusyState();
+      renderExploreChat();
+      dispatchEvent(new CustomEvent("explore-state-changed"));
+      exploreSessionPromise = null;
+    }
+    return exploreState.sessionId;
+  })();
+  return exploreSessionPromise;
 }
 
 function openExploreChat() {
@@ -329,13 +348,32 @@ async function submitExplorePrompt(text, context = currentExploreContext()) {
   renderExploreChat();
   dispatchEvent(new CustomEvent("explore-state-changed"));
   let answer = null;
+  let session = null;
   try {
-    const session = await exploreRequest(`/sessions/${encodeURIComponent(exploreState.sessionId)}/messages`, {
+    const designSync = await fetch("/api/mcp/design", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        nodes: context.proposalNodes || [],
+        edges: context.proposalEdges || [],
+      }),
+    });
+    if (!designSync.ok) throw new Error("No se pudo sincronizar el diseño con Graph Lab");
+    const result = await exploreRequest(`/sessions/${encodeURIComponent(exploreState.sessionId)}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: question, context }),
     });
-    exploreState.messages = session.messages || [];
+    if (result.mode === "stream") {
+      await streamExploreSession();
+      session = await exploreRequest(`/sessions/${encodeURIComponent(exploreState.sessionId)}`);
+      exploreState.messages = session.messages || [];
+      exploreState.streamingText = "";
+    } else {
+      session = result.session || result;
+      exploreState.messages = session.messages || [];
+    }
+    await refreshContractRealizations();
     const proposalResult = globalThis.applyAgentGraphProposals(session.actions || []);
     const proposalCount = proposalResult.nodes + proposalResult.relations;
     document.querySelector("#chat-status").textContent = proposalCount
@@ -352,6 +390,100 @@ async function submitExplorePrompt(text, context = currentExploreContext()) {
     dispatchEvent(new CustomEvent("explore-state-changed"));
   }
   return answer?.content || null;
+}
+
+async function refreshContractRealizations() {
+  const response = await fetch("/api/contracts", { headers: { Accept: "application/json" } });
+  if (!response.ok || !state.graph) return;
+  const payload = await response.json();
+  const realized = new Map();
+  for (const contract of payload.contracts || []) {
+    if (contract.status !== "MATERIALIZED") continue;
+    const metadata = contract.metadata || {};
+    const accepted = new Set(metadata.accepted_paths || []);
+    for (const path of metadata.realized_paths || []) {
+      realized.set(path, accepted.has(path) ? "accepted" : "materialized");
+    }
+  }
+  if (!realized.size) return;
+  const promoted = new Set();
+  state.graph.nodes.forEach((node) => {
+    const status = realized.get(node.target_path);
+    if (!status || !["proposed", "modified"].includes(node.status)) return;
+    const implementation = state.graph.nodes.find((candidate) => (
+      ["observed", "accepted"].includes(candidate.status || "observed")
+      && candidate.source === node.target_path
+      && candidate.kind === node.kind
+      && candidate.label === node.label
+    ));
+    node.status = status;
+    node.realization = { status, contract: "codex", node_id: implementation?.id || null };
+    if (implementation) {
+      node.source = implementation.source;
+      node.line = implementation.line;
+      node.end_line = implementation.end_line;
+    }
+    promoted.add(node.id);
+  });
+  state.graph.edges.forEach((edge) => {
+    if (!promoted.has(edge.source) && !promoted.has(edge.target)) return;
+    if (["proposed", "modified"].includes(edge.status)) edge.status = "materialized";
+  });
+  saveDesign();
+  render();
+}
+
+function streamExploreSession() {
+  return new Promise((resolve, reject) => {
+    const source = new EventSource(
+      `/api/explore/sessions/${encodeURIComponent(exploreState.sessionId)}/events?after=${exploreState.eventCursor}`,
+    );
+    source.onmessage = (message) => {
+      let event;
+      try {
+        event = JSON.parse(message.data);
+      } catch (error) {
+        return;
+      }
+      if (Number.isInteger(event.id)) exploreState.eventCursor = Math.max(exploreState.eventCursor, event.id);
+      const data = event.data || {};
+      if (event.type === "agent_message_delta") {
+        const text = String(data.text || "").trim();
+        if (text && !exploreState.streamingText.includes(text)) {
+          exploreState.streamingText = exploreState.streamingText
+            ? `${exploreState.streamingText}\n\n${text}`
+            : text;
+          renderExploreChat();
+        }
+      } else if (event.type === "tool_activity") {
+        document.querySelector("#chat-status").textContent = `Codex: ${data.tool || "working"}`;
+        renderExploreChat();
+      } else if (event.type === "agent_started") {
+        document.querySelector("#chat-status").textContent = data.message || "Codex está trabajando";
+        renderExploreChat();
+      } else if (event.type === "agent_progress") {
+        document.querySelector("#chat-status").textContent = data.message || "Codex está trabajando";
+        renderExploreChat();
+      } else if (event.type === "agent_completed") {
+        if (data.text) {
+          exploreState.streamingText = String(data.text);
+          renderExploreChat();
+        }
+        source.close();
+        resolve();
+      } else if (event.type === "agent_failed") {
+        source.close();
+        const error = data.error || "Codex failed";
+        document.querySelector("#chat-status").textContent = error;
+        renderExploreChat();
+        reject(new Error(error));
+      }
+    };
+    source.onerror = () => {
+      source.close();
+      reject(new Error("Codex event stream disconnected"));
+    };
+  });
 }
 
 document.querySelectorAll("[data-chat-mode]").forEach((button) => {
@@ -386,9 +518,6 @@ async function selectExploreAgentMode(button) {
   renderExploreChat();
 }
 
-document.querySelectorAll("[data-explore-agent-mode]").forEach((button) => {
-  button.addEventListener("click", () => selectExploreAgentMode(button));
-});
 addEventListener("explore-chat-required", () => setChatMode("explore"));
 document.querySelector("#explore-clear-pins").addEventListener("click", () => {
   exploreState.pinnedNodeIds.clear();
@@ -417,13 +546,19 @@ document.querySelector("#chat-speech").addEventListener("click", () => {
   else globalThis.speechSynthesis?.cancel();
   renderExploreVoiceControls();
 });
+document.querySelector("#chat-input").addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+  event.preventDefault();
+  document.querySelector("#chat-form").requestSubmit();
+});
 document.querySelector("#chat-form").addEventListener("submit", async (event) => {
-  if (document.body.dataset.chatMode !== "explore") return;
   event.preventDefault();
   const input = document.querySelector("#chat-input");
   const text = input.value.trim();
-  if (!text || !exploreState.sessionId || exploreState.pending) return;
+  if (!text || exploreState.pending) return;
   input.value = "";
+  exploreState.messages.push({ role: "user", content: text });
+  renderExploreChat();
   await submitExplorePrompt(text);
 });
 addEventListener("graph-selection-changed", updateExploreContext);

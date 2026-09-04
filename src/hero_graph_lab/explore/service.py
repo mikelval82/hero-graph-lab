@@ -24,8 +24,8 @@ Help the user understand the selected codebase using evidence from the graph and
 Use graph tools for structural and relationship questions and Read/Grep/Glob for source evidence.
 Use ProposeNode and ProposeRelation only when the user explicitly asks to change the graph design.
 Graph proposals are reviewable design changes: they never modify source files.
-After the browser accepts them, it automatically persists them in its browser-local draft; Save map is the separate explicit synchronization step to HARNESS.
-Never claim to have modified source files or synchronized a proposal to HARNESS unless the user saved the map.
+After the browser accepts them, they remain in the browser-local draft until the user prepares an executor handoff.
+Never claim to have modified source files unless the active external agent reports that it did so.
 Always answer in Spanish, while preserving code identifiers, project paths, and code snippets as written.
 When a diagram helps, emit one fenced mermaid block using syntax compatible with Mermaid 11.6. Use simple diagram identifiers, quote labels that contain punctuation, and do not use HTML labels, click directives, or experimental diagram types.
 Keep answers concise, cite project-relative files and line numbers, and distinguish facts from inference.
@@ -47,14 +47,26 @@ Your final answer must summarize the graph proposals actually staged and clearly
 If the user only asks for explanation or analysis, do not create proposals.
 """
 
+AUTO_MODE_PROMPT = """
+AUTOMATIC AGENT WORKFLOW IS ACTIVE.
+You are the single agent responsible for the whole interaction. Start by reading the graph and source evidence.
+When the user asks for a change, design, feature, refactor or integration, first create complete reviewable graph proposals using ProposeNode and ProposeRelation.
+Do not modify source code during the design stage. Explain the proposed contract and ask for explicit user approval.
+After the user explicitly approves the design, use GraphSnapshot, CompileContractFromDesign, ValidateContract and ExportHandoff with the active executor. Do not use the legacy HERO Harness.
+Only after a valid handed-off contract exists and the user asks to continue with implementation may you modify contract-owned paths.
+If a required path or criterion is missing, stop and explain what is needed instead of inventing it.
+"""
+
 IMPLEMENT_MODE_PROMPT = """
-IMPLEMENT MODE IS ACTIVE. Source changes are allowed only through the bounded HARNESS contract tools.
-The approved task contract is authoritative. First read the task contract, then acquire or continue its Chat execution lease.
-Read and modify only contract-owned paths. Before every patch, use ContractReadFile and pass its exact SHA-256 to ContractApplyPatch.
-Do not use the general Read tool as evidence for a write hash. Do not invent paths, broaden scope, or alter the contract.
-After editing, run ContractRunChecks and ContractValidate. End every implementation turn with exactly one successful terminal action: ContractComplete, ContractReportBlocker, or ContractProposeAmendment.
-If the requested work conflicts with the contract, use ContractProposeAmendment instead of silently changing the design. Include one atomic GraphPropose-compatible operations batch whenever the graph itself must change, so HARNESS can project it for review.
-Never claim completion unless ContractComplete succeeded. Graph proposal tools are unavailable in this mode.
+IMPLEMENT MODE IS ACTIVE. The approved Graph Lab contract is authoritative.
+You are running as the external executor in the approved workspace. Read the exported
+contract and handoff, then modify only its approved source paths. Do not invent paths,
+broaden scope, or alter the contract. Run the verification commands from the handoff after
+editing. If the request conflicts with the contract, stop and explain the conflict instead
+of silently changing the design. Report exactly what changed and which checks passed.
+Graph Lab records the execution from the agent workspace changes; no ContractReadFile,
+ContractApplyPatch, ContractRunChecks, or ContractComplete tools are available or required
+in this direct Codex execution mode.
 """
 
 TERMINAL_CONTRACT_TOOLS = {
@@ -69,6 +81,10 @@ DESIGN_CHANGE_PATTERN = re.compile(
     r"improv(?:e|ing)|add|integrate|create|change|connect|notify)\b",
     re.IGNORECASE,
 )
+IMPLEMENT_REQUEST_PATTERN = re.compile(
+    r"\b(implementa|implementar|implementación|implementacion|aplica|aplicar|continúa|continua|adelante|hazlo|modifica|modificar|code|implement|apply|continue)\b",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -79,6 +95,9 @@ class ExploreSession:
     input_tokens: int = 0
     output_tokens: int = 0
     lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
+    event_condition: threading.Condition = field(default_factory=threading.Condition, repr=False)
+    events: list[dict[str, Any]] = field(default_factory=list, repr=False)
+    next_event_id: int = 0
 
 
 class ExploreAssistantService:
@@ -91,6 +110,8 @@ class ExploreAssistantService:
         max_turns: int = 8,
         tools: ExploreToolRegistry | None = None,
         contract_tools: Any | None = None,
+        execution_scope: Callable[[], dict[str, Any]] | None = None,
+        execution_reporter: Callable[[str, str], dict[str, Any]] | None = None,
     ) -> None:
         self.client = client
         self.project_provider = project_provider
@@ -98,6 +119,8 @@ class ExploreAssistantService:
         self.max_turns = max_turns
         self.tools = tools or ExploreToolRegistry()
         self.contract_tools = contract_tools
+        self.execution_scope = execution_scope or (lambda: {})
+        self.execution_reporter = execution_reporter
         self._sessions: dict[str, ExploreSession] = {}
         self._lock = threading.RLock()
 
@@ -119,6 +142,46 @@ class ExploreAssistantService:
             if self._sessions.pop(session_id, None) is None:
                 raise KeyError(session_id)
 
+    def start_message(self, session_id: str, text: str, context: dict[str, Any] | None = None) -> dict[str, Any]:
+        if self.client.provider not in {"codex", "dsh"}:
+            return self.send_message(session_id, text, context)
+        with self._lock:
+            session = self._get_session(session_id)
+        label = "DeepSeek DSH" if self.client.provider == "dsh" else "Codex"
+        self._emit(session, "agent_started", {"message": f"{label} está trabajando"})
+        worker = threading.Thread(
+            target=self._run_started_message,
+            args=(session_id, text, context),
+            name=f"graph-lab-agent-{session_id[:8]}",
+            daemon=True,
+        )
+        worker.start()
+        return {"mode": "stream", "session_id": session_id}
+
+    def events_since(self, session_id: str, after: int = 0, timeout: float = 25.0) -> list[dict[str, Any]]:
+        with self._lock:
+            session = self._get_session(session_id)
+        with session.event_condition:
+            if not any(int(event["id"]) > after for event in session.events):
+                session.event_condition.wait(timeout)
+            return [dict(event) for event in session.events if int(event["id"]) > after]
+
+    def _run_started_message(self, session_id: str, text: str, context: dict[str, Any] | None) -> None:
+        try:
+            self.send_message(session_id, text, context)
+        except Exception as error:  # noqa: BLE001
+            with self._lock:
+                session = self._get_session(session_id)
+            self._emit(session, "agent_failed", {"error": str(error)})
+
+    @staticmethod
+    def _emit(session: ExploreSession, event_type: str, data: dict[str, Any]) -> None:
+        with session.event_condition:
+            session.next_event_id += 1
+            event = {"id": session.next_event_id, "type": event_type, "data": data}
+            session.events.append(event)
+            session.event_condition.notify_all()
+
     def send_message(self, session_id: str, text: str, context: dict[str, Any] | None = None) -> dict[str, Any]:
         question = text.strip()
         if not question:
@@ -129,26 +192,54 @@ class ExploreAssistantService:
             session = self._get_session(session_id)
         with session.lock:
             request_context = context or {}
-            allow_proposals = request_context.get("assistantMode") == "propose"
-            implement_mode = request_context.get("assistantMode") == "implement"
+            assistant_mode = request_context.get("assistantMode", "read")
+            allow_proposals = assistant_mode in {"propose", "auto"}
+            scope_hint = self.execution_scope() if assistant_mode == "auto" else {}
+            implement_mode = assistant_mode == "implement" or (
+                assistant_mode == "auto"
+                and bool(scope_hint.get("contract_id"))
+                and bool(IMPLEMENT_REQUEST_PATTERN.search(question))
+            )
             if implement_mode:
-                self._ensure_implementation_available()
+                scope = self._ensure_implementation_available()
+            else:
+                scope = {}
             graph = GraphIndex(self._graph_with_proposals(self.graph_provider(), request_context))
             environment = ToolEnvironment(self.project_provider().resolve(), graph, allow_proposals)
             context_text = self._context_text(request_context, environment)
             session.messages.append(ModelMessage("user", f"{context_text}\n\nQuestion:\n{question}"))
             session.public_messages.append({"role": "user", "content": question})
-            expects_proposals = allow_proposals and bool(DESIGN_CHANGE_PATTERN.search(question))
+            # Codex and DSH use the external MCP server for proposals. Those actions
+            # are persisted by GraphToolGateway, not in this in-process
+            # ToolEnvironment, so the generic retry guard would incorrectly
+            # tell Codex to propose again and create an approval loop.
+            expects_proposals = (
+                self.client.provider not in {"codex", "dsh"}
+                and allow_proposals
+                and bool(DESIGN_CHANGE_PATTERN.search(question))
+            )
             terminal_action = False
+            contract_tool_names = {
+                str(spec["name"]) for spec in self.contract_tools.tool_specs()
+            } if self.contract_tools is not None else set()
             for _ in range(self.max_turns):
-                contract_specs = self._contract_specs() if implement_mode else ()
+                contract_specs = (
+                    self._contract_specs()
+                    if self.contract_tools is not None and assistant_mode in {"auto", "implement"}
+                    else ()
+                )
                 response = self.client.complete(
                     ModelRequest(
                         SYSTEM_PROMPT
-                        + (PROPOSE_MODE_PROMPT if allow_proposals else "")
+                        + (self._auto_mode_prompt() if assistant_mode == "auto" else "")
+                        + (PROPOSE_MODE_PROMPT if assistant_mode == "propose" else "")
                         + (IMPLEMENT_MODE_PROMPT if implement_mode else ""),
                         tuple(session.messages),
                         self.tools.specs(allow_proposals) + contract_specs,
+                        allowed_paths=tuple(scope.get("allowed_paths", [])),
+                        verification_commands=tuple(scope.get("verification_commands", [])),
+                        contract_id=str(scope.get("contract_id", "")),
+                        event_callback=lambda event: self._emit(session, event.get("type", "agent_event"), event),
                     )
                 )
                 self._add_usage(session, response.usage)
@@ -160,19 +251,28 @@ class ExploreAssistantService:
                             "Your response staged no graph changes. Propose mode requires you to inspect the graph and call ProposeNode and/or ProposeRelation now. Do not return implementation advice without tool calls.",
                         ))
                         continue
-                    if implement_mode and not terminal_action:
+                    if implement_mode and not terminal_action and self.client.provider not in {"codex", "dsh"}:
                         session.messages.append(ModelMessage(
                             "user",
                             "Implementation mode requires a successful terminal contract action now: complete, report a blocker, or propose an amendment.",
                         ))
                         continue
-                    session.public_messages.append({"role": "assistant", "content": response.text})
+                    if implement_mode and self.client.provider in {"codex", "dsh"} and self.execution_reporter is not None:
+                        try:
+                            realization = self.execution_reporter(str(scope.get("contract_id", "")), response.text)
+                            response_text = response.text + "\n\n" + self._realization_summary(realization)
+                        except Exception as error:  # noqa: BLE001
+                            response_text = response.text + f"\n\nEjecución aplicada, pero no se pudo reconciliar el grafo: {error}"
+                    else:
+                        response_text = response.text
+                    session.public_messages.append({"role": "assistant", "content": response_text})
+                    self._emit(session, "agent_completed", {"text": response_text})
                     return self._serialize(session, environment.actions)
                 for call in response.tool_calls:
                     try:
-                        if call.name.startswith("Contract"):
-                            if not implement_mode or self.contract_tools is None:
-                                raise ValueError("contract tools are unavailable outside Implement mode")
+                        if call.name in contract_tool_names:
+                            if assistant_mode not in {"auto", "implement"} or self.contract_tools is None:
+                                raise ValueError("contract tools are unavailable in this mode")
                             payload = self.contract_tools.execute(call.name, call.arguments)
                             result = json.dumps(payload, ensure_ascii=False)
                             if call.name in TERMINAL_CONTRACT_TOOLS:
@@ -191,7 +291,24 @@ class ExploreAssistantService:
                     session.messages.append(tool_message)
             raise RuntimeError("Explore Assistant exceeded its tool turn limit")
 
-    def _ensure_implementation_available(self) -> None:
+    @staticmethod
+    def _realization_summary(realization: dict[str, Any]) -> str:
+        status = realization.get("status", "UNKNOWN")
+        materialized = ", ".join(realization.get("materialized", [])) or "ninguna ruta"
+        accepted = ", ".join(realization.get("accepted", []))
+        suffix = f" Rutas aceptadas en Git: {accepted}." if accepted else ""
+        return f"Graph Lab reconciliado: {status}. Rutas materializadas: {materialized}.{suffix}"
+
+    def _auto_mode_prompt(self) -> str:
+        executor = "deepseek-dsh" if self.client.provider == "dsh" else "codex-mcp"
+        return AUTO_MODE_PROMPT + f"\nThe active executor is {executor}; pass that exact executor value to ExportHandoff.\n"
+
+    def _ensure_implementation_available(self) -> dict[str, Any]:
+        scope = self.execution_scope()
+        if self.client.provider in {"codex", "dsh"}:
+            if not scope.get("contract_id") or not scope.get("allowed_paths"):
+                raise ValueError("Agent Implement requires an active handed-off contract with approved paths")
+            return scope
         if self.contract_tools is None:
             raise ValueError("Chat Implement is unavailable because HARNESS is not connected")
         snapshot = self.contract_tools.execute("ContractListTasks", {})
@@ -215,6 +332,7 @@ class ExploreAssistantService:
             raise ValueError(
                 f"task execution lease is owned by {competing.get('actor', 'another actor')}"
             )
+        return {}
 
     def _contract_specs(self) -> tuple[ToolSpec, ...]:
         return tuple(

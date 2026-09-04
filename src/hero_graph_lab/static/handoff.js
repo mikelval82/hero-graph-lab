@@ -9,10 +9,13 @@ async function handoffJson(path, options = {}) {
   return payload;
 }
 
-document.querySelector("#mission-launch").addEventListener("click", () => {
+function openHandoffDialog() {
   handoffStatus.textContent = "";
   handoffDialog.showModal();
-});
+}
+
+document.querySelector("#mission-launch").addEventListener("click", openHandoffDialog);
+document.querySelector("#sync-design").addEventListener("click", openHandoffDialog);
 document.querySelector("#handoff-close").addEventListener("click", () => handoffDialog.close());
 document.querySelector("#handoff-cancel").addEventListener("click", () => handoffDialog.close());
 
@@ -38,7 +41,7 @@ handoffForm.addEventListener("submit", async (event) => {
     const receipt = await handoffJson(`/api/contracts/${encodeURIComponent(contract.id)}/handoff`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ executor: document.querySelector("#handoff-executor").value, commands }),
+      body: JSON.stringify({ executor: "codex-mcp", commands }),
     });
     handoffStatus.textContent = `HANDED_OFF · ${receipt.handoff_path}`;
   } catch (error) {

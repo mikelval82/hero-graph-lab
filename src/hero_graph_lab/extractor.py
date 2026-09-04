@@ -7,7 +7,7 @@ import os
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 from hero_graph_lab.markdown_adapter import (
     MarkdownGraphAdapter,
@@ -92,6 +92,20 @@ class Edge:
     source: str
     target: str
     kind: str
+
+
+def merge_markdown_containment_edges(
+    document_edges: Iterable[dict[str, str]], edges: list[Edge]
+) -> None:
+    """Merge Markdown ``contains`` edges without changing existing graph edges."""
+    existing = {(edge.source, edge.target, edge.kind) for edge in edges}
+    for edge in document_edges:
+        if edge.get("kind") != "contains":
+            continue
+        key = (edge["source"], edge["target"], edge["kind"])
+        if key not in existing:
+            edges.append(Edge(*key))
+            existing.add(key)
 
 
 class PythonGraphExtractor(ast.NodeVisitor):
@@ -373,6 +387,7 @@ def _extract_python_package(path: Path, *, include_project_files: bool = False) 
         phase_a_nodes = [asdict(node) for node in nodes]
         document_graph = MarkdownGraphAdapter().extract(markdown_sources)
         nodes.extend(Node(**node) for node in document_graph["nodes"])
+        merge_markdown_containment_edges(document_graph["edges"], edges)
 
         reference_graph = MarkdownGraphAdapter().extract(
             markdown_sources, observed_nodes=phase_a_nodes

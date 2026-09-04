@@ -18,6 +18,8 @@ from hero_graph_lab.contracts import (
 )
 from hero_graph_lab.contracts.validation import ContractValidationError
 from hero_graph_lab.execution.adapters import DeepSeekHarnessAdapter, ManualHandoffAdapter
+from hero_graph_lab.execution.dsh_client import DshClient
+from hero_graph_lab.execution.registry import ExecutionRegistry
 from hero_graph_lab.server import LabState, make_handler
 
 
@@ -75,13 +77,34 @@ class ContractsExecutionTest(TestCase):
         self.assertEqual(names, ["contract.json", "instructions.md", "source-snapshot.json", "verification-policy.json"])
         self.assertEqual(existing, "pass\n")
 
-    def test_deepseek_adapter_is_explicitly_export_only(self) -> None:
+    def test_deepseek_adapter_exports_for_the_active_dsh_chat_session(self) -> None:
         with TemporaryDirectory() as directory:
             adapter = DeepSeekHarnessAdapter(Path(directory))
             receipt = adapter.handoff(request("deepseek-1"))
 
         self.assertFalse(adapter.capabilities()["execution"])
-        self.assertIn("pending", receipt.message)
+        self.assertEqual(receipt.status, ContractStatus.HANDED_OFF)
+        self.assertIn("active DeepSeek DSH", receipt.message)
+
+    def test_dsh_client_rejects_dsh_model_in_project_dotenv(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".env").write_text("DSH_MODEL=deepseek-v4-pro\n", encoding="utf-8")
+            client = DshClient(root, executable="/bin/true")
+
+            error = client.configuration_error()
+            available = client.available()
+
+        self.assertIn("HERO_GRAPH_LAB_DSH_MODEL", error)
+        self.assertFalse(available)
+
+    def test_registry_exposes_deepseek_dsh_without_legacy_harness(self) -> None:
+        with TemporaryDirectory() as directory:
+            registry = ExecutionRegistry(Path(directory))
+
+            adapter = registry.get("deepseek-dsh")
+
+        self.assertEqual(adapter.name, "deepseek-dsh")
 
     def test_reconcile_reports_materialized_and_divergent_contracts(self) -> None:
         with TemporaryDirectory() as directory:

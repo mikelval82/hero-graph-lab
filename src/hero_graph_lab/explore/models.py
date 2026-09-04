@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal, Protocol
+from typing import Any, Callable, Literal, Protocol
 
 
 Role = Literal["user", "assistant", "tool"]
@@ -38,6 +38,10 @@ class ModelRequest:
     messages: tuple[ModelMessage, ...]
     tools: tuple[ToolSpec, ...]
     max_tokens: int = 4_096
+    allowed_paths: tuple[str, ...] = ()
+    verification_commands: tuple[str, ...] = ()
+    contract_id: str = ""
+    event_callback: Callable[[dict[str, Any]], None] | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True)
