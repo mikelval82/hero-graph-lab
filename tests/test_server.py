@@ -398,7 +398,7 @@ class LabServerTest(TestCase):
                 self.assertIn("await loadExperiment({ restoreLocalDesign: true })", explore_script)
                 self.assertIn('fetch("/api/mcp/proposals"', explore_script)
                 self.assertIn('fetch("/api/mcp/proposals/ack"', explore_script)
-                self.assertIn("setInterval(pollMcpProposals, 1000)", explore_script)
+                self.assertIn("function scheduleMcpProposalPoll", explore_script)
                 self.assertIn('classList.toggle("model-pending", busy)', explore_script)
                 self.assertIn("pinnedNodeIds", explore_script)
                 self.assertIn("assistantMode: exploreState.agentMode", explore_script)
