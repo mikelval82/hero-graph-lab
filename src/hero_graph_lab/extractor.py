@@ -220,7 +220,9 @@ def extract_python_graph(path: Path) -> dict[str, Any]:
 def extract_project_graph(path: Path) -> dict[str, Any]:
     if path.is_file():
         if path.suffix.lower() == ".py":
-            return PythonGraphExtractor(path).extract()
+            graph = PythonGraphExtractor(path).extract()
+            graph["root"] = f"module:{path.stem}"
+            return graph
         if path.suffix.lower() in SCRIPT_SOURCE_SUFFIXES:
             module_name = path.name[: -len(path.suffix)]
             graph = TypeScriptGraphAdapter().extract(

@@ -32,6 +32,28 @@ class HarnessWorkerHostTest(TestCase):
         self.assertIn("--no-grill", command)
         self.assertNotIn("--resume", command)
 
+    def test_mission_worktree_path_is_stable(self) -> None:
+        host = HarnessWorkerHost(project_dir=HARNESS_ROOT, harness_root=HARNESS_ROOT)
+
+        first = host._mission_worktree_path(task="A mission", branch="feature/a-mission")
+        second = host._mission_worktree_path(task="A mission", branch="feature/a-mission")
+
+        self.assertEqual(first, second)
+        self.assertTrue(str(first).startswith("/tmp/hero-graph-lab-mission-"))
+
+    def test_stop_preserves_worker_worktree_for_resume(self) -> None:
+        host = HarnessWorkerHost(project_dir=HARNESS_ROOT, harness_root=HARNESS_ROOT)
+        host._worker_worktree = Path("/tmp/mission-to-resume")
+
+        with patch.object(host, "_terminate_process") as terminate, patch.object(
+            host, "_remove_worker_worktree"
+        ) as remove:
+            host.stop()
+
+        terminate.assert_called_once()
+        remove.assert_not_called()
+        self.assertIsNone(host._worker_worktree)
+
     def test_worker_connection_reset_is_normalized(self) -> None:
         host = HarnessWorkerHost(project_dir=HARNESS_ROOT, harness_root=HARNESS_ROOT)
         host._process = type("RunningProcess", (), {"poll": lambda self: None})()

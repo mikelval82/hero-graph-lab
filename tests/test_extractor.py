@@ -14,6 +14,16 @@ FIXTURE = Path(__file__).parents[1] / "fixtures" / "order_service.py"
 
 
 class PythonGraphExtractorTest(TestCase):
+    def test_single_python_project_graph_always_exposes_module_root(self) -> None:
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "service.py"
+            path.write_text("class Service:\n    pass\n", encoding="utf-8")
+
+            graph = extract_project_graph(path)
+
+        self.assertEqual(set(graph), {"source", "root", "nodes", "edges"})
+        self.assertEqual(graph["root"], "module:service")
+
     def test_exposes_script_symbols_while_css_and_html_remain_file_nodes(self) -> None:
         with TemporaryDirectory() as directory:
             project = Path(directory) / "project"
