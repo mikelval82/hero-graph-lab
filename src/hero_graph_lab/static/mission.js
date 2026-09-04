@@ -20,6 +20,8 @@ const missionState = {
   eventCursor: 0,
   eventLoopRunning: false,
   refreshTimer: null,
+  refreshInFlight: null,
+  renderFingerprint: null,
 };
 
 const missionDialog = document.querySelector("#mission-dialog");
@@ -119,6 +121,7 @@ function activateInspectorTab(name) {
 
 function renderHostStatus() {
   const running = Boolean(missionState.host?.running);
+  const stale = Boolean(missionState.host?.process_alive && missionState.host?.worker_connected && !running);
   const indicator = document.querySelector("#harness-indicator");
   const missionChatButton = document.querySelector('[data-chat-mode="mission"]');
   indicator.classList.toggle("online", running);
@@ -127,12 +130,12 @@ function renderHostStatus() {
   if (!running && document.body.dataset.chatMode === "mission") {
     dispatchEvent(new CustomEvent("explore-chat-required"));
   }
-  document.querySelector("#mission-launch").textContent = running ? "Open mission" : "Start mission";
+  document.querySelector("#mission-launch").textContent = running ? "Open mission" : (stale ? "Reconnect mission" : "Start mission");
   document.querySelector("#mission-project").value = missionState.host?.project_selected
     ? missionState.host.project_dir || ""
     : "";
   document.querySelector("#mission-stop").hidden = !running;
-  if (!running) {
+  if (!running && !stale) {
     missionState.capabilities = null;
     document.querySelector("#mission-stage-label").textContent = "Local design";
     document.querySelector("#mission-branch-label").textContent = missionState.host?.configured === false ? "HARNESS unavailable" : "HARNESS offline";
@@ -146,10 +149,15 @@ function renderHostStatus() {
     missionState.activity = [];
     renderActivity();
   }
+  if (stale) {
+    document.querySelector("#mission-branch-label").textContent = "HARNESS worker unreachable · state may be stale";
+    document.querySelector("#mission-summary").textContent = missionState.host.last_worker_error || "The worker process is alive but its API is not responding.";
+  }
 }
 
 function renderMission() {
   renderHostStatus();
+  if (missionState.host?.process_alive && missionState.host?.worker_connected && !missionState.host?.running) return;
   const snapshot = missionState.snapshot;
   if (!snapshot) return;
   const mission = snapshot.mission;
@@ -472,15 +480,42 @@ function renderChat() {
   count.hidden = !missionState.messages.length;
 }
 
-async function refreshMission({ mergeGraph = true } = {}) {
+function missionRenderFingerprint() {
+  const snapshotMission = missionState.snapshot?.mission || {};
+  const operation = missionState.operation || {};
+  const lastMessage = missionState.messages.at(-1) || {};
+  const lastActivity = missionState.activity.at(-1) || {};
+  return JSON.stringify({
+    host: missionState.host?.running,
+    revision: snapshotMission.revision,
+    stage: snapshotMission.stage,
+    blocked: snapshotMission.blocked_reason,
+    allowed: snapshotMission.allowed_actions,
+    design: missionState.design?.design_revision,
+    messages: [missionState.messages.length, lastMessage.id, lastMessage.content],
+    operation: [operation.operation_id, operation.status, operation.action, operation.detail, operation.error],
+    activity: [missionState.activity.length, lastActivity.event_id, lastActivity.description],
+    contracts: missionState.contracts.map((contract) => [contract.id, contract.status, contract.execution?.status]),
+  });
+}
+
+async function refreshMissionNow({ mergeGraph = true } = {}) {
   missionState.host = await harnessRequest("/status");
-  if (!missionState.host.running) {
+  const workerStale = Boolean(
+    missionState.host.process_alive && missionState.host.worker_connected && !missionState.host.running,
+  );
+  if (!missionState.host.running && !workerStale) {
     missionState.snapshot = null;
     missionState.design = null;
     missionState.contracts = [];
     missionState.operation = null;
     missionState.observedRevision = null;
     missionState.mergedDesignFingerprint = null;
+    missionState.renderFingerprint = null;
+    renderHostStatus();
+    return;
+  }
+  if (workerStale) {
     renderHostStatus();
     return;
   }
@@ -505,7 +540,11 @@ async function refreshMission({ mergeGraph = true } = {}) {
       harnessRequest(`/v1/contracts/tasks/${encodeURIComponent(task.id)}`).catch(() => null)
     )
   ).then((items) => items.filter(Boolean));
-  renderMission();
+  const renderFingerprint = missionRenderFingerprint();
+  if (renderFingerprint !== missionState.renderFingerprint) {
+    renderMission();
+    missionState.renderFingerprint = renderFingerprint;
+  }
   const observedRevision = Number(snapshot.design?.observed_revision || 0);
   if (missionState.observedRevision === null) {
     missionState.observedRevision = observedRevision;
@@ -515,6 +554,16 @@ async function refreshMission({ mergeGraph = true } = {}) {
   }
   if (mergeGraph) mergeMissionDesign();
   startEventLoop();
+}
+
+async function refreshMission(options = {}) {
+  if (missionState.refreshInFlight) return missionState.refreshInFlight;
+  missionState.refreshInFlight = refreshMissionNow(options);
+  try {
+    return await missionState.refreshInFlight;
+  } finally {
+    missionState.refreshInFlight = null;
+  }
 }
 
 function scheduleMissionRefresh() {
@@ -557,9 +606,10 @@ async function submitMissionAction(action, definition) {
     };
     if (action === "approve_design") body.base_design_revision = missionState.design.design_revision;
     if (action === "approve_task") body.task_id = missionState.snapshot.mission.active_task_id;
-    const retryingPreparation = action === "retry"
-      && /phase=(spec|plan)\b/.test(missionState.snapshot.mission.blocked_reason);
-    const endpoint = retryingPreparation ? "retry-preparation" : definition.endpoint;
+    const recoveryAction = missionState.snapshot.mission.blocked?.recovery_action;
+    const endpoint = action === "retry"
+      ? (recoveryAction === "retry-design" ? "retry-design" : "retry")
+      : definition.endpoint;
     missionState.operation = await harnessRequest(
       `/v1/actions/${endpoint}`,
       jsonOptions("POST", body),

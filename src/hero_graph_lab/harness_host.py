@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import subprocess
 import sys
-import tempfile
 import threading
 from collections import deque
 from dataclasses import dataclass
@@ -45,6 +45,8 @@ class HarnessWorkerHost:
         self._worker_worktree: Path | None = None
         self._logs: deque[str] = deque(maxlen=100)
         self._lock = threading.Lock()
+        self._worker_health = "unknown"
+        self._last_worker_error = ""
 
     def configure_project(self, project_dir: Path) -> dict[str, object]:
         with self._lock:
@@ -72,7 +74,11 @@ class HarnessWorkerHost:
                 return self.status()
             self._validate_configuration()
             self._prepare_git_project()
-            worker_project = self._create_worker_worktree()
+            worker_project = (
+                self._resume_worker_worktree(task=task, branch=branch)
+                if resume
+                else self._create_worker_worktree(task=task, branch=branch)
+            )
             self.project_dir = worker_project
             command = self._worker_command(
                 task=task,
@@ -92,6 +98,8 @@ class HarnessWorkerHost:
             )
             self._connection = None
             self._logs.clear()
+            self._worker_health = "starting"
+            self._last_worker_error = ""
             self._process = subprocess.Popen(
                 command,
                 cwd=self.project_dir,
@@ -157,15 +165,27 @@ class HarnessWorkerHost:
         with self._lock:
             self._terminate_process()
             self._connection = None
-            self._remove_worker_worktree()
+            # Keep the worktree so a later `resume` can reconnect to the same
+            # mission workspace and preserve uncommitted implementation work.
+            # Cleanup is an explicit lifecycle operation, not a side effect of
+            # stopping a worker.
+            self._worker_worktree = None
             self.project_dir = self._selected_project_dir
 
     def status(self) -> dict[str, object]:
-        running = self._running()
+        process_alive = self._running()
+        connected = self._connection is not None
+        if process_alive and connected:
+            self._probe_worker()
+        running = process_alive and connected and self._worker_health != "unreachable"
         connection = self._connection if running else None
         return {
             "configured": self.harness_root.is_dir() and self.python_executable.is_file(),
             "running": running,
+            "process_alive": process_alive,
+            "worker_connected": connected,
+            "worker_health": self._worker_health,
+            "last_worker_error": self._last_worker_error,
             "mission_id": connection.mission_id if connection else "",
             "project_dir": str(self.project_dir),
             "branch": connection.branch if connection else "",
@@ -194,6 +214,8 @@ class HarnessWorkerHost:
         )
         try:
             with urlopen(request, timeout=35) as response:
+                self._worker_health = "healthy"
+                self._last_worker_error = ""
                 return (
                     int(response.status),
                     response.headers.get_content_type() or "application/json",
@@ -206,7 +228,28 @@ class HarnessWorkerHost:
                 error.read(),
             )
         except (ConnectionError, TimeoutError, URLError) as error:
+            self._worker_health = "unreachable"
+            self._last_worker_error = str(error)
             return _json_response(502, {"error": "harness_worker_error", "detail": str(error)})
+
+    def _probe_worker(self) -> None:
+        """Distinguish a live subprocess from a responsive worker API."""
+        connection = self._connection
+        if connection is None:
+            return
+        request = Request(
+            connection.url + "/api/v1/capabilities",
+            method="GET",
+            headers={"Authorization": f"Bearer {connection.token}"},
+        )
+        try:
+            with urlopen(request, timeout=1) as response:
+                if response.status == 200:
+                    self._worker_health = "healthy"
+                    self._last_worker_error = ""
+        except (ConnectionError, TimeoutError, URLError, OSError) as error:
+            self._worker_health = "unreachable"
+            self._last_worker_error = str(error)
 
     def _read_worker_stdout(
         self,
@@ -283,9 +326,17 @@ class HarnessWorkerHost:
                 "chore: initialize project",
             )
 
-    def _create_worker_worktree(self) -> Path:
-        root = Path(tempfile.mkdtemp(prefix="hero-graph-lab-mission-", dir="/tmp"))
-        root.rmdir()
+    def _mission_worktree_path(self, *, task: str, branch: str) -> Path:
+        identity = f"{self._selected_project_dir.resolve()}\n{branch.strip()}\n{task.strip()}"
+        digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:12]
+        return Path("/tmp") / f"hero-graph-lab-mission-{digest}"
+
+    def _create_worker_worktree(self, *, task: str, branch: str) -> Path:
+        root = self._mission_worktree_path(task=task, branch=branch)
+        if root.exists():
+            raise HarnessHostError(
+                f"mission worktree already exists: {root}; resume it or choose another branch/task"
+            )
         result = subprocess.run(
             ["git", "worktree", "add", "--detach", str(root), "HEAD"],
             cwd=self._selected_project_dir,
@@ -295,6 +346,13 @@ class HarnessWorkerHost:
         )
         if result.returncode != 0:
             raise HarnessHostError(result.stderr.strip() or "could not create mission worktree")
+        self._worker_worktree = root
+        return root
+
+    def _resume_worker_worktree(self, *, task: str, branch: str) -> Path:
+        root = self._mission_worktree_path(task=task, branch=branch)
+        if not root.is_dir():
+            raise HarnessHostError(f"cannot resume mission: worktree not found: {root}")
         self._worker_worktree = root
         return root
 

@@ -13,6 +13,7 @@ const exploreState = {
 };
 
 let mcpProposalPollPending = false;
+let mcpProposalPollTimer = null;
 
 document.body.dataset.chatMode = "explore";
 const BrowserSpeechRecognition = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
@@ -102,6 +103,14 @@ async function pollMcpProposals() {
   } finally {
     mcpProposalPollPending = false;
   }
+}
+
+function scheduleMcpProposalPoll() {
+  clearTimeout(mcpProposalPollTimer);
+  mcpProposalPollTimer = setTimeout(async () => {
+    if (document.visibilityState !== "hidden") await pollMcpProposals();
+    scheduleMcpProposalPoll();
+  }, 2500);
 }
 
 function updateExploreBusyState() {
@@ -422,4 +431,4 @@ addEventListener("graph-experiment-ready", updateExploreContext);
 addEventListener("graph-experiment-ready", pollMcpProposals);
 
 startExploreSession();
-setInterval(pollMcpProposals, 1000);
+scheduleMcpProposalPoll();
