@@ -272,7 +272,7 @@ class LabServerTest(TestCase):
                 self.assertIn('id="explore-agent-mode"', index)
                 self.assertIn('data-explore-agent-mode="read"', index)
                 self.assertIn('data-explore-agent-mode="propose"', index)
-        self.assertIn('data-explore-agent-mode="implement"', index)
+                self.assertIn('data-explore-agent-mode="implement"', index)
                 self.assertIn('id="explore-pins"', index)
                 self.assertIn('id="chat-microphone"', index)
                 self.assertIn('id="chat-speech"', index)
