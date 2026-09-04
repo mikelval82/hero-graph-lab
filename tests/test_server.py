@@ -496,7 +496,7 @@ class LabServerTest(TestCase):
                 self.assertNotIn('addEventListener("click", toggleCallTrace)', app_script)
                 self.assertIn('retry: { endpoint: "retry-review"', mission_script)
                 self.assertIn('recoveryAction === "retry-design"', mission_script)
-                self.assertIn('"retry-preparation"', mission_script)
+                self.assertIn('"retry-design" : "retry"', mission_script)
                 self.assertIn('model_selection:', mission_script)
                 self.assertIn('payload.requested_model', mission_script)
                 self.assertIn("function rebuildGraphIndexes", app_script)
