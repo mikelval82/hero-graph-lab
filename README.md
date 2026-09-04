@@ -1,341 +1,221 @@
 # HERO Graph Lab
 
-HERO Graph Lab is the visual workspace for understanding a codebase, designing
-changes and preparing verifiable execution handoffs. It owns intent, design,
-versioned contracts, source snapshots, verification policy, evidence and
-reconciliation. Executors such as Codex, Claude Code, CI or
-[HERO HARNESS](https://github.com/mikelval82/hero-harness) consume those
-handoffs externally.
+HERO Graph Lab is a visual workspace for understanding a codebase, designing a
+change as a graph, approving a versioned contract, and reconciling the result
+with the real source tree and Git state.
 
-Graph Lab runs without HERO HARNESS installed and does not start executor
-subprocesses or create executor worktrees. The deprecated HARNESS bridge remains
-available only behind the explicit `--legacy-harness` option while integrations
-migrate to the neutral contract API.
-
-## Run
-
-Requires Python 3.12 or newer.
-
-```powershell
-py -3.12 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e .
-.\.venv\Scripts\python.exe -m hero_graph_lab
-```
-
-Use the explicit `.venv` interpreter even when the terminal prompt already
-shows `(.venv)`: another workspace environment may still own the `python`
-command. The editable install means `PYTHONPATH` and changing into `src` are
-not required.
-
-Open <http://127.0.0.1:8765>.
-
-To open a project directly:
-
-```powershell
-.\.venv\Scripts\python.exe -m hero_graph_lab `
-	--mission-project C:\path\to\project
-```
-
-`--mission-project` is the initial graph source. Without it, Graph Lab opens the
-fixture and **Open project** can select an absolute local project folder.
-
-Use **Prepare handoff** to create and validate a contract, then export
-`.graph-lab/handoffs/<execution_id>/`. The package contains `contract.json`,
-`instructions.md`, `verification-policy.json` and `source-snapshot.json`.
-
-An empty selected folder is initialized as a Git repository with an initial
-commit. A non-empty folder that is not already a Git repository is rejected so
-Graph Lab cannot silently adopt existing files.
-
-## Neutral contract execution
-
-Graph Lab extracts the observed code graph, renders source and contracts, keeps
-reviewable design changes in a browser-local draft, and exports a versioned
-handoff. The external executor owns its workspace, file changes, commands and
-runtime loop. Graph Lab records returned evidence and reconciles the graph.
+It owns the observed graph, local design draft, contract, source snapshot,
+verification policy, execution evidence, and the visual status of each change.
+The coding agent is interchangeable: the current integrated agents are Codex
+and the official [DeepSeek Harness (`dsh`)](https://github.com/deepseek-ai/deepseek-harness).
 
 ```mermaid
 flowchart LR
-    User[User] --> GraphLab[HERO Graph Lab]
-    Codex[Codex through MCP] --> GraphLab
-    GraphLab --> Draft[Explore and local design draft]
-    Draft --> Contract[Versioned Graph Lab contract]
-    Contract --> Handoff[Filesystem or MCP handoff]
-    Handoff --> Executor[External executor]
-    Executor --> Evidence[Execution evidence]
-    Evidence --> Verify[Re-extract and reconcile]
-    Verify --> Project[Project source and Git]
-    Project --> GraphLab
+    User --> Lab[HERO Graph Lab]
+    Lab --> Graph[Observed code graph]
+    Graph --> Draft[Reviewable design draft]
+    Draft --> Contract[Approved contract]
+    Contract --> Agent[Codex or DeepSeek DSH]
+    Agent --> Evidence[Changes and verification]
+    Evidence --> Reconcile[Re-extract and reconcile]
+    Reconcile --> Graph
 ```
 
-The neutral HTTP API exposes `/api/capabilities`, `/api/contracts`,
-`/api/executions` and reconciliation endpoints. Handoffs never modify source
-files and the built-in DeepSeek Harness adapter is export-only until a real
-external CLI/API integration is configured.
+The legacy HERO Harness mission workflow is not part of the normal flow.
 
-## Explore Assistant
+## Requirements
 
-The Inspector's **Explore** chat is available independently of HARNESS. Each
-question includes the current graph scope, selected node or relationship,
-visible source range, visible nodes, and any nodes pinned by the user. In
-**Read** mode, the assistant can inspect the selected project with read-only
-Read, Glob, Grep and graph-query tools and cannot modify project files.
+- Python 3.12 or newer.
+- Git for contract acceptance status.
+- One agent runtime:
+  - Codex CLI for `--explore-provider codex`; or
+  - Node 22.19+ and the official DeepSeek DSH CLI for `--explore-provider dsh`.
 
-The default deterministic provider verifies the interaction without requiring
-credentials. Start Graph Lab with a model-backed provider using its standard
-SDK environment variable (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, or
-`GOOGLE_API_KEY`/`GEMINI_API_KEY`):
+Install Graph Lab with its MCP dependency:
 
-```powershell
-.\.venv\Scripts\python.exe -m hero_graph_lab --explore-provider anthropic --explore-model claude-sonnet-4-5
-.\.venv\Scripts\python.exe -m hero_graph_lab --explore-provider openai --explore-model gpt-5
-.\.venv\Scripts\python.exe -m hero_graph_lab --explore-provider deepseek --explore-model deepseek-v4-flash
-.\.venv\Scripts\python.exe -m hero_graph_lab --explore-provider gemini --explore-model gemini-2.5-flash
+```bash
+python3.12 -m venv .venv
+.venv/bin/python -m pip install -e ".[mcp]"
 ```
 
-Install one provider with `.\.venv\Scripts\python.exe -m pip install -e
-".[anthropic]"`, `.\.venv\Scripts\python.exe -m pip install -e ".[openai]"`,
-`.\.venv\Scripts\python.exe -m pip install -e ".[deepseek]"`, or
-`.\.venv\Scripts\python.exe -m pip install -e ".[gemini]"`; `.[explore]`
-installs all providers. On Windows, `run-gemini.cmd` starts Gemini with the local
-interpreter and accepts additional Graph Lab arguments. Provider adapters only
-translate the common model and tool-call contract, so additional clients can
-be added without changing the assistant service or UI.
+On Windows, use `py -3.12`, `.venv\Scripts\python.exe`, and
+`.venv\Scripts\hero-graph-lab.exe` instead.
 
-HARNESS can route mission phases across model tiers independently of the
-Explore assistant. With DeepSeek, leave `HARNESS_MODEL` unset to use V4 Flash
-for routine phases and V4 Pro for planning, high-confidence review, large tasks
-and retries. Override the tiers with `HARNESS_MODEL_CHEAP`,
-`HARNESS_MODEL_DEFAULT`, and `HARNESS_MODEL_DEEP`; the Mission activity panel
-shows each selected model.
+## Run with Codex
 
-The **Mic** control dictates into the current Explore question using the
-browser's speech-recognition service. **Read** toggles spoken assistant replies.
-Voice input and output degrade to disabled controls when the browser lacks the
-corresponding Web Speech API; the Gemini key remains server-side and audio is
-never sent through Graph Lab's HTTP API.
+Codex is the default chat agent:
 
-Explore renders assistant Markdown through the same sanitized renderer used by
-Mission documents. HTML is sanitized with DOMPurify, Mermaid uses its strict
-security profile, and invalid diagrams remain visible as controlled errors.
-
-In **Propose** mode, the assistant can emit reviewable module, class, function,
-method, and relationship proposals. Accepted actions are saved automatically in
-the browser-local design draft and never edit project source files. **Save map**
-is the separate explicit step that synchronizes the draft to HARNESS.
-
-### Connected proposal contracts
-
-A proposal is more than a labelled box. Code-oriented proposal nodes can carry
-the exact intended path, qualified name, callable signature, responsibility,
-docstring, linked requirements, and behavioral acceptance criteria. Selecting a
-proposal opens **Proposal Contract** in the Code workspace. This view renders a
-clearly labelled virtual interface, lists its direct relationships and observed
-implementation anchors, and reports missing contract fields. It never presents
-the preview as repository source or creates a source stub.
-
-Connections to current code are explicit reviewed graph relationships. A
-proposal connected only to the project root remains visibly incomplete because
-root containment explains placement, not integration. The editor and agents may
-leave fields unresolved when evidence is insufficient; Graph Lab preserves the
-draft and reports the omissions instead of inventing code details. Existing
-legacy proposals continue to load and are shown with the same completeness
-diagnostics.
-
-The Add/Edit dialog, Explore chat, and `ProposeNode` MCP tool use the same
-contract vocabulary. Browser storage preserves the enriched local draft across
-reloads. **Prepare handoff** stores a versioned contract and exports it for the
-selected external executor.
-
-Graph Lab never enables source writes from natural-language chat. External
-executors receive the handoff, work in their own workspace, and return evidence
-through `/api/executions/{id}/evidence`.
-
-## Codex MCP tools
-
-Graph Lab exposes source, graph-query, proposal, contract, handoff, evidence and
-reconciliation tools through the MCP STDIO server. The browser Explore chat
-remains on its existing REST session API; both adapters use the same project.
-
-Install the optional SDK dependency:
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install -e ".[mcp]"
+```bash
+cd ~/hero-graph-lab
+.venv/bin/hero-graph-lab \
+  --host 127.0.0.1 \
+  --port 8765 \
+  --mission-project "$PWD" \
+  --explore-provider codex
 ```
 
-Start the Graph Lab web server first. The MCP bridge deliberately delegates to
-the loopback server so its tools always use the project currently selected in
-the UI:
+Open <http://127.0.0.1:8765>. `--mission-project` selects the initial project
+to index. Without it, Graph Lab opens its fixture and **Open project** can
+select an absolute local path.
 
-```powershell
-codex mcp add hero_graph_lab -- `
-  C:\path\to\hero-graph-lab\.venv\Scripts\python.exe `
-  -m hero_graph_lab.mcp_server `
+## Run with DeepSeek DSH
+
+Install the official DeepSeek harness as your normal user, not with `sudo`:
+
+```bash
+npm install -g @deepseek-ai/dsh
+dsh --version
+```
+
+Create `.env` from `.env.example` and set the API key:
+
+```dotenv
+DEEPSEEK_API_KEY=...
+HERO_GRAPH_LAB_DSH_MODEL=deepseek-v4-flash
+```
+
+Then start Graph Lab:
+
+```bash
+cd ~/hero-graph-lab
+.venv/bin/hero-graph-lab \
+  --host 127.0.0.1 \
+  --port 8765 \
+  --mission-project "$PWD" \
+  --explore-provider dsh
+```
+
+Do not use `DSH_MODEL` in `.env`: DSH intentionally rejects it. Graph Lab
+translates `HERO_GRAPH_LAB_DSH_MODEL` into the process-only `DSH_MODEL` value.
+It also generates `.graph-lab/dsh`, a local DSH profile that connects the
+official DSH MCP client to the active Graph Lab server.
+
+DSH headless runs one process per chat turn. Graph Lab retains the conversation
+and supplies the relevant history and graph context to the next turn.
+
+## Design and implementation flow
+
+1. Ask the chat agent to inspect or change part of the project.
+2. The agent reads graph and source evidence, then creates reviewable graph
+   proposals. Proposals never write source files.
+3. Inspect the proposal contract in the Code panel. It shows target paths,
+   interface, requirements, acceptance criteria and direct relationships.
+4. Approve the design in the chat.
+5. Graph Lab snapshots the accepted draft, compiles and validates a contract,
+   and exports a handoff to `.graph-lab/handoffs/<execution-id>/`.
+6. Ask the active agent to implement it. It receives only the contract-owned
+   paths and configured checks.
+7. Graph Lab records evidence, re-extracts the project graph, and marks nodes
+   and relationships as materialized. After a Git commit, applicable paths are
+   marked accepted.
+
+Changes outside the approved contract paths are reported as divergent; they are
+not silently accepted. `.graph-lab/` is local runtime state and is ignored by
+Git.
+
+## Chat and graph interaction
+
+The chat receives the current graph scope, selected node or relationship,
+visible source range, visible nodes and pinned nodes. Press Enter to send a
+message. Agent progress and replies stream into the conversation.
+
+The **Mic** control uses browser speech recognition; **Read** toggles speech
+output. Both disable gracefully when the browser lacks the corresponding Web
+Speech API.
+
+Assistant Markdown is sanitized with DOMPurify. Mermaid diagrams use a strict
+security profile and invalid diagrams remain visible as controlled errors.
+
+## Proposal contracts
+
+Code-oriented proposals carry more than a label:
+
+- repository-relative `target_path`;
+- qualified name and callable signature;
+- responsibility and docstring;
+- linked requirements and behavioral acceptance criteria;
+- explicit relationships to observed code.
+
+A proposal without a concrete observed implementation connection remains
+visibly incomplete. Graph Lab preserves missing values rather than inventing
+them. Browser proposals and MCP proposals share the same vocabulary and merge
+into the same draft.
+
+## MCP server
+
+Graph Lab exposes source, graph-query, proposals, contracts, handoffs,
+execution evidence and reconciliation through an MCP STDIO server. The bridge
+uses the Graph Lab loopback server, ensuring that tools always act on the
+project selected in the UI.
+
+Start Graph Lab first, then register it with Codex:
+
+```bash
+codex mcp add hero_graph_lab -- \
+  /absolute/path/to/hero-graph-lab/.venv/bin/python \
+  -m hero_graph_lab.mcp_server \
   --url http://127.0.0.1:8765
-codex mcp list
 ```
 
-Restart the Codex IDE extension after adding the server. Inspection tools are
-marked read-only; `ProposeNode` and `ProposeRelation` are marked as writes. MCP
-proposals enter an in-memory delivery inbox and the open browser applies them
-to the existing local design draft. They remain `NEW` reviewable elements and
-still require **Save map** for HARNESS synchronization.
+DeepSeek DSH receives the same MCP server automatically through its generated
+`graph-lab` DSH profile; no separate MCP registration is required.
 
-`ProposeNode` accepts `target_path`, `qualified_name`, `signature`, `docstring`,
-`description`, `satisfies`, and `acceptance` in addition to its label, kind, and
-optional parent. Paths must be repository-relative. Callers should inspect the
-observed graph first and add an explicit justified relationship to current code;
-unknown contract details should be omitted and will remain visibly incomplete.
+The MCP bridge accepts loopback URLs only. It does not expose an unrestricted
+shell or a legacy mission worker.
 
-MCP contract tools create and validate intent contracts, export handoffs, record
-external evidence and reconcile the resulting graph. They never expose an
-unrestricted shell or start an executor loop.
+## Graph navigation
 
-The bridge accepts loopback HTTP URLs only. If Graph Lab is stopped, tool calls
-fail explicitly instead of extracting a different or stale project. Pending
-delivery state is intentionally ephemeral and is cleared when the server stops
-or the selected project changes.
+Graph Lab offers three views over the same graph:
 
-## Graph commands
+- **Hierarchy**: containment only.
+- **Flow**: the navigated path, direct children and related context.
+- **Focus**: callers and callees of the selected node.
 
-Graph actions are registered once and invoked by toolbar buttons, keyboard
-shortcuts, and the `Ctrl+K` command palette. A command owns its availability,
-so its button and palette state remain synchronized. Graph shortcuts
-only run while the graph has focus and are ignored in form fields, editable
-content, and open dialogs.
+Useful shortcuts while the graph has focus:
 
-| Shortcut | Command |
-|---|---|
-| `I` | Ask the configured Explore provider for a Spanish explanation of the selected node |
-| `M` | Open Diagram Studio for deterministic diagrams or an inferred business sequence |
-| `G` | Open a contextual interactive projection in Flow or Focus; press again on a selected node to expand it |
-| `T` | Isolate the call trace; press it again to restore the exact previous view |
-| `F` | Open Focus view |
-| `E` | Expand or collapse the selected node |
-| `→` | Expand or follow the selected node |
-| `←` | Collapse the selected node, or step back in an interactive projection |
-| `C` | Toggle between dimmed graph context and only the highlighted neighborhood |
-| `H` | Hide the selected node and its descendants |
-| `P` | Pin or unpin the selected node as Explore context |
-| `A` | Add a proposed child node |
-| `R` | Start a proposed relationship and select its target |
-| `Delete` | Delete or restore the selected proposal |
-| `Esc` | Cancel relationship mode, restore the pre-trace view, or clear selection |
-| `?` | Open visible shortcut help |
-| `Ctrl+K` | Open the command palette |
+| Shortcut | Action |
+| --- | --- |
+| `I` | Ask the configured agent to explain the selected node. |
+| `M` | Open Diagram Studio. |
+| `G` | Open or expand an interactive projection. |
+| `T` | Trace calls. |
+| `F` | Open Focus view. |
+| `→` / `←` | Expand/follow or collapse/back. |
+| `C` | Toggle only-active graph context. |
+| `H` | Hide the selected node. |
+| `P` | Pin or unpin a node as chat context. |
+| `A` / `R` | Add a proposed node or relationship. |
+| `Delete` | Delete or restore the selected proposal. |
+| `Ctrl+K` | Open the command palette. |
 
-## Diagram Studio
+`G` opens a deterministic interactive projection. Diagram Studio supports
+hierarchy, class, calls, module dependencies, neighborhood and pinned-path
+views. The optional business-sequence diagram is always labelled `INFERRED`.
 
-Diagram Studio offers package/module hierarchy, class, call, module dependency,
-selection-neighborhood, and pinned-path diagrams. These six modes are labelled
-`DETERMINISTIC` because they use only current graph nodes and relationships.
-Type and traversal depth are selectable, Mermaid source remains visible, and
-the result can be copied. Class diagrams derive dependencies from calls between
-methods; they do not invent inheritance. Pinned paths use the shortest
-undirected graph path while preserving extracted arrow direction.
+## API and execution status
 
-The business-sequence mode is the only model-backed diagram. It sends Explore
-only the selection, pinned nodes, a bounded neighborhood, and selected source
-range. Its output and UI are always labelled `INFERRED`, because extracted
-`calls` relationships do not preserve execution order. Inferred responses are
-cached by graph signature, anchors, depth, and prompt version. No diagram mode
-writes project files.
+The neutral HTTP API includes:
 
-`G` is deliberately separate from `M`. It opens the equivalent deterministic
-projection directly in the interactive graph: packages use hierarchy, modules
-use module dependencies, classes use collaborators, callables use their call
-graph, and two pinned nodes can open their path. Within the projection, select
-a node and use `G`, `E`, or double-click to merge its next local expansion.
-`Esc` or **Back** removes the latest expansion; **Restore view** recovers the
-original view, selection, layout, zoom, scroll, and layout-lock state. Design
-editing is disabled while a synthetic projection is active.
+- `GET /api/capabilities`
+- `GET /api/contracts`
+- `GET /api/executions/<execution-id>`
+- contract validation, handoff, evidence and reconciliation actions.
 
-## Mission workspace
+To inspect an execution from a terminal:
 
-The Inspector can load an idea or mature brief seed, run Research and Grill,
-edit versioned mission documents and the proposed design, approve design,
-WorkPlan and task gates, and follow worker events. Available commands are
-negotiated through the worker capability endpoint.
-
-The initial brief remains input rather than instant approval. Research and
-Grill refine it into the reviewed `brief.md`; approving that brief together
-with a design revision creates the immutable snapshot from which HARNESS
-derives the ChangeSet, WorkPlan and task contracts. Research, Grill, SPEC, PLAN
-and REVIEW are not replaced by the graph: the graph adds a reviewable structural
-contract that those phases share.
-
-Every task exposes a specification and plan for review before implementation.
-Mission executes the same task contract that Chat and Codex MCP can retrieve.
-Saving a design change during execution requests an amendment: the worker
-finishes the current safe boundary, pauses, and requires design and WorkPlan
-approval again. A completed mission exposes a versioned mission report and only
-commits or merges after structural verification and final reconciliation
-succeed.
-
-Mission documents open in a rendered Markdown preview and can be switched to
-Edit mode without leaving the Code panel. Fenced `mermaid` blocks render as
-diagrams in Preview mode. Markdown HTML is sanitized before display, and
-Mermaid runs with its strict security profile.
-
-## Experiment 02
-
-The lab uses a deterministic AST graph extracted from the nested `fixtures/order_app` package. It contains six modules across application, domain, pricing, infrastructure, and presentation areas.
-
-The graph offers three coordinated views over the same selection and scope:
-
-- **Hierarchy** shows containment without call relationships or edge labels.
-- **Flow** keeps an ordered journey of visited nodes and the relationships followed between them. It shows the direct children and related context of its current endpoint without dropping earlier branches.
-- **Focus** temporarily reduces Flow to the direct callers and callees of the selected node, placing callers on the left and callees on the right. Returning to Flow restores its nodes, positions, zoom, and scroll.
-
-All views support inline exploration through package, module, class, and method levels:
-
-- Use the Explorer panel to browse folders, files, classes, functions, and methods.
-- Click a tree item to reveal it in Flow; use its caret to expand or collapse it.
-- Single-click a graph node to inspect it without changing the visible topology or layout.
-- Double-click a container or select it and use **Expand** to add it to the Flow journey and reveal its children.
-- Double-click a related leaf, or select it and use **Follow**, to advance through a relationship without requiring children.
-- Use the highlighted journey breadcrumbs or the back arrow to return to an earlier visited node. Relationship direction is retained even when traversed in reverse.
-- Use **Collapse** to remove a container's descendants from the visualization without changing the current scope.
-- Use **Hide** to remove a selected node from the visualization only.
-- Use **Reset view** to restore hidden nodes and collapse inline expansions.
-- Flow redraws automatically with a deterministic layered layout: dependency connectivity assigns the layers, structural `contains` relationships keep children after their parents, and neighbor ordering reduces edge crossings.
-- Cyclic dependencies are grouped before layers are assigned, so they do not collapse into an arbitrary first column.
-- Select a function or method with outgoing calls and use **Trace calls** to reveal its exact callees at depth 1 on the current graph.
-- Trace badges mark the selected origin as `0` and direct callees as `1`; unrelated nodes and relationships are dimmed. Use **Clear trace** to return to the normal projection.
-- Calls are aggregated between the branches visible at the current scope.
-- Click a relationship line or label to highlight it and edit its name, type, and `key=value` properties.
-- Aggregated relationships edit the underlying calls represented by the visible line as a group.
-- Symbols outside the current scope appear as dashed `CONTEXT` nodes.
-- The persistent **Code** panel opens a complete script when its file is selected in Explorer.
-- Selecting a class, function, or method in Explorer or Flow shows its exact source range in the same panel.
-
-Try the navigation tasks shown in the interface and record concrete friction or discoveries with **Record finding**. Observations are stored locally in `state/observations.json` and should drive the next iteration.
-
-Nodes can be repositioned in Flow. Manual positions remain until the visible topology changes; expanding, collapsing, hiding, changing scope, or editing graph structure triggers a fresh automatic layout. Single-clicking a node only updates inspection emphasis. Double-click or **Follow** advances the Flow journey; use Focus to isolate immediate call relationships. Selecting the canvas background clears inspection without changing the journey.
-
-The vertical boundaries between Explorer, Flow Graph, Code, and Inspector are resizable. Drag a boundary, focus it and use the arrow keys, or double-click it to restore its default position. Panel sizes persist in browser storage.
-
-Explorer, Code, and Inspector can also be collapsed independently. Their compact rails remain available to restore each panel, and the collapsed state persists in browser storage. Design tools and their legends live beside the graph navigation controls so structural edits stay close to Expand, Collapse, and Hide.
-
-The **Design tools** section explores graphical authorship without changing the fixture:
-
-- Observed nodes are labeled `CODE`.
-- New proposals are labeled `NEW`.
-- Edits to observed nodes are labeled `EDIT`.
-- Proposed removals are labeled `DELETE` and can be restored.
-
-Design changes, node positions, inline expansions, and hidden graph nodes persist in browser storage. **Reset view** only resets the visualization. **Reset** returns to the extracted graph; neither action affects saved findings.
-
-Each node exposes a circular relationship port. Drag from that port to another node to propose a named relationship. The editor stores a relationship type and `key=value` properties. Selecting a relationship label reopens the editor; observed relationships follow the same `EDIT` and reversible `DELETE` states as observed nodes.
-
-Relationship color represents design status independently from relationship type: dark gray is extracted `CODE`, green is `NEW`, blue is `EDIT`, and red is `DELETE`. Line patterns may still distinguish types such as calls without changing that status color.
-
-## Test
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest
+```bash
+curl -s http://127.0.0.1:8765/api/executions/EXECUTION_ID | python3 -m json.tool
 ```
 
-The MCP protocol smoke in `tests/test_mcp_server.py` starts the STDIO process,
-performs initialization, lists tools, and invokes a live graph query through a
-temporary loopback Graph Lab server.
+## Tests
+
+Run the full suite:
+
+```bash
+.venv/bin/python -m pytest -q
+node --test tests/*.test.js
+```
+
+The Python suite covers extraction, contracts, execution reconciliation, MCP,
+server endpoints and agent adapters. The JavaScript suite covers graph
+projection, navigation, rendering, views and panel layout.
