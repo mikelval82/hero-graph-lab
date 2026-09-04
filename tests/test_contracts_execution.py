@@ -122,3 +122,14 @@ class ContractsExecutionTest(TestCase):
         self.assertEqual(created["id"], "api-contract")
         self.assertEqual(handoff["status"], "HANDED_OFF")
         self.assertEqual(status["executor"], "manual")
+
+    def test_handoff_can_be_reloaded_after_graph_lab_restart(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = LabState(root, root / "observations.json")
+            first.create_contract({"id": "restartable", "title": "R", "objective": "O", "acceptance_criteria": ["A"]})
+            receipt = first.export_handoff("restartable", {})
+            second = LabState(root, root / "observations.json")
+            evidence = second.record_evidence(receipt["execution_id"], {"revision": "external-1"})
+
+        self.assertEqual(evidence["execution_id"], receipt["execution_id"])

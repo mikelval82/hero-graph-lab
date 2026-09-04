@@ -26,7 +26,7 @@ from hero_graph_lab.contracts import (
     VerificationPolicy,
     validate_contract,
 )
-from hero_graph_lab.contracts.serialization import dumps as contract_dumps
+from hero_graph_lab.contracts.serialization import dumps as contract_dumps, loads as contract_loads
 from hero_graph_lab.extractor import extract_project_graph, project_source_files
 from hero_graph_lab.contract_gateway import ContractGateway, HarnessContractGateway
 from hero_graph_lab.explore import ExploreAssistantService, create_model_client
@@ -188,18 +188,14 @@ class LabState:
         return json.loads(contract_dumps(receipt))
 
     def execution_status(self, execution_id: str) -> dict[str, object]:
-        request = self.execution_requests.get(execution_id)
-        if request is None:
-            for contract in self.contract_repository.list():
-                if contract.id == execution_id:
-                    request = ExecutionRequest(contract, self._source_snapshot(), VerificationPolicy())
-                    break
+        request = self._request_for_execution(execution_id)
         if request is None:
             raise KeyError(execution_id)
         return self.execution_registry.get("manual").status(execution_id) | {"evidence": [json.loads(contract_dumps(item)) for item in self.execution_evidence.get(execution_id, [])]}
 
     def record_evidence(self, execution_id: str, payload: dict[str, Any]) -> dict[str, object]:
-        if execution_id not in self.execution_requests:
+        request = self._request_for_execution(execution_id)
+        if request is None:
             raise KeyError(execution_id)
         evidence = ExecutionEvidence(
             execution_id,
@@ -210,7 +206,6 @@ class LabState:
             payload.get("artifacts", {}) if isinstance(payload.get("artifacts", {}), dict) else {},
         )
         self.execution_evidence.setdefault(execution_id, []).append(evidence)
-        request = self.execution_requests[execution_id]
         self.contract_repository.save(replace(request.contract, status=ContractStatus.VERIFYING))
         target = self.fixture / ".graph-lab" / "evidence" / f"{execution_id}.json"
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -219,7 +214,7 @@ class LabState:
 
     def reconcile(self, contract_id: str, execution_id: str) -> dict[str, object]:
         contract = self.contract_repository.get(contract_id)
-        request = self.execution_requests.get(execution_id)
+        request = self._request_for_execution(execution_id)
         if request is None:
             raise KeyError(execution_id)
         graph = self.graph()
@@ -239,6 +234,29 @@ class LabState:
             content = path.read_bytes()
             files[relative] = {"sha256": hashlib.sha256(content).hexdigest(), "size": len(content)}
         return SourceSnapshot(self.graph().get("root", ""), self.graph(), files, datetime.now(UTC).isoformat())
+
+    def _request_for_execution(self, execution_id: str) -> ExecutionRequest | None:
+        request = self.execution_requests.get(execution_id)
+        if request is not None:
+            return request
+        handoff = self.fixture / ".graph-lab" / "handoffs" / execution_id
+        try:
+            contract_payload = contract_loads((handoff / "contract.json").read_text(encoding="utf-8"))
+            snapshot_payload = contract_loads((handoff / "source-snapshot.json").read_text(encoding="utf-8"))
+            policy_payload = contract_loads((handoff / "verification-policy.json").read_text(encoding="utf-8"))
+            contract_values = dict(contract_payload)
+            contract_values["status"] = ContractStatus(contract_payload.get("status", "DRAFT"))
+            contract = IntentContract(**contract_values)
+            request = ExecutionRequest(
+                contract,
+                SourceSnapshot(**snapshot_payload),
+                VerificationPolicy(**policy_payload),
+                execution_id=execution_id,
+            )
+        except (FileNotFoundError, OSError, TypeError, ValueError, json.JSONDecodeError):
+            return None
+        self.execution_requests[execution_id] = request
+        return request
 
     @staticmethod
     def _source_fingerprint(fixture: Path) -> tuple[tuple[str, int, int], ...]:
